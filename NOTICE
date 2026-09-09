@@ -2,3 +2,22 @@ Pulse
 Copyright 2026 Petauron
 
 This product includes software developed by Pulse contributors.
+
+Rust crate licenses and original copyright/notice files are distributed in
+RUST_THIRD_PARTY_LICENSES.html. Notices for the pinned Rust standard library
+are distributed in RUST_STDLIB_LICENSES.html. These files accompany both the
+binary archives and the container image under /usr/share/doc/pulse/.
+
+The Web interface includes modified software from Komari Theme Emerald,
+Copyright 2026 Tokinx, under the MIT License.
+
+Packaged country flags are from flag-icons,
+Copyright 2013 Panayiotis Lipiridis, under the MIT License.
+
+Selected SVG icons are generated from Iconify JSON collections. The included
+IconPark icons are Apache-2.0 licensed; Lucide icons are ISC licensed (with
+some Feather-derived icons under MIT); and Tabler Icons are MIT licensed. See
+web/THIRD_PARTY_NOTICES.md for versions and required notices.
+
+Licenses and notices for JavaScript dependencies included in the production
+bundle are distributed as web/dist/THIRD_PARTY_LICENSES.md.

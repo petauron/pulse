@@ -1,6 +1,14 @@
 /target/
-/web/dist/
 /web/node_modules/
+/web/.eslintcache
+/web/playwright-report/
+/web/test-results/
+/agent-credentials.json
+/agent-credentials.tmp-*
+/pulse.db
+/pulse.db-shm
+/pulse.db-wal
+/pulse.db.backup-*
 .DS_Store
 .env
 .env.*
