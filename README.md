@@ -88,6 +88,8 @@ The visual implementation is derived from [Komari Theme Emerald](https://github.
 
 ## Production operation
 
+Official Linux binary archives use a Debian 12 (glibc 2.36) runtime baseline. Both the Service and Agent must start in a clean Debian 12 runtime in CI and release jobs. For musl-based distributions or older runtimes, use the container or build from source.
+
 Each release publishes archives containing both binaries, systemd units, and reversible install/rollback scripts, alongside checksums, provenance attestations, and SPDX SBOMs. A non-root Service container is also available. See [docs/OPERATIONS.md](docs/OPERATIONS.md) for deployment, TLS/access-control, enrollment, credential rotation/revocation, backup/restore, upgrade, rollback, and uninstall procedures.
 
 Rust dependency license texts and original copyright/NOTICE files accompany each distribution in [RUST_THIRD_PARTY_LICENSES.html](RUST_THIRD_PARTY_LICENSES.html); [RUST_STDLIB_LICENSES.html](RUST_STDLIB_LICENSES.html) preserves the pinned standard library's notices. After updating `Cargo.lock` or the toolchain, install `cargo-about` 0.9.2 with its `cli` feature and the toolchain's `rust-docs` component, run `cargo fetch --locked`, then `node scripts/rust-licenses.mjs` and review the changes. CI runs the same generator with `--check` to reject missing or stale notices.
