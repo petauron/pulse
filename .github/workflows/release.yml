@@ -74,13 +74,11 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Verify native Rust target
-        run: |
-          test "$(rustc -vV | sed -n 's/^host: //p')" = "${{ matrix.target }}"
-      - name: Build release binaries
+      - name: Build and verify native release binaries on Debian 12
         env:
           PULSE_BUILD_GIT_HASH: ${{ github.sha }}
-        run: cargo build --locked --release -p pulse-service -p pulse-agent
+          PULSE_BUILD_TARGET: ${{ matrix.target }}
+        run: sh scripts/build-linux-release.sh
       - name: Stage release archive
         env:
           ARCHIVE_NAME: pulse-${{ github.ref_name }}-linux-${{ matrix.arch }}

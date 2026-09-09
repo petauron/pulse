@@ -69,10 +69,11 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --locked --workspace --all-targets
-      - name: Build release binaries
+      - name: Build and verify release binaries on Debian 12
         env:
           PULSE_BUILD_GIT_HASH: ${{ github.sha }}
-        run: cargo build --locked --release --workspace
+          PULSE_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: sh scripts/build-linux-release.sh
 
   security:
     name: Dependency security
@@ -177,6 +178,8 @@ jobs:
           container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 pulse-ci)
           trap 'docker rm --force "$container_id" >/dev/null' EXIT
           test "$(docker inspect --format '{{.Config.User}}' "$container_id")" = "65532:65532"
+          docker exec "$container_id" pulse-service --version
+          docker exec "$container_id" pulse-agent --version
           for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18081/healthz >/dev/null; then
               exit 0
