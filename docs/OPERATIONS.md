@@ -14,10 +14,10 @@ Download the archive for the host architecture together with `SHA256SUMS`, its S
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify pulse-v0.1.0-alpha.1-linux-x86_64.tar.gz --repo petauron/pulse
+gh attestation verify pulse-v0.1.0-alpha.2-linux-x86_64.tar.gz --repo petauron/pulse
 ```
 
-Official Linux archives target `x86_64` and `aarch64` GNU/Linux. Build from the corresponding release tag for other targets.
+Official Linux archives target `x86_64` and `aarch64` GNU/Linux with a Debian 12 (glibc 2.36) runtime baseline. Both binaries are built in the pinned Debian 12 Rust image and must start in a clean Debian 12 runtime before packaging. The same build/verification script runs in CI. Use the container or build from source for other environments, including musl-based distributions.
 
 The release workflow validates binaries, SBOMs, and a multi-architecture container before creating a hidden draft. It then pushes and attests the image and publishes the GitHub Release only as the final step. If final publication fails or the run is cancelled, the workflow attempts to remove the GHCR package version carrying that release tag and leaves the draft for a safe rerun. Cleanup is limited to two minutes. If cleanup fails, times out, or the runner is forcibly terminated, the maintainer must inspect and remove that tagged GHCR package version before retrying; never publish the draft manually while cleanup is unresolved.
 
