@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Resolved packaged flag filenames consistently on case-sensitive Linux filesystems across cards, lists, details, and globe overlays.
 - Made offline chart gaps explicit and excluded stale offline samples from current usage totals.
 - Restored automatic dashboard initialization after connection failures and keyboard access to node status summaries.
 - Added safe credential recovery after incomplete enrollment and accepted IPv6 loopback Service URLs.

@@ -16,6 +16,7 @@ import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { getCoordByCode, getCountryCodeFromRegion } from '@/utils/geoHelper'
 import { formatBytesPerSecondSplit } from '@/utils/helper'
+import { getFlagSrc } from '@/utils/regionHelper'
 
 const props = defineProps<{
   nodes?: NodeData[]
@@ -507,7 +508,7 @@ function formatRate(bytesPerSec: number): string {
         class="absolute -top-7.5 left-0 pointer-events-none rounded backdrop-blur transition-[opacity,filter] duration-500"
       >
         <img
-          :src="`/assets/flags/${cluster.code}.svg`" :alt="cluster.code"
+          :src="getFlagSrc(cluster.code)" :alt="cluster.code"
           class="size-4 block absolute -bottom-2 -left-2 z-1"
         >
         <div class="relative z-2 bg-background/60 rounded py-0.5 px-1 text-xs zoom-80 items-start justify-center text-nowrap">

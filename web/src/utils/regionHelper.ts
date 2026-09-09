@@ -1626,13 +1626,22 @@ export function getRegionCode(regionEmoji: string): string {
   return regionInfo.code
 }
 
+const flagCodes = new Set(Object.values(emojiToRegionMap).map(({ code }) => code.toLowerCase()))
+const flagFileAliases: Record<string, string> = {
+  ac: 'sh-ac',
+  ea: 'es',
+  ta: 'sh-ta',
+}
+
 /**
- * 获取地区国旗图片路径
- * @param region 地区emoji
+ * 获取已打包的地区国旗图片路径，未知地区使用占位图。
+ * @param region 地区emoji或代码
  * @returns 国旗图片路径
  */
 export function getFlagSrc(region: string): string {
-  return `/assets/flags/${getRegionCode(region)}.svg`
+  const code = getRegionCode(region.trim()).toLowerCase()
+  const filename = flagCodes.has(code) ? (flagFileAliases[code] ?? code) : 'xx'
+  return `/assets/flags/${filename}.svg`
 }
 
 /**

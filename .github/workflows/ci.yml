@@ -150,11 +150,11 @@ jobs:
       - name: Run desktop, mobile, and accessibility flows
         working-directory: web
         run: npm run test:e2e
-      - name: Upload failure evidence
-        if: failure()
+      - name: Upload browser evidence
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-failure-evidence
+          name: playwright-evidence
           path: |
             web/playwright-report/
             web/test-results/
