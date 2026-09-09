@@ -12,18 +12,198 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
 jobs:
-  rust:
-    runs-on: ubuntu-latest
+  web:
+    name: Web static checks
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install Web dependencies
+        run: npm ci
+      - name: Verify third-party notices
+        run: npm run verify:licenses
+      - name: Lint Web source
+        run: npm run lint
+      - name: Test Web data handling
+        run: npm run test:unit
+      - name: Build embedded Web assets
+        env:
+          # Release and container builds inject their actual source revision.
+          # Checked-in assets need a value reproducible before a commit exists.
+          PULSE_BUILD_GIT_HASH: dev
+        run: npm run build
+      - name: Verify generated assets are current
+        run: git diff --exit-code -- dist src/generated/icons.ts
+
+  rust-checks:
+    name: Rust checks and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Run Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
+      - name: Build release binaries
+        env:
+          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
+        run: cargo build --locked --release --workspace
+
+  security:
+    name: Dependency security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Audit production Web dependencies
+        working-directory: web
+        run: |
+          npm ci
+          npm audit --omit=dev --audit-level=high
+      - name: Audit and constrain Rust dependencies
+        env:
+          CARGO_DENY_VERSION: 0.20.2
+          CARGO_DENY_SHA256: 9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f
+        run: |
+          tool_directory=$(mktemp -d)
+          trap 'rm -rf "$tool_directory"' EXIT
+          archive="$tool_directory/cargo-deny.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/EmbarkStudios/cargo-deny/releases/download/$CARGO_DENY_VERSION/cargo-deny-$CARGO_DENY_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          printf '%s  %s\n' "$CARGO_DENY_SHA256" "$archive" | sha256sum --check
+          tar --extract --gzip --file "$archive" --directory "$tool_directory" --strip-components=1
+          "$tool_directory/cargo-deny" --version
+          "$tool_directory/cargo-deny" --all-features --locked check advisories licenses sources
+      - name: Verify Rust redistribution licenses and notices
+        env:
+          CARGO_ABOUT_VERSION: 0.9.2
+          CARGO_ABOUT_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
+        run: |
+          tool_directory=$(mktemp -d)
+          trap 'rm -rf "$tool_directory"' EXIT
+          archive="$tool_directory/cargo-about.tar.gz"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/$CARGO_ABOUT_VERSION/cargo-about-$CARGO_ABOUT_VERSION-x86_64-unknown-linux-musl.tar.gz"
+          printf '%s  %s\n' "$CARGO_ABOUT_SHA256" "$archive" | sha256sum --check
+          tar --extract --gzip --file "$archive" --directory "$tool_directory" --strip-components=1
+          rustup component add rust-docs
+          cargo fetch --locked
+          CARGO_ABOUT="$tool_directory/cargo-about" node scripts/rust-licenses.mjs --check
+
+  e2e:
+    name: Real Service and Agent browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+      - name: Install Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+      - name: Run desktop, mobile, and accessibility flows
+        working-directory: web
+        run: npm run test:e2e
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-failure-evidence
+          path: |
+            web/playwright-report/
+            web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  container:
+    name: Non-root container smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image
+        run: docker build --build-arg PULSE_BUILD_GIT_HASH=${{ github.sha }} --tag pulse-ci .
+      - name: Verify runtime identity and health
+        run: |
+          container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 pulse-ci)
+          trap 'docker rm --force "$container_id" >/dev/null' EXIT
+          test "$(docker inspect --format '{{.Config.User}}' "$container_id")" = "65532:65532"
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18081/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs "$container_id"
+          exit 1
+
+  # Keep this job ID stable: protected main can require the single `rust` check,
+  # while the gate now includes Web, Rust, security, browser, and container jobs.
+  rust:
+    needs: [web, rust-checks, security, e2e, container]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require every CI job
+        env:
+          WEB_RESULT: ${{ needs.web.result }}
+          RUST_RESULT: ${{ needs.rust-checks.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          CONTAINER_RESULT: ${{ needs.container.result }}
+        run: |
+          test "$WEB_RESULT" = success
+          test "$RUST_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          test "$E2E_RESULT" = success
+          test "$CONTAINER_RESULT" = success

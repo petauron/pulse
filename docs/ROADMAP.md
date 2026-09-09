@@ -4,18 +4,23 @@ Pulse is developed as small end-to-end slices. Scope may change before the first
 
 ## 1. Secure ingestion
 
-- SQLite schema and forward migrations
-- One-time enrollment token exchange
-- Per-Agent credential storage and rotation
-- Authenticated, idempotent snapshot ingestion
-- Explicit protocol version negotiation
+- [x] SQLite schema and forward migration foundation
+- [x] One-time enrollment token exchange
+- [x] Protected per-Agent credential storage
+- [x] Authenticated, idempotent snapshot ingestion
+- [x] Explicit protocol version negotiation
+- [x] Short-lived enrollment creation and revocation
+- [x] Agent credential rotation, node revocation, deletion, and audit trail
 
 ## 2. Metrics and retention
 
-- CPU, load, memory, swap, disk, network, uptime, OS, and architecture
-- Bounded batching and retry behavior
-- Raw and rolled-up history with explicit retention
-- Storage and memory budget tests
+- [x] CPU, load, memory, swap, disk, network, uptime, OS, and architecture
+- [x] Bounded fresh-sample retry behavior
+- [x] Raw history with explicit retention
+- [x] Complete-window bounded history downsampling with coverage metadata
+- Rolled-up long-term history
+- [x] Storage migration, permission, retention, and bound tests
+- Release-binary memory budget regression test
 
 ## 3. Probe tasks
 
@@ -26,14 +31,14 @@ Pulse is developed as small end-to-end slices. Scope may change before the first
 
 ## 4. Dashboard
 
-- Compact node cards and grouped list view
-- Node detail and historical charts
+- [x] Emerald compact node cards and grouped list view
+- [x] Node detail and historical load charts
 - Independent latency/loss history for each probe task
-- Responsive and accessible layout
+- [x] Keyboard-operable Emerald card/list/detail flows and accessible history table
 
 ## 5. Operations
 
-- systemd Agent installer, update, rollback, and uninstall
-- Service container image and persistent-volume guidance
-- Backup and restore documentation
-- Multi-architecture signed releases and software bill of materials
+- [x] systemd Service/Agent install, update, rollback, and uninstall assets
+- [x] Non-root Service container image and persistent-volume guidance
+- [x] Backup, restore, credential lifecycle, and hardening documentation
+- [x] Multi-architecture checksummed releases, provenance, and software bill of materials
