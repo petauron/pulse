@@ -16,7 +16,9 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   const flag = card.getByRole('img', { name: 'SG', exact: true })
   await expect(flag).toHaveAttribute('src', '/assets/flags/sg.svg')
   await expect.poll(() => flag.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
-  await testInfo.attach('node-card', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+  const cardScreenshot = testInfo.outputPath('node-card.png')
+  await page.screenshot({ path: cardScreenshot, fullPage: true })
+  await testInfo.attach('node-card', { path: cardScreenshot, contentType: 'image/png' })
 
   const statusTrigger = page.getByRole('button', { name: '查看节点状态汇总' })
   await statusTrigger.focus()
@@ -53,7 +55,9 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   )
   expect(seriousViolations).toEqual([])
   expect(consoleErrors).toEqual([])
-  await testInfo.attach('node-detail', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+  const detailScreenshot = testInfo.outputPath('node-detail.png')
+  await page.screenshot({ path: detailScreenshot, fullPage: true })
+  await testInfo.attach('node-detail', { path: detailScreenshot, contentType: 'image/png' })
 
   await page.getByRole('button', { name: '返回节点列表' }).click()
   await expect(page).toHaveURL('/')
