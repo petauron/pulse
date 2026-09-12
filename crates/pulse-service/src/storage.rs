@@ -16,8 +16,8 @@ use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 2;
-const MIN_SNAPSHOT_SPACING_MS: i64 = 4_750;
+pub(crate) const SCHEMA_VERSION: i64 = 3;
+const MIN_SNAPSHOT_SPACING_MS: i64 = 950;
 pub(crate) const RETENTION_PRUNE_BATCH_SIZE: usize = 10_000;
 
 #[derive(Debug)]
@@ -27,6 +27,7 @@ pub(crate) enum StorageError {
     NodeLimit,
     RateLimited,
     NotFound,
+    InvalidInput(&'static str),
     Database(rusqlite::Error),
 }
 
@@ -38,6 +39,7 @@ impl Display for StorageError {
             Self::NodeLimit => formatter.write_str("node limit reached"),
             Self::RateLimited => formatter.write_str("snapshot rate limited"),
             Self::NotFound => formatter.write_str("record not found"),
+            Self::InvalidInput(message) => formatter.write_str(message),
             Self::Database(error) => write!(formatter, "database error: {error}"),
         }
     }
@@ -150,7 +152,7 @@ impl Storage {
         })
     }
 
-    fn connection(&self) -> Result<MutexGuard<'_, Connection>, StorageError> {
+    pub(crate) fn connection(&self) -> Result<MutexGuard<'_, Connection>, StorageError> {
         self.connection
             .lock()
             .map_err(|_| StorageError::Database(rusqlite::Error::InvalidQuery))
@@ -315,6 +317,7 @@ impl Storage {
     pub(crate) fn delete_node(&self, node_id: &str, now_ms: u64) -> Result<(), StorageError> {
         let mut connection = self.connection()?;
         let transaction = connection.transaction()?;
+        crate::control::remove_node_assignments(&transaction, node_id)?;
         let changed = transaction.execute("DELETE FROM nodes WHERE id = ?1", params![node_id])?;
         if changed == 0 {
             return Err(StorageError::NotFound);
@@ -362,8 +365,10 @@ impl Storage {
             retention_days,
             RETENTION_PRUNE_BATCH_SIZE,
         )?;
+        let probe_removed=transaction.execute("DELETE FROM probe_results WHERE id IN (SELECT id FROM probe_results WHERE received_at_ms<?1 ORDER BY received_at_ms LIMIT 10000)",
+            [to_i64(now_ms.saturating_sub(u64::from(retention_days)*86_400_000))?])?;
         transaction.commit()?;
-        Ok(removed)
+        Ok(removed.saturating_add(probe_removed))
     }
 
     pub(crate) fn ingest(
@@ -420,6 +425,7 @@ impl Storage {
         )?;
         update_node_from_snapshot(&transaction, &node_id, snapshot, received_at)?;
         insert_snapshot(&transaction, &node_id, snapshot, received_at)?;
+        crate::control::update_traffic(&transaction, &node_id, snapshot, received_at_ms)?;
         transaction.commit()?;
         Ok(())
     }
@@ -429,18 +435,21 @@ impl Storage {
         offset: u32,
         limit: u32,
         offline_after_seconds: u64,
-    ) -> Result<(u32, Vec<DashboardNode>), StorageError> {
+    ) -> Result<(u32, Vec<Value>), StorageError> {
         let connection = self.connection()?;
-        let total = active_node_count(&connection)?;
+        let total = connection.query_row("SELECT COUNT(*) FROM nodes WHERE disabled_at_ms IS NULL AND NOT EXISTS (SELECT 1 FROM node_options o WHERE o.node_id=nodes.id AND json_extract(o.data,'$.hidden')=1)",[],|row|row.get(0))?;
         let clients = query_clients(&connection, offset, limit)?;
         let statuses = query_latest_statuses(&connection, offline_after_seconds)?;
-        let nodes = clients
-            .into_iter()
-            .map(|client| DashboardNode {
-                status: statuses.get(&client.id).cloned(),
-                client,
-            })
-            .collect();
+        let mut nodes = Vec::with_capacity(clients.len());
+        for client in clients {
+            let mut metadata = json!(client);
+            crate::control::decorate_client(&connection, &client.id, &mut metadata)?;
+            let mut status = statuses.get(&client.id).map_or(Value::Null, |s| json!(s));
+            if !status.is_null() {
+                crate::control::decorate_status(&connection, &client.id, &mut status)?;
+            }
+            nodes.push(json!({"client":metadata,"status":status}));
+        }
         Ok((total, nodes))
     }
 
@@ -456,9 +465,13 @@ impl Storage {
         let mut status_values = serde_json::Map::new();
         for client in clients {
             if let Some(status) = statuses.get(&client.id) {
-                status_values.insert(client.id.clone(), status.emerald_value());
+                let mut value = status.emerald_value();
+                crate::control::decorate_status(&connection, &client.id, &mut value)?;
+                status_values.insert(client.id.clone(), value);
             }
-            client_values.insert(client.id.clone(), client.emerald_value());
+            let mut value = client.emerald_value();
+            crate::control::decorate_client(&connection, &client.id, &mut value)?;
+            client_values.insert(client.id.clone(), value);
         }
         Ok(json!({ "clients": client_values, "statuses": status_values }))
     }
@@ -473,6 +486,9 @@ impl Storage {
         let requested_start = now_ms.saturating_sub(u64::from(hours) * 60 * 60 * 1_000);
         let requested_end = now_ms;
         let connection = self.connection()?;
+        if !crate::control::visible(&connection, node_id)? {
+            return Err(StorageError::NotFound);
+        }
         let bounds: (i64, Option<i64>, Option<i64>) = connection.query_row(
             "SELECT COUNT(*), MIN(received_at_ms), MAX(received_at_ms)
              FROM snapshots
@@ -563,10 +579,10 @@ fn insert_snapshot(
             memory_total_bytes, memory_used_bytes, swap_total_bytes, swap_used_bytes,
             disk_total_bytes, disk_used_bytes, network_receive_bytes_per_second,
             network_transmit_bytes_per_second, network_total_received_bytes,
-            network_total_transmitted_bytes, process_count
+            network_total_transmitted_bytes, process_count, extensions
          ) VALUES (
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-            ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
+            ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
          )",
         params![
             node_id,
@@ -589,19 +605,12 @@ fn insert_snapshot(
             to_i64(snapshot.network_total_received_bytes)?,
             to_i64(snapshot.network_total_transmitted_bytes)?,
             snapshot.process_count.map(to_i64).transpose()?,
+            json!({"tcp_connection_count":snapshot.tcp_connection_count,
+                "udp_connection_count":snapshot.udp_connection_count,"gpus":snapshot.gpus})
+            .to_string(),
         ],
     )?;
     Ok(())
-}
-
-fn active_node_count(connection: &Connection) -> Result<u32, StorageError> {
-    connection
-        .query_row(
-            "SELECT COUNT(*) FROM nodes WHERE disabled_at_ms IS NULL",
-            [],
-            |row| row.get(0),
-        )
-        .map_err(Into::into)
 }
 
 fn query_clients(
@@ -615,7 +624,8 @@ fn query_clients(
                 swap_total_bytes, disk_total_bytes, created_at_ms, updated_at_ms,
                 last_seen_at_ms
          FROM nodes WHERE disabled_at_ms IS NULL
-         ORDER BY created_at_ms ASC LIMIT ?1 OFFSET ?2",
+           AND NOT EXISTS (SELECT 1 FROM node_options o WHERE o.node_id=nodes.id AND json_extract(o.data,'$.hidden')=1)
+         ORDER BY COALESCE((SELECT json_extract(o.data,'$.weight') FROM node_options o WHERE o.node_id=nodes.id),0) DESC, created_at_ms ASC LIMIT ?1 OFFSET ?2",
     )?;
     let rows = statement.query_map(params![limit, offset], |row| {
         Ok(DashboardClient {
@@ -662,7 +672,10 @@ fn query_latest_statuses(
 ) -> Result<HashMap<String, DashboardStatus>, StorageError> {
     let mut statement = connection.prepare(LATEST_STATUSES_SQL)?;
     let now = unix_time_ms()?;
-    let offline_after_ms = offline_after_seconds.saturating_mul(1_000);
+    let offline_after_ms = crate::control::effective_offline_ms(
+        connection,
+        offline_after_seconds.saturating_mul(1_000),
+    )?;
     let rows = statement.query_map([], |row| {
         let last_seen_at_ms = from_i64(row.get::<_, i64>(19)?);
         Ok(DashboardStatus {
@@ -706,7 +719,7 @@ fn query_raw_history(
                 memory_used_bytes, memory_total_bytes, swap_used_bytes, swap_total_bytes,
                 load_one, load_five, load_fifteen, disk_used_bytes, disk_total_bytes,
                 network_receive_bytes_per_second, network_transmit_bytes_per_second,
-                network_total_received_bytes, network_total_transmitted_bytes, process_count
+                network_total_received_bytes, network_total_transmitted_bytes, process_count, extensions
          FROM snapshots
          WHERE node_id = ?1 AND received_at_ms BETWEEN ?2 AND ?3
          ORDER BY received_at_ms ASC, id ASC",
@@ -734,7 +747,11 @@ fn query_aggregate_history(
                 CAST(AVG(network_receive_bytes_per_second) AS INTEGER),
                 CAST(AVG(network_transmit_bytes_per_second) AS INTEGER),
                 MAX(network_total_received_bytes), MAX(network_total_transmitted_bytes),
-                CAST(AVG(process_count) AS INTEGER)
+                CAST(AVG(process_count) AS INTEGER),
+                json_object('tcp_connection_count',AVG(json_extract(extensions,'$.tcp_connection_count')),
+                    'udp_connection_count',AVG(json_extract(extensions,'$.udp_connection_count')),
+                    'gpu',AVG((SELECT AVG(json_extract(value,'$.usage_percent')) FROM json_each(snapshots.extensions,'$.gpus'))),
+                    'temp',MAX((SELECT MAX(json_extract(value,'$.temperature_celsius')) FROM json_each(snapshots.extensions,'$.gpus'))))
          FROM snapshots
          WHERE node_id = ?1 AND received_at_ms BETWEEN ?2 AND ?3
          GROUP BY ((received_at_ms - ?2) / ?4)
@@ -755,7 +772,7 @@ fn query_aggregate_history(
 fn history_row(row: &Row<'_>) -> rusqlite::Result<Value> {
     let received_at = from_i64(row.get(1)?);
     let collected_at = from_i64(row.get(2)?);
-    Ok(json!({
+    let mut value = json!({
         "client": row.get::<_, String>(0)?,
         "time": format_timestamp(received_at),
         "collected_time": format_timestamp(collected_at),
@@ -779,7 +796,13 @@ fn history_row(row: &Row<'_>) -> rusqlite::Result<Value> {
         "process": row.get::<_, Option<i64>>(17)?.map(from_i64),
         "connections": Value::Null,
         "connections_udp": Value::Null
-    }))
+    });
+    let raw: String = row.get(18)?;
+    let data: Value = serde_json::from_str(&raw).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(18, rusqlite::types::Type::Text, Box::new(e))
+    })?;
+    crate::control::apply_extensions(&data, &mut value);
+    Ok(value)
 }
 
 fn prune_expired_snapshots(
@@ -806,13 +829,19 @@ fn prune_expired_snapshots(
 
 fn migrate(connection: &mut Connection, from_version: i64) -> rusqlite::Result<()> {
     match from_version {
-        0 => create_schema_v2(connection),
-        1 => migrate_v1_to_v2(connection),
-        _ => Err(rusqlite::Error::InvalidQuery),
+        0 => create_schema_v2(connection)?,
+        1 => migrate_v1_to_v2(connection)?,
+        2 => {}
+        _ => return Err(rusqlite::Error::InvalidQuery),
     }
+    let transaction = connection.transaction()?;
+    crate::control::migrate(&transaction)?;
+    crate::auth::migrate(&transaction)?;
+    transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    transaction.commit()
 }
 
-fn create_schema_v2(connection: &mut Connection) -> rusqlite::Result<()> {
+pub(crate) fn create_schema_v2(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction()?;
     transaction.execute_batch(
         "CREATE TABLE nodes (
@@ -1264,12 +1293,6 @@ impl DashboardStatus {
     }
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct DashboardNode {
-    client: DashboardClient,
-    status: Option<DashboardStatus>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1307,6 +1330,9 @@ mod tests {
             network_total_received_bytes: 100,
             network_total_transmitted_bytes: 200,
             process_count: None,
+            tcp_connection_count: None,
+            udp_connection_count: None,
+            gpus: None,
         }
     }
 
@@ -1328,6 +1354,55 @@ mod tests {
             .enroll(&request(), &hash_token(&enrollment.token), 10, 11_000)
             .unwrap();
         (directory, storage, credentials)
+    }
+
+    #[test]
+    fn discovered_region_updates_existing_node_and_dashboard_without_reenrollment() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("pulse.db");
+        let storage = Storage::open(&path, 64 * 1024 * 1024).unwrap();
+        let enrollment = storage.create_enrollment(600, 10_000).unwrap();
+        let mut enrollment_request = request();
+        enrollment_request.region.clear();
+        let credentials = storage
+            .enroll(
+                &enrollment_request,
+                &hash_token(&enrollment.token),
+                10,
+                11_000,
+            )
+            .unwrap();
+        let token = hash_token(&credentials.agent_token);
+        assert_eq!(
+            storage.native_nodes(0, 10, 90).unwrap().1[0]["client"]["region"],
+            ""
+        );
+
+        for (index, region) in ["", "US", "JP"].into_iter().enumerate() {
+            let mut snapshot = sample(Uuid::new_v4().to_string(), 20_000);
+            snapshot.region = region.to_owned();
+            storage
+                .ingest(
+                    &token,
+                    &snapshot,
+                    20_000 + u64::try_from(index).unwrap() * 5_000,
+                    7,
+                )
+                .unwrap();
+            let (total, nodes) = storage.native_nodes(0, 10, 90).unwrap();
+            assert_eq!(total, 1);
+            assert_eq!(nodes[0]["client"]["id"], credentials.node_id);
+            assert_eq!(nodes[0]["client"]["region"], region);
+            let dashboard = storage.emerald_dashboard(90, 10).unwrap();
+            assert_eq!(dashboard["clients"][&credentials.node_id]["region"], region);
+        }
+
+        drop(storage);
+        let reopened = Storage::open(&path, 64 * 1024 * 1024).unwrap();
+        assert_eq!(
+            reopened.native_nodes(0, 10, 90).unwrap().1[0]["client"]["region"],
+            "JP"
+        );
     }
 
     #[test]

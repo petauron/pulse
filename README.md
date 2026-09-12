@@ -44,17 +44,27 @@ Pulse now provides an end-to-end monitoring path:
 - online/offline state, node cards, list view, detail view, and load history;
 - the Komari Emerald interface, built into the Service binary.
 
+The current development branch adds administrator setup/login, private reads,
+TOTP and optional GitHub OAuth, an Emerald management area, bounded network probes,
+alerts, asset fields, monthly traffic accounting and optional extended metrics.
+These additions are **not included in the published Alpha.2 artifacts**. See
+[authentication setup](docs/AUTH.md) and [monitoring administration](docs/MONITORING.md).
+
 ### Run the Service
 
 Create a short-lived, single-use enrollment token in the same database, then start the Service:
 
 ```bash
 export PULSE_DATABASE_PATH=./pulse.db
+export PULSE_PUBLIC_URL=http://127.0.0.1:8080
+umask 077
+openssl rand -hex 32 > ./setup-token
+export PULSE_SETUP_TOKEN_FILE=./setup-token
 cargo run -p pulse-service -- enrollment create
 cargo run -p pulse-service -- serve
 ```
 
-The dashboard is available at `http://127.0.0.1:8080/`. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
+Open `http://127.0.0.1:8080/login`, supply the private setup token and create the administrator. The dashboard is private by default. After setup, remove the token file and its environment setting together. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
 
 ### Enroll and run an Agent
 
@@ -65,7 +75,7 @@ umask 077
 printf '%s\n' 'replace-with-the-returned-token' > ./enrollment-token
 PULSE_ENROLLMENT_TOKEN_FILE=./enrollment-token \
 PULSE_NODE_NAME=example-node \
-PULSE_NODE_REGION=SG \
+PULSE_NODE_REGION='' \
 PULSE_NODE_GROUP=default \
   cargo run -p pulse-agent
 ```
@@ -73,6 +83,15 @@ PULSE_NODE_GROUP=default \
 One enrollment token enrolls exactly one Agent and expires after ten minutes by default. Remove the token file after enrollment. The Agent stores its per-node credential at `$XDG_STATE_HOME/pulse/agent-credentials.json` or `~/.local/state/pulse/agent-credentials.json`; subsequent starts do not need an enrollment token. Create another token with the admin CLI to enroll another node—no Service restart is needed. Set `PULSE_CREDENTIALS_PATH` to choose a different protected credential file.
 
 Remote Service URLs must use HTTPS. Plain HTTP is accepted only for loopback development.
+
+Automatic globe placement is enabled by default through GeoJS when
+`PULSE_NODE_REGION` is empty. The provider sees the Agent's public egress IP and
+Agent version, but receives no metrics or Pulse credentials. Set
+`PULSE_GEOIP_PROVIDER=disabled` to opt out before starting/upgrading the Agent, or
+`ipinfo` to select IPinfo. A manual country code (for example `US`) always takes
+priority and prevents GeoIP requests. Existing explicit `disabled` settings are preserved.
+See [node location](docs/OPERATIONS.md#node-location-and-globe-placement) for refresh,
+failure behavior, privacy, and existing-node upgrades.
 
 ### Build the embedded Web interface
 

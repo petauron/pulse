@@ -54,6 +54,13 @@ elif [ -e "$current_link" ]; then
     exit 1
 fi
 
+if [ "$component" = agent ]; then
+    echo "Privacy notice: without a manual region, Agent country discovery defaults to GeoJS."
+    echo "GeoJS sees public egress IP and Agent version, not Pulse credentials or metrics."
+    echo "Set PULSE_GEOIP_PROVIDER=disabled in /etc/pulse/agent.env before upgrading to opt out."
+    echo "Existing configuration is preserved; an active Agent is restarted during upgrade."
+fi
+
 if ! getent group "$account" >/dev/null 2>&1; then
     groupadd --system "$account"
 fi

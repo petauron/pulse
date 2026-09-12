@@ -207,41 +207,11 @@ const customTags = computed(() => getCustomTags(props.node))
             </div>
             <div class="flex items-center justify-between">
               <span class="truncate">
-                三网
+                探测
               </span>
               <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
-              <div class="truncate" title="当前 Agent 不采集延迟和丢包">
-                N/A
-              </div>
-            </div>
-            <div class="grid grid-cols-6 gap-x-3">
-              <!-- 延迟 -->
-              <div
-                class="relative col-span-3 flex h-6 flex-col gap-2 text-left opacity-55"
-                title="当前 Agent 不采集延迟"
-              >
-                <div class="flex items-center justify-between text-[11px] leading-none relative">
-                  <span class="text-muted-foreground">延迟</span>
-                  <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
-                  <span class="font-medium text-foreground/85">N/A</span>
-                </div>
-                <div class="grid h-full grid-cols-16 items-end gap-[1px]" aria-hidden="true">
-                  <span v-for="index in 16" :key="index" class="block h-full w-full rounded-[1px] bg-muted" />
-                </div>
-              </div>
-              <!-- 丢包 -->
-              <div
-                class="relative col-span-3 flex h-6 flex-col gap-2 text-left opacity-55"
-                title="当前 Agent 不采集丢包"
-              >
-                <div class="flex items-center justify-between text-[11px] leading-none">
-                  <span class="text-muted-foreground">丢包</span>
-                  <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
-                  <span class="font-medium text-foreground/85">N/A</span>
-                </div>
-                <div class="grid h-full grid-cols-16 items-end gap-[1px]" aria-hidden="true">
-                  <span v-for="index in 16" :key="index" class="block h-full w-full rounded-[1px] bg-muted" />
-                </div>
+              <div class="truncate">
+                详情查看延迟与丢包
               </div>
             </div>
           </div>

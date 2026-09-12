@@ -1,7 +1,8 @@
 import type { KomariRpc } from '@/utils/rpc'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { useNodesStore } from '@/stores/nodes'
-import { getSharedApi } from '@/utils/api'
+import { ApiError, getSharedApi } from '@/utils/api'
 import { getSharedRpc, RpcError } from '@/utils/rpc'
 
 class InitManager {
@@ -21,7 +22,7 @@ class InitManager {
 
   private getPollInterval(): number {
     const interval = this.appStore.publicSettings?.theme_settings?.dataUpdateInterval
-    return typeof interval === 'number' && interval >= 1 && interval <= 60
+    return typeof interval === 'number' && interval >= 1 && interval <= 300
       ? interval * 1000
       : 3000
   }
@@ -41,35 +42,36 @@ class InitManager {
         const api = getSharedApi()
         // Wait for every bounded request before retrying, even when one fails
         // immediately, so repeated failures cannot accumulate pending requests.
-        const [publicSettings, userInfo, dashboard] = await Promise.allSettled([
+        const [publicSettings, dashboard] = await Promise.allSettled([
           api.getPublicSettings(),
-          api.getMe(),
           this.rpc.getDashboard(),
         ])
         if (this.isDestroyed)
           return
         if (publicSettings.status === 'rejected')
           throw publicSettings.reason
-        if (userInfo.status === 'rejected')
-          throw userInfo.reason
         if (dashboard.status === 'rejected')
           throw dashboard.reason
         this.appStore.publicSettings = publicSettings.value
-        this.appStore.updateLoginState(userInfo.value.logged_in)
-        this.nodesStore.initNodes(dashboard.value.clients, dashboard.value.statuses)
+        this.applyDashboard(dashboard.value)
         this.isInitialized = true
       }
       else {
         const dashboard = await this.rpc.getDashboard()
         if (this.isDestroyed)
           return
-        this.nodesStore.initNodes(dashboard.clients, dashboard.statuses)
+        this.applyDashboard(dashboard)
       }
       this.appStore.connectionError = false
     }
     catch (error) {
       if (this.isDestroyed)
         return
+      if ((error instanceof RpcError && error.code === 401) || (error instanceof ApiError && error.statusCode === 401)) {
+        this.destroy()
+        this.appStore.loading = false
+        return
+      }
       const message = error instanceof RpcError ? error.message : String(error)
       console.warn('[Pulse] Connection failed; retrying:', message)
       this.appStore.connectionError = true
@@ -82,6 +84,14 @@ class InitManager {
         this.pollTimer = setTimeout(() => void this.poll(), this.getPollInterval())
       }
     }
+  }
+
+  private applyDashboard(dashboard: Awaited<ReturnType<KomariRpc['getDashboard']>>): void {
+    // The Service enforces visibility; also discard hidden data from guest UI state.
+    const clients = useAuthStore().loggedIn
+      ? dashboard.clients
+      : Object.fromEntries(Object.entries(dashboard.clients).filter(([, client]) => !client.hidden))
+    this.nodesStore.initNodes(clients, dashboard.statuses)
   }
 
   stopPolling(): void {

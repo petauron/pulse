@@ -46,19 +46,34 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         parse_env("PULSE_OFFLINE_AFTER_SECONDS", config.offline_after_seconds)?;
     config.max_nodes = parse_env("PULSE_MAX_NODES", config.max_nodes)?;
     config.max_database_bytes = max_database_bytes;
+    config.auth = pulse_service::AuthConfig::from_env()?;
     let state = AppState::open(&config)?;
     let listener = TcpListener::bind(listen_address).await?;
     let maintenance = tokio::spawn(retention_maintenance(state.clone()));
+    let alerts = tokio::spawn(alert_maintenance(state.clone()));
 
     tracing::info!(address = %listen_address, "Pulse Service listening");
     let serve_result = axum::serve(listener, router(state))
         .with_graceful_shutdown(shutdown_signal())
         .await;
     maintenance.abort();
+    alerts.abort();
     let _ = maintenance.await;
+    let _ = alerts.await;
     serve_result?;
     tracing::info!("Pulse Service stopped cleanly");
     Ok(())
+}
+
+async fn alert_maintenance(state: AppState) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(5));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        ticker.tick().await;
+        if let Err(error) = state.maintain_alerts().await {
+            tracing::error!(%error,"alert maintenance failed");
+        }
+    }
 }
 
 async fn retention_maintenance(state: AppState) {

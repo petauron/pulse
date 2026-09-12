@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Toaster } from '@/components/ui/sonner'
 import { useAppStore } from '@/stores/app'
+import { useAuthStore } from '@/stores/auth'
 import { destroyInitManager, initApp } from '@/utils/init'
+import { AUTH_REQUIRED_EVENT } from '@/utils/session'
 import Background from './components/Background.vue'
 import Footer from './components/Footer.vue'
 import Header from './components/Header.vue'
@@ -10,22 +13,36 @@ import LoadingCover from './components/LoadingCover.vue'
 import Provider from './components/Provider.vue'
 
 const appStore = useAppStore()
+const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 
-const isReady = ref(false)
+async function syncDashboard(): Promise<void> {
+  if (route.name === 'login') {
+    destroyInitManager()
+    appStore.loading = false
+    return
+  }
+  await initApp()
+}
+
+function onAuthRequired(): void {
+  destroyInitManager()
+  auth.clear()
+  appStore.loading = false
+  if (route.name !== 'login')
+    void router.replace({ name: 'login', query: { redirect: route.fullPath } })
+}
 
 onMounted(async () => {
-  try {
-    await initApp()
-    await nextTick()
-    isReady.value = true
-  }
-  catch (error) {
-    console.error('[App] Initialization failed:', error)
-    isReady.value = true
-  }
+  window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
+  await router.isReady()
+  await syncDashboard()
 })
+watch(() => route.name, () => void syncDashboard())
 
 onUnmounted(() => {
+  window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
   destroyInitManager()
 })
 </script>
@@ -42,7 +59,7 @@ onUnmounted(() => {
     <main v-if="!appStore.loading" id="main-content" tabindex="-1" class="flex-1">
       <div class="max-w-[1280px] mx-auto">
         <RouterView v-slot="{ Component }">
-          <KeepAlive :include="['HomeView']">
+          <KeepAlive :key="auth.epoch" :include="['HomeView']">
             <component :is="Component" />
           </KeepAlive>
         </RouterView>

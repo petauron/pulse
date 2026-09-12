@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { login } from './auth'
 
 test('real Agent is visible through the Emerald card, list, search, detail, and history flow', async ({ page }, testInfo) => {
   const consoleErrors: string[] = []
@@ -8,11 +9,11 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
       consoleErrors.push(message.text())
   })
 
-  await page.goto('/')
+  await login(page)
   const card = page.getByRole('button', { name: '查看 e2e-node 节点详情' })
   await expect(card).toBeVisible({ timeout: 20_000 })
   await expect(card).toContainText('e2e-node')
-  await expect(card).toContainText('N/A')
+  await expect(card).toContainText('详情查看延迟与丢包')
   const flag = card.getByRole('img', { name: 'SG', exact: true })
   await expect(flag).toHaveAttribute('src', '/assets/flags/sg.svg')
   await expect.poll(() => flag.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
@@ -64,6 +65,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
 })
 
 test('the first failed connection recovers without reloading the page', async ({ page }) => {
+  await login(page, '/admin')
   let failRequests = true
   await page.route('**/api/public', async (route) => {
     if (failRequests)
