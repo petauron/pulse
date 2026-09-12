@@ -108,6 +108,9 @@ impl Storage {
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
         let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
         let page_size = u64::try_from(page_size).map_err(|_| "invalid SQLite page size")?;
+        if page_size == 0 || max_database_bytes < page_size {
+            return Err("PULSE_MAX_DATABASE_BYTES must contain at least one SQLite page".into());
+        }
         let current_pages: i64 = connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
         let current_pages =
             u64::try_from(current_pages).map_err(|_| "invalid SQLite page count")?;
@@ -117,7 +120,9 @@ impl Storage {
             )
             .into());
         }
-        let max_pages = i64::try_from(max_database_bytes.div_ceil(page_size).max(1))
+        // A partial final page cannot be allocated without violating the same
+        // byte limit enforced above on every subsequent open.
+        let max_pages = i64::try_from(max_database_bytes / page_size)
             .map_err(|_| "configured database size exceeds SQLite limits")?;
         connection.pragma_update(None, "max_page_count", max_pages)?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
@@ -1354,6 +1359,29 @@ mod tests {
             .enroll(&request(), &hash_token(&enrollment.token), 10, 11_000)
             .unwrap();
         (directory, storage, credentials)
+    }
+
+    #[test]
+    fn non_page_aligned_capacity_never_allows_a_page_beyond_the_restart_limit() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("pulse.db");
+        let limit = 64 * 1024 * 1024 + 1;
+        let storage = Storage::open(&path, limit).unwrap();
+        {
+            let connection = storage.connection().unwrap();
+            let page_size: i64 = connection
+                .query_row("PRAGMA page_size", [], |row| row.get(0))
+                .unwrap();
+            let max_pages: i64 = connection
+                .query_row("PRAGMA max_page_count", [], |row| row.get(0))
+                .unwrap();
+            let page_size = u64::try_from(page_size).unwrap();
+            let max_pages = u64::try_from(max_pages).unwrap();
+            assert_eq!(max_pages, limit / page_size);
+            assert!(max_pages * page_size <= limit);
+        }
+        drop(storage);
+        assert!(Storage::open(&path, limit).is_ok());
     }
 
     #[test]

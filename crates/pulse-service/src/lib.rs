@@ -101,6 +101,12 @@ impl AppState {
         validate_config(config)?;
         let storage = Storage::open(&config.database_path, config.max_database_bytes)?;
         storage.prune_expired(unix_time_ms()?, config.retention_days)?;
+        let auth = auth::AuthState::new(
+            &config.database_path,
+            config.auth.clone(),
+            config.max_database_bytes,
+        )?;
+        let session_gate = auth.session_gate().clone();
         Ok(Self {
             storage: Arc::new(storage),
             database_permit: Arc::new(Semaphore::new(1)),
@@ -109,12 +115,8 @@ impl AppState {
             retention_days: config.retention_days,
             offline_after_seconds: config.offline_after_seconds,
             max_nodes: config.max_nodes,
-            auth: auth::AuthState::new(
-                &config.database_path,
-                config.auth.clone(),
-                config.max_database_bytes,
-            )?,
-            session_gate: session_gate::SessionGate::default(),
+            auth,
+            session_gate,
         })
     }
 
@@ -367,8 +369,7 @@ async fn request_guard(
             *request.method(),
             axum::http::Method::GET | axum::http::Method::HEAD
         );
-    // OAuth callback is a GET but issues sessions and may evict an older one.
-    let changes_sessions = auth_mutation || path == "/api/auth/oauth/callback";
+    // OAuth callback acquires its lease only after external identity verification.
     // Never let an anonymous slow upload hold the exclusive session lease.
     // Retain the original request parts so cookies, Origin, and CSRF are unchanged.
     let request = if auth_mutation {
@@ -379,8 +380,8 @@ async fn request_guard(
     } else {
         request
     };
-    let lease = if administrative || changes_sessions {
-        match state.session_gate.acquire(changes_sessions).await {
+    let lease = if administrative || auth_mutation {
+        match state.session_gate.acquire(auth_mutation).await {
             Ok(lease) => Some(lease),
             Err(message) => return ApiError::unavailable(message).into_response(),
         }
@@ -1270,6 +1271,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(admin.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn oauth_callback_validation_does_not_wait_for_an_administration_lease() {
+        let (_directory, state) = test_state();
+        let administration = state.session_gate.acquire(false).await.unwrap();
+        assert!(
+            !state.auth.session_gate().write_available(),
+            "root administration and OAuth issuance must share the same gate"
+        );
+        let response = timeout(
+            Duration::from_secs(1),
+            router(state.clone()).oneshot(
+                Request::builder()
+                    .uri("/api/auth/oauth/callback")
+                    .body(Body::empty())
+                    .unwrap(),
+            ),
+        )
+        .await
+        .expect("callback validation must not acquire an exclusive session lease")
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        drop(administration);
     }
 
     #[tokio::test]

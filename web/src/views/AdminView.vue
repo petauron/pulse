@@ -29,7 +29,7 @@ const sections = [{ id: 'nodes', label: '节点' }, { id: 'probes', label: '探�
 const section = computed(() => sections.some(item => item.id === route.query.section) ? route.query.section : 'nodes')
 
 async function refresh(): Promise<void> {
-  if (loading.value)
+  if (!auth.loggedIn || loading.value)
     return
   loading.value = true
   loadError.value = ''

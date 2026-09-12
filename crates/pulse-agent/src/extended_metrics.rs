@@ -271,13 +271,13 @@ pub fn detect_virtualization() -> Option<String> {
                 return Some(label.to_owned());
             }
         }
-        if let Some(container) = small_file("/run/systemd/container") {
-            if matches!(
+        if let Some(container) = small_file("/run/systemd/container")
+            && matches!(
                 container.as_str(),
                 "docker" | "podman" | "lxc" | "lxc-libvirt" | "systemd-nspawn" | "openvz"
-            ) {
-                return Some(container);
-            }
+            )
+        {
+            return Some(container);
         }
         let product = small_file("/sys/class/dmi/id/product_name").unwrap_or_default();
         let vendor = small_file("/sys/class/dmi/id/sys_vendor").unwrap_or_default();

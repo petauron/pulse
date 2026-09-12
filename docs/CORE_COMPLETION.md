@@ -28,12 +28,17 @@ as part of that workflow. No production restart or release is implied.
 - [ ] Separately authorized publication and catalog artifact update
 
 The Web license check, lint, 24 unit tests, Vue type check and production build
-have passed. Rust formatting, strict Clippy and all 69 workspace tests have
+have passed. Rust formatting, strict Clippy and all 73 workspace tests have
 passed. Production Web dependency auditing reported no vulnerabilities. The
 checked-in distribution has been rebuilt with the reproducible `dev` revision;
 the Rust notice bundle was regenerated and checked for 167 Linux dependencies.
 The PR checks remain authoritative for the final submitted revision, including
 Linux-only code and container builds. No live webhook destination was configured.
+
+The follow-up independent review's capacity-rounding and OAuth lease findings
+were fixed and re-reviewed. Regression tests cover non-page-aligned byte limits,
+administrator access during delayed OAuth identity lookup, and rejecting a stale
+OAuth flow after credential revocation.
 
 Pulse is on `kuddy/agent-auto-region`. Vastora changes are isolated on
 `kuddy/pulse-monitoring-config`; the original Vastora `main` worktree and its

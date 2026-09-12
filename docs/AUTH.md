@@ -38,9 +38,11 @@ values contain two independently generated UUID v4 values; only their SHA-256
 hashes are stored in SQLite.
 
 Deploy exactly one Service process per SQLite database. Browser administration
-requests hold a shared session lease; authentication mutations and OAuth callbacks
-hold an exclusive lease, acquired before authorization with a two-second queue
-deadline. Before acquiring an exclusive lease, authentication mutations must upload
+requests hold a shared session lease; authentication mutations hold an exclusive
+lease, acquired before authorization with a two-second queue deadline. OAuth's
+external identity exchange does not hold the lease; only final session issuance
+acquires it and rechecks the administrator's authentication version transactionally.
+Before acquiring an exclusive lease, authentication mutations must upload
 their entire request body within two seconds and an 8 KiB limit; a slow anonymous
 upload cannot hold the session lease. Running database workers keep their lease
 even if the HTTP request is cancelled or times out. A successful session revocation therefore waits for

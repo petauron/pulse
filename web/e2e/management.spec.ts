@@ -66,7 +66,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
   let taskId = ''
   try {
     await page.getByLabel('名称', { exact: true }).fill(name)
-    await page.getByLabel('类型', { exact: true }).selectOption('http')
+    await page.getByRole('combobox', { name: '类型', exact: true }).selectOption('http')
     await page.getByLabel('目标', { exact: true }).fill('http://127.0.0.1:18080/healthz')
     await page.getByLabel('间隔（秒）', { exact: true }).fill('5')
     await page.getByLabel('超时（秒）', { exact: true }).fill('2')

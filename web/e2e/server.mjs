@@ -56,8 +56,8 @@ const children = [
   }),
 ]
 
-const agentTimer = setTimeout(() => {
-  children.push(spawn(agentBinary, [], {
+function startAgent() {
+  const child = spawn(agentBinary, [], {
     cwd: repository,
     env: {
       ...process.env,
@@ -71,8 +71,10 @@ const agentTimer = setTimeout(() => {
       PULSE_GEOIP_PROVIDER: 'disabled',
     },
     stdio: 'inherit',
-  }))
-}, 500)
+  })
+  children.push(child)
+  observeChild(child)
+}
 
 async function initializeAdministrator() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -104,34 +106,37 @@ async function initializeAdministrator() {
   }
 }
 
-initializeAdministrator().catch(() => {
+// Initial setup and enrollment both write the disposable database. Start the
+// Agent only after setup commits instead of racing a fixed startup delay.
+initializeAdministrator().then(startAgent).catch(() => {
   process.stderr.write('Failed to initialize the disposable E2E administrator\n')
-  cleanup()
+  cleanup('SIGTERM', 1)
 })
 
 let closing = false
-function cleanup(signal = 'SIGTERM') {
+function cleanup(signal = 'SIGTERM', exitCode = 0) {
   if (closing)
     return
   closing = true
-  clearTimeout(agentTimer)
   for (const child of children) {
     if (!child.killed)
       child.kill(signal)
   }
   rmSync(stateDirectory, { recursive: true, force: true })
-  process.exit(0)
+  process.exit(exitCode)
 }
 
 process.on('SIGINT', () => cleanup('SIGINT'))
 process.on('SIGTERM', () => cleanup('SIGTERM'))
-for (const child of children) {
+function observeChild(child) {
   child.on('exit', (code, signal) => {
-    if (!closing && code !== 0) {
+    if (!closing) {
       process.stderr.write(`E2E child exited unexpectedly: code=${code} signal=${signal}\n`)
-      cleanup()
+      cleanup('SIGTERM', 1)
     }
   })
 }
+for (const child of children)
+  observeChild(child)
 
 setInterval(() => {}, 60_000)

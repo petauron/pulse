@@ -5,6 +5,7 @@ use std::{
     error::Error,
     fmt,
     fs::File,
+    future::Future,
     io::Read,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -117,6 +118,7 @@ impl AuthConfig {
 #[derive(Clone)]
 pub struct AuthState {
     inner: Arc<AuthInner>,
+    session_gate: crate::session_gate::SessionGate,
 }
 
 struct AuthInner {
@@ -298,6 +300,7 @@ impl AuthState {
         })?;
         let dummy_password_hash = hash_password(&random_token())?;
         Ok(Self {
+            session_gate: crate::session_gate::SessionGate::default(),
             inner: Arc::new(AuthInner {
                 connection: Mutex::new(connection),
                 database_permit: Arc::new(Semaphore::new(1)),
@@ -339,6 +342,10 @@ impl AuthState {
     #[must_use]
     pub fn oauth_enabled(&self) -> bool {
         self.inner.github.is_some()
+    }
+
+    pub(crate) fn session_gate(&self) -> &crate::session_gate::SessionGate {
+        &self.session_gate
     }
 
     async fn database<T, F>(&self, operation: F) -> Result<T, AuthError>
@@ -991,12 +998,48 @@ async fn oauth_callback(
         transaction.commit()?;
         Ok(flow)
     }).await?;
-    let identity = github_identity(&state, github, &code, &verifier).await?;
-    if identity.id != github.allowed_user_id {
+    let (token, complete) = oauth_session_after_identity(
+        &state,
+        auth_version,
+        github.allowed_user_id,
+        github_identity(&state, github, &code, &verifier),
+    )
+    .await?;
+    let mut response = Redirect::to(if complete {
+        "/"
+    } else {
+        "/?oauth_totp=required"
+    })
+    .into_response();
+    state.set_cookie(
+        &mut response,
+        state.session_cookie_name(),
+        &token,
+        if complete { SESSION_TTL } else { FLOW_TTL },
+    )?;
+    state.set_cookie(&mut response, state.oauth_cookie_name(), "", 0)?;
+    Ok(response)
+}
+
+async fn oauth_session_after_identity(
+    state: &AuthState,
+    auth_version: i64,
+    allowed_user_id: u64,
+    identity: impl Future<Output = Result<GithubIdentity, AuthError>>,
+) -> Result<(String, bool), AuthError> {
+    // External OAuth I/O must not reserve the global session-change lease.
+    // Only final session issuance/eviction competes with browser administration.
+    if identity.await?.id != allowed_user_id {
         return Err(AuthError::unauthorized());
     }
-    let (token, complete) = state
-        .database(move |connection| {
+    let lease = state
+        .session_gate
+        .acquire(true)
+        .await
+        .map_err(|_| AuthError::internal())?;
+    crate::session_gate::scope(
+        Some(lease),
+        state.database(move |connection| {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             let admin = admin(&transaction)?.ok_or(AuthError::unauthorized())?;
@@ -1015,22 +1058,9 @@ async fn oauth_callback(
             )?;
             transaction.commit()?;
             Ok((token, complete))
-        })
-        .await?;
-    let mut response = Redirect::to(if complete {
-        "/"
-    } else {
-        "/?oauth_totp=required"
-    })
-    .into_response();
-    state.set_cookie(
-        &mut response,
-        state.session_cookie_name(),
-        &token,
-        if complete { SESSION_TTL } else { FLOW_TTL },
-    )?;
-    state.set_cookie(&mut response, state.oauth_cookie_name(), "", 0)?;
-    Ok(response)
+        }),
+    )
+    .await
 }
 
 async fn oauth_complete(
@@ -1134,7 +1164,7 @@ fn limit_database_pages(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
     let page_size = u64::try_from(page_size).map_err(|_| "invalid SQLite page size")?;
-    if page_size == 0 || max_database_bytes == 0 {
+    if page_size == 0 || max_database_bytes < page_size {
         return Err("invalid authentication database size limit".into());
     }
     let pages: i64 = connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
@@ -1142,7 +1172,8 @@ fn limit_database_pages(
     if pages.saturating_mul(page_size) > max_database_bytes {
         return Err("database already exceeds PULSE_MAX_DATABASE_BYTES".into());
     }
-    let max_pages = i64::try_from(max_database_bytes.div_ceil(page_size).max(1))
+    // Match Storage's strict byte ceiling, including non-page-aligned limits.
+    let max_pages = i64::try_from(max_database_bytes / page_size)
         .map_err(|_| "configured database size exceeds SQLite limits")?;
     connection.pragma_update(None, "max_page_count", max_pages)?;
     Ok(())
@@ -1490,6 +1521,33 @@ mod tests {
         headers
     }
 
+    #[test]
+    fn authentication_page_limit_rejects_growth_past_a_partial_page() {
+        let connection = Connection::open_in_memory().unwrap();
+        let page_size: i64 = connection
+            .query_row("PRAGMA page_size", [], |row| row.get(0))
+            .unwrap();
+        assert!(limit_database_pages(&connection, u64::try_from(page_size - 1).unwrap()).is_err());
+        limit_database_pages(&connection, u64::try_from(page_size * 2 + 1).unwrap()).unwrap();
+        let max_pages: i64 = connection
+            .query_row("PRAGMA max_page_count", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(max_pages, 2);
+        connection
+            .execute("CREATE TABLE capacity_test(data BLOB)", [])
+            .unwrap();
+        let error = connection
+            .execute(
+                "INSERT INTO capacity_test VALUES (zeroblob(?1))",
+                [page_size],
+            )
+            .unwrap_err();
+        assert_eq!(
+            error.sqlite_error_code(),
+            Some(rusqlite::ErrorCode::DiskFull)
+        );
+    }
+
     #[tokio::test]
     async fn initialization_requires_bootstrap_origin_and_csrf_and_is_single_use() {
         let (_directory, state) = state();
@@ -1724,9 +1782,78 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn slow_oauth_identity_does_not_block_admin_or_credential_revocation() {
+        let (_directory, state) = state();
+        let (cookie, csrf) = initialize(&state).await;
+        let auth_version = state
+            .database(|connection| {
+                Ok(admin(connection)?
+                    .ok_or(AuthError::unauthorized())?
+                    .auth_version)
+            })
+            .await
+            .unwrap();
+        let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = tokio::sync::oneshot::channel();
+        let oauth_state = state.clone();
+        let callback = tokio::spawn(async move {
+            oauth_session_after_identity(&oauth_state, auth_version, 42, async move {
+                // Simulate an external identity lookup without contacting GitHub.
+                let _ = entered_tx.send(());
+                release_rx.await.map_err(|_| AuthError::internal())?;
+                Ok(GithubIdentity { id: 42 })
+            })
+            .await
+        });
+        entered_rx.await.unwrap();
+        let admin_lease = state.session_gate.acquire(false).await.unwrap();
+        let admin_headers = headers(&cookie);
+        let authorization = crate::session_gate::scope(
+            Some(admin_lease),
+            state.authorize(&admin_headers, true, true),
+        )
+        .await
+        .unwrap();
+        assert!(authorization.is_some());
+        let revoke_lease = state.session_gate.acquire(true).await.unwrap();
+        let response = crate::session_gate::scope(
+            Some(revoke_lease),
+            request(
+                &state,
+                "POST",
+                "/api/auth/password",
+                &cookie,
+                Some(&csrf),
+                Some(TEST_ORIGIN),
+                json!({"current_password":PASSWORD,"new_password":"replacement password during OAuth lookup"}),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        release_tx.send(()).unwrap();
+        let error = callback.await.unwrap().unwrap_err();
+        assert_eq!(error.status, StatusCode::UNAUTHORIZED);
+        assert!(state.session(&admin_headers).await.unwrap().is_none());
+        let sessions = state
+            .database(|connection| {
+                Ok(
+                    connection.query_row("SELECT count(*) FROM auth_sessions", [], |row| {
+                        row.get::<_, i64>(0)
+                    })?,
+                )
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            sessions, 0,
+            "an old OAuth flow must not recreate a revoked session"
+        );
+    }
+
+    #[tokio::test]
     async fn cancelled_authentication_worker_keeps_its_exclusive_session_lease() {
         let (_directory, state) = state();
-        let gate = crate::session_gate::SessionGate::default();
+        let gate = state.session_gate.clone();
         let lease = gate.acquire(true).await.unwrap();
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (finish_tx, finish_rx) = std::sync::mpsc::sync_channel(1);
