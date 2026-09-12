@@ -4,7 +4,10 @@ use std::{
     fmt::{self, Display, Formatter},
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard},
+    sync::{
+        Mutex, MutexGuard,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -16,8 +19,11 @@ use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use uuid::Uuid;
 
-pub(crate) const SCHEMA_VERSION: i64 = 3;
+mod metrics;
+
+pub(crate) const SCHEMA_VERSION: i64 = 4;
 const MIN_SNAPSHOT_SPACING_MS: i64 = 950;
+const INGEST_PRUNE_INTERVAL_MS: u64 = 60_000;
 pub(crate) const RETENTION_PRUNE_BATCH_SIZE: usize = 10_000;
 
 #[derive(Debug)]
@@ -63,6 +69,7 @@ impl From<rusqlite::Error> for StorageError {
 pub(crate) struct Storage {
     connection: Mutex<Connection>,
     path: PathBuf,
+    next_prune_at_ms: AtomicU64,
 }
 
 #[derive(Debug, Serialize)]
@@ -106,25 +113,7 @@ impl Storage {
         let existed_with_data = path.metadata().is_ok_and(|metadata| metadata.len() > 0);
         let mut connection = Connection::open(path)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        let page_size: i64 = connection.query_row("PRAGMA page_size", [], |row| row.get(0))?;
-        let page_size = u64::try_from(page_size).map_err(|_| "invalid SQLite page size")?;
-        if page_size == 0 || max_database_bytes < page_size {
-            return Err("PULSE_MAX_DATABASE_BYTES must contain at least one SQLite page".into());
-        }
-        let current_pages: i64 = connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
-        let current_pages =
-            u64::try_from(current_pages).map_err(|_| "invalid SQLite page count")?;
-        if current_pages.saturating_mul(page_size) > max_database_bytes {
-            return Err(format!(
-                "database already exceeds PULSE_MAX_DATABASE_BYTES ({max_database_bytes} bytes)"
-            )
-            .into());
-        }
-        // A partial final page cannot be allocated without violating the same
-        // byte limit enforced above on every subsequent open.
-        let max_pages = i64::try_from(max_database_bytes / page_size)
-            .map_err(|_| "configured database size exceeds SQLite limits")?;
-        connection.pragma_update(None, "max_page_count", max_pages)?;
+        metrics::configure_limit(&connection, "main", max_database_bytes)?;
         let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         if version > SCHEMA_VERSION {
             return Err(format!(
@@ -139,21 +128,16 @@ impl Storage {
                 online_backup(&connection, &backup_path)?;
                 tracing::info!(path = %backup_path.display(), "database backup created before migration");
             }
-            migrate(&mut connection, version)?;
+            if version < 3 {
+                migrate(&mut connection, version)?;
+            }
         }
-
-        // Credential rotation/revocation must survive power loss after success.
-        connection.execute_batch(
-            "PRAGMA foreign_keys = ON;
-             PRAGMA journal_mode = WAL;
-             PRAGMA synchronous = FULL;
-             PRAGMA cache_size = -4096;
-             PRAGMA wal_autocheckpoint = 1000;
-             PRAGMA journal_size_limit = 67108864;",
-        )?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
+        metrics::attach(&mut connection, path, max_database_bytes)?;
         Ok(Self {
             connection: Mutex::new(connection),
             path: path.to_path_buf(),
+            next_prune_at_ms: AtomicU64::new(0),
         })
     }
 
@@ -329,6 +313,9 @@ impl Storage {
         }
         insert_audit_transaction(&transaction, now_ms, "node.delete", node_id)?;
         transaction.commit()?;
+        // Control-plane deletion is durable first. Startup retries interrupted
+        // metric cleanup, since WAL commits are not atomic across both files.
+        metrics::delete_node(&mut connection, node_id)?;
         Ok(())
     }
 
@@ -349,12 +336,10 @@ impl Storage {
     }
 
     pub(crate) fn backup(&self) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
-        let connection = self
+        let mut connection = self
             .connection()
             .map_err(|error| -> Box<dyn Error + Send + Sync> { Box::new(error) })?;
-        let target = backup_path(&self.path)?;
-        online_backup(&connection, &target)?;
-        Ok(target)
+        metrics::backup(&mut connection, &self.path)
     }
 
     pub(crate) fn prune_expired(
@@ -374,6 +359,40 @@ impl Storage {
             [to_i64(now_ms.saturating_sub(u64::from(retention_days)*86_400_000))?])?;
         transaction.commit()?;
         Ok(removed.saturating_add(probe_removed))
+    }
+
+    pub(crate) fn prune_before_ingest(
+        &self,
+        transaction: &Transaction<'_>,
+        now_ms: u64,
+        retention_days: u32,
+    ) -> Result<bool, StorageError> {
+        if now_ms < self.next_prune_at_ms.load(Ordering::Relaxed) {
+            return Ok(false);
+        }
+        prune_expired_snapshots(
+            transaction,
+            to_i64(now_ms)?,
+            retention_days,
+            RETENTION_PRUNE_BATCH_SIZE,
+        )?;
+        transaction.execute(
+            "DELETE FROM probe_results WHERE id IN (SELECT id FROM probe_results
+             WHERE received_at_ms<?1 ORDER BY received_at_ms LIMIT 10000)",
+            [to_i64(
+                now_ms.saturating_sub(u64::from(retention_days) * 86_400_000),
+            )?],
+        )?;
+        Ok(true)
+    }
+
+    pub(crate) fn record_ingest_prune(&self, pruned: bool, now_ms: u64) {
+        if pruned {
+            self.next_prune_at_ms.store(
+                now_ms.saturating_add(INGEST_PRUNE_INTERVAL_MS),
+                Ordering::Relaxed,
+            );
+        }
     }
 
     pub(crate) fn ingest(
@@ -422,16 +441,12 @@ impl Storage {
             return Err(StorageError::RateLimited);
         }
 
-        prune_expired_snapshots(
-            &transaction,
-            received_at,
-            retention_days,
-            RETENTION_PRUNE_BATCH_SIZE,
-        )?;
+        let pruned = self.prune_before_ingest(&transaction, received_at_ms, retention_days)?;
         update_node_from_snapshot(&transaction, &node_id, snapshot, received_at)?;
         insert_snapshot(&transaction, &node_id, snapshot, received_at)?;
         crate::control::update_traffic(&transaction, &node_id, snapshot, received_at_ms)?;
         transaction.commit()?;
+        self.record_ingest_prune(pruned, received_at_ms);
         Ok(())
     }
 
@@ -542,14 +557,21 @@ fn update_node_from_snapshot(
     snapshot: &SystemSnapshot,
     received_at: i64,
 ) -> Result<(), StorageError> {
-    transaction.execute(
+    transaction.prepare_cached(
         "UPDATE nodes SET
             name = COALESCE(?2, name), agent_version = ?3, operating_system = ?4,
             kernel_version = ?5, architecture = ?6, cpu_name = ?7, cpu_cores = ?8,
             virtualization = ?9, region = ?10, node_group = ?11,
             memory_total_bytes = ?12, swap_total_bytes = ?13, disk_total_bytes = ?14,
-            updated_at_ms = ?15, last_seen_at_ms = ?15
-         WHERE id = ?1",
+            updated_at_ms = ?15
+         WHERE id = ?1 AND (
+            name IS NOT COALESCE(?2, name) OR agent_version IS NOT ?3 OR
+            operating_system IS NOT ?4 OR kernel_version IS NOT ?5 OR
+            architecture IS NOT ?6 OR cpu_name IS NOT ?7 OR cpu_cores IS NOT ?8 OR
+            virtualization IS NOT ?9 OR region IS NOT ?10 OR node_group IS NOT ?11 OR
+            memory_total_bytes IS NOT ?12 OR swap_total_bytes IS NOT ?13 OR disk_total_bytes IS NOT ?14
+         )",
+    )?.execute(
         params![
             node_id,
             snapshot.host_name.as_deref(),
@@ -577,8 +599,9 @@ fn insert_snapshot(
     snapshot: &SystemSnapshot,
     received_at: i64,
 ) -> Result<(), StorageError> {
-    transaction.execute(
-        "INSERT INTO snapshots (
+    transaction
+        .prepare_cached(
+            "INSERT INTO snapshots (
             node_id, sample_id, collected_at_ms, received_at_ms, uptime_seconds,
             cpu_usage_percent, load_one, load_five, load_fifteen,
             memory_total_bytes, memory_used_bytes, swap_total_bytes, swap_used_bytes,
@@ -589,7 +612,8 @@ fn insert_snapshot(
             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
             ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21
          )",
-        params![
+        )?
+        .execute(params![
             node_id,
             snapshot.sample_id,
             to_i64(snapshot.collected_at_unix_ms)?,
@@ -613,8 +637,13 @@ fn insert_snapshot(
             json!({"tcp_connection_count":snapshot.tcp_connection_count,
                 "udp_connection_count":snapshot.udp_connection_count,"gpus":snapshot.gpus})
             .to_string(),
-        ],
-    )?;
+        ])?;
+    transaction
+        .prepare_cached(
+            "INSERT INTO node_state(node_id,last_seen_at_ms) VALUES(?1,?2)
+         ON CONFLICT(node_id) DO UPDATE SET last_seen_at_ms=excluded.last_seen_at_ms",
+        )?
+        .execute(params![node_id, received_at])?;
     Ok(())
 }
 
@@ -627,7 +656,7 @@ fn query_clients(
         "SELECT id, name, agent_version, operating_system, kernel_version, architecture,
                 cpu_name, cpu_cores, virtualization, region, node_group, memory_total_bytes,
                 swap_total_bytes, disk_total_bytes, created_at_ms, updated_at_ms,
-                last_seen_at_ms
+                (SELECT last_seen_at_ms FROM node_state WHERE node_id=nodes.id)
          FROM nodes WHERE disabled_at_ms IS NULL
            AND NOT EXISTS (SELECT 1 FROM node_options o WHERE o.node_id=nodes.id AND json_extract(o.data,'$.hidden')=1)
          ORDER BY COALESCE((SELECT json_extract(o.data,'$.weight') FROM node_options o WHERE o.node_id=nodes.id),0) DESC, created_at_ms ASC LIMIT ?1 OFFSET ?2",
@@ -663,7 +692,7 @@ const LATEST_STATUSES_SQL: &str =
                 s.swap_used_bytes, s.disk_total_bytes, s.disk_used_bytes,
                 s.network_receive_bytes_per_second, s.network_transmit_bytes_per_second,
                 s.network_total_received_bytes, s.network_total_transmitted_bytes,
-                s.process_count, n.last_seen_at_ms
+                s.process_count, s.received_at_ms
          FROM nodes n
          JOIN snapshots s ON s.id = (
             SELECT s2.id FROM snapshots s2 WHERE s2.node_id = n.id
@@ -842,7 +871,7 @@ fn migrate(connection: &mut Connection, from_version: i64) -> rusqlite::Result<(
     let transaction = connection.transaction()?;
     crate::control::migrate(&transaction)?;
     crate::auth::migrate(&transaction)?;
-    transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", 3)?;
     transaction.commit()
 }
 
@@ -1081,13 +1110,21 @@ fn online_backup(source: &Connection, target: &Path) -> Result<(), Box<dyn Error
     let temporary = target.with_file_name(format!(".{target_name}.partial"));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true).mode(0o600);
+    // A pre-existing temporary path is not ours to clean up on failure.
+    drop(options.open(&temporary)?);
     let backup_result = (|| -> Result<(), Box<dyn Error + Send + Sync>> {
-        drop(options.open(&temporary)?);
         let mut destination = Connection::open(&temporary)?;
         destination.busy_timeout(Duration::from_secs(5))?;
         {
             let backup = Backup::new(source, &mut destination)?;
             backup.run_to_completion(128, Duration::from_millis(10), None)?;
+        }
+        // Publish a standalone snapshot, not a WAL-mode file that may require
+        // creating sidecars when opened read-only on another SQLite runtime.
+        let journal: String =
+            destination.query_row("PRAGMA journal_mode=DELETE", [], |row| row.get(0))?;
+        if journal != "delete" {
+            return Err("SQLite backup could not be finalized without WAL sidecars".into());
         }
         let integrity: String =
             destination.query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))?;
@@ -1444,6 +1481,60 @@ mod tests {
             synchronous, 2,
             "FULL synchronization is required for credential lifecycle durability"
         );
+        let metrics_sync: i64 = connection
+            .query_row("PRAGMA metrics.synchronous", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(metrics_sync, 2, "acknowledged samples must remain durable");
+    }
+
+    #[test]
+    fn ordinary_samples_do_not_write_the_control_database() {
+        let (directory, storage, credentials) = enrolled_storage();
+        let token = hash_token(&credentials.agent_token);
+        storage
+            .ingest(
+                &token,
+                &sample(Uuid::new_v4().to_string(), 20_000),
+                20_000,
+                7,
+            )
+            .unwrap();
+        let observer = Connection::open(directory.path().join("pulse.db")).unwrap();
+        let version = || {
+            observer
+                .query_row("PRAGMA data_version", [], |r| r.get::<_, i64>(0))
+                .unwrap()
+        };
+        let before = version();
+        for index in 1..=10 {
+            let now = 20_000 + index * 1000;
+            let mut snapshot = sample(Uuid::new_v4().to_string(), now);
+            snapshot.network_total_received_bytes += index;
+            storage.ingest(&token, &snapshot, now, 7).unwrap();
+        }
+        assert_eq!(
+            version(),
+            before,
+            "routine samples must not dirty main pages"
+        );
+        let db = storage.connection().unwrap();
+        let seen: i64 = db
+            .query_row(
+                "SELECT last_seen_at_ms FROM node_state WHERE node_id=?1",
+                [&credentials.node_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(seen, 30_000);
+        drop(db);
+        let mut changed = sample(Uuid::new_v4().to_string(), 31_000);
+        changed.region = "JP".into();
+        storage.ingest(&token, &changed, 31_000, 7).unwrap();
+        assert_ne!(
+            version(),
+            before,
+            "actual metadata changes must remain persistent"
+        );
     }
 
     #[test]
@@ -1603,13 +1694,13 @@ mod tests {
         {
             let connection = storage.connection().unwrap();
             connection
-                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+                .execute_batch("PRAGMA metrics.wal_checkpoint(TRUNCATE);")
                 .unwrap();
             let page_count: i64 = connection
-                .query_row("PRAGMA page_count", [], |row| row.get(0))
+                .query_row("PRAGMA metrics.page_count", [], |row| row.get(0))
                 .unwrap();
             connection
-                .pragma_update(None, "max_page_count", page_count)
+                .pragma_update(Some("metrics"), "max_page_count", page_count)
                 .unwrap();
         }
 
@@ -1817,13 +1908,67 @@ mod tests {
         );
         let backup = storage.backup().unwrap();
         assert_eq!(
-            fs::metadata(backup).unwrap().permissions().mode() & 0o777,
-            0o600
+            fs::metadata(&backup).unwrap().permissions().mode() & 0o777,
+            0o700
         );
+        for file in ["pulse.db", "pulse.metrics.db", "manifest.json"] {
+            assert_eq!(
+                fs::metadata(backup.join(file))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
 
         fs::set_permissions(&database, fs::Permissions::from_mode(0o644)).unwrap();
         drop(storage);
         assert!(Storage::open(&database, 64 * 1024 * 1024).is_err());
+    }
+
+    #[test]
+    fn backup_does_not_delete_an_existing_temporary_file() {
+        let directory = tempdir().unwrap();
+        let source = Connection::open_in_memory().unwrap();
+        source
+            .execute("CREATE TABLE sample(value INTEGER)", [])
+            .unwrap();
+        let target = directory.path().join("backup.db");
+        let temporary = directory.path().join(".backup.db.partial");
+        fs::write(&temporary, "preserve-existing-file").unwrap();
+        assert!(online_backup(&source, &target).is_err());
+        assert_eq!(
+            fs::read_to_string(&temporary).unwrap(),
+            "preserve-existing-file"
+        );
+        assert!(!target.exists());
+    }
+
+    #[test]
+    fn wal_backup_is_a_standalone_read_only_file() {
+        let directory = tempdir().unwrap();
+        let source = Connection::open(directory.path().join("source.db")).unwrap();
+        source.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE sample(value INTEGER); INSERT INTO sample VALUES(42);").unwrap();
+        let target = directory.path().join("backup.db");
+        online_backup(&source, &target).unwrap();
+        let backup =
+            Connection::open_with_flags(&target, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        assert_eq!(
+            backup
+                .query_row("PRAGMA journal_mode", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "delete"
+        );
+        assert_eq!(
+            backup
+                .query_row("SELECT value FROM sample", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            42
+        );
+        assert!(!directory.path().join("backup.db-wal").exists());
+        assert!(!directory.path().join("backup.db-shm").exists());
     }
 
     #[cfg(unix)]
@@ -1898,7 +2043,7 @@ mod tests {
         assert!(completed_writes.load(Ordering::SeqCst) > writes_before_backup);
 
         let backup = backup_result.unwrap();
-        let backup_connection = Connection::open(backup).unwrap();
+        let backup_connection = Connection::open(backup.join("pulse.db")).unwrap();
         let values: (i64, i64) = backup_connection
             .query_row(
                 "SELECT

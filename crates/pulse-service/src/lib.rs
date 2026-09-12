@@ -59,6 +59,7 @@ pub struct ServiceConfig {
     pub retention_days: u32,
     pub offline_after_seconds: u64,
     pub max_nodes: u32,
+    /// Maximum size of each SQLite file; excludes WAL and backup files.
     pub max_database_bytes: u64,
     pub auth: AuthConfig,
 }
@@ -307,7 +308,7 @@ impl Administration {
         Ok(self.storage.audit_events(limit.clamp(1, 1_000))?)
     }
 
-    /// Creates a consistent private online backup beside the configured database.
+    /// Creates a consistent private backup directory containing both databases and a manifest.
     ///
     /// # Errors
     ///

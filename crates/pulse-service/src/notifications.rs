@@ -219,10 +219,11 @@ impl Storage {
 #[allow(clippy::cast_precision_loss)]
 fn load_nodes(db: &Connection, now_ms: u64) -> Result<HashMap<String, NodeState>, StorageError> {
     let mut statement = db.prepare(
-        "SELECT n.id,n.name,n.created_at_ms,n.last_seen_at_ms,o.data,
+        "SELECT n.id,n.name,n.created_at_ms,ns.last_seen_at_ms,o.data,
                 s.cpu_usage_percent,s.memory_used_bytes,s.memory_total_bytes,
                 s.disk_used_bytes,s.disk_total_bytes,t.used_up,t.used_down,t.cycle_start_ms
          FROM nodes n LEFT JOIN node_options o ON o.node_id=n.id
+         LEFT JOIN node_state ns ON ns.node_id=n.id
          LEFT JOIN traffic_periods t ON t.node_id=n.id
          LEFT JOIN snapshots s ON s.id=(SELECT latest.id FROM snapshots latest
              WHERE latest.node_id=n.id ORDER BY latest.received_at_ms DESC,latest.id DESC LIMIT 1)
@@ -740,7 +741,7 @@ mod tests {
             .connection()
             .unwrap()
             .execute(
-                "UPDATE nodes SET last_seen_at_ms=110001 WHERE id=?1",
+                "INSERT INTO node_state(node_id,last_seen_at_ms) VALUES(?1,110001) ON CONFLICT(node_id) DO UPDATE SET last_seen_at_ms=110001",
                 [node_id],
             )
             .unwrap();

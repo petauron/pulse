@@ -235,7 +235,7 @@ fn migration_from_released_schema_creates_backup_and_privacy_default() {
     assert_eq!(
         db.query_row::<i64, _, _>("PRAGMA user_version", [], |r| r.get(0))
             .unwrap(),
-        3
+        crate::storage::SCHEMA_VERSION
     );
     assert!(
         directory

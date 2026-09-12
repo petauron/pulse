@@ -19,7 +19,7 @@ Download the archive for the host architecture together with `SHA256SUMS`, its S
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify pulse-v0.1.0-alpha.3-linux-x86_64.tar.gz --repo petauron/pulse
+gh attestation verify pulse-v0.1.0-alpha.4-linux-x86_64.tar.gz --repo petauron/pulse
 ```
 
 Official Linux archives target `x86_64` and `aarch64` GNU/Linux with a Debian 12 (glibc 2.36) runtime baseline. Both binaries are built in the pinned Debian 12 Rust image and must start in a clean Debian 12 runtime before packaging. The same build/verification script runs in CI. Use the container or build from source for other environments, including musl-based distributions.
@@ -131,7 +131,7 @@ and [IPinfo](https://github.com/komari-monitor/komari/blob/main/utils/geoip/ipin
 
 ## Containerized Service
 
-The image runs as UID/GID 65532 and stores its mode-0600 SQLite database in `/var/lib/pulse`. The Agent should still run directly on each monitored host so its metrics describe that host rather than a container.
+The image runs as UID/GID 65532 and stores its mode-0600 SQLite databases in `/var/lib/pulse`. Persist the entire directory, not a single database file. The Agent should still run directly on each monitored host so its metrics describe that host rather than a container.
 
 ```bash
 sudo install -d -o 65532 -g 65532 -m 0700 /srv/pulse
@@ -143,7 +143,7 @@ docker run --detach --name pulse --restart unless-stopped \
   --volume /srv/pulse-setup-token:/run/secrets/setup-token:ro \
   --env PULSE_PUBLIC_URL=https://pulse.example.com \
   --env PULSE_SETUP_TOKEN_FILE=/run/secrets/setup-token \
-  ghcr.io/petauron/pulse:v0.1.0-alpha.3
+  ghcr.io/petauron/pulse:v0.1.0-alpha.4
 ```
 
 Alpha.3 contains these authentication changes; Alpha.2 does not. Even though the process listens on all interfaces inside the container, publish it to loopback and terminate TLS at the reverse proxy. Open `/login` for initial setup; afterward remove both the setup-token mount and environment setting when recreating the container, then remove its source file. The [Compose example](../deploy/docker-compose.yml) provides the same explicit configuration. Run local administration with `docker exec`, using the same database path already present in the image environment.
@@ -178,6 +178,13 @@ Import refuses to overwrite an existing credential. Set the exact original Servi
 
 ## Backup and restore
 
+The Service uses two paired SQLite files:
+
+- `pulse.db`: accounts, sessions, credentials, node metadata, monitoring configuration, alerts and audit events.
+- `pulse.metrics.db`: raw snapshots, probe results, last-seen times and traffic counters.
+
+`PULSE_DATABASE_PATH` selects the control file; the sibling metrics filename is derived by replacing the final `.db` with `.metrics.db` (or appending `.metrics.db` if there is no `.db` suffix). Both files use WAL and `synchronous=FULL`. Successful reports are committed before acknowledgment: there is no lossy in-memory sample buffer or change to raw history precision.
+
 Run the online backup command as the Service account:
 
 ```bash
@@ -185,16 +192,18 @@ sudo -u pulse env PULSE_DATABASE_PATH=/var/lib/pulse/pulse.db \
   /usr/local/bin/pulse-service backup
 ```
 
-Pulse uses SQLite's online backup API to coordinate a consistent snapshot with live writers. It writes to a uniquely named mode-0600 temporary file, runs SQLite's integrity check, fsyncs it, and only then makes the final backup path visible beside the database. Copy the printed file to encrypted storage and test restoration periodically. A forward schema migration also creates and validates a backup and fails closed if the backup or migration cannot complete.
+Pulse briefly reserves both database writers, then uses SQLite's online backup API to copy and integrity-check both files. Backup copies are finalized in DELETE journal mode so they can be read independently without WAL sidecars; the running databases remain in WAL mode. The command prints a mode-0700 **directory**, containing mode-0600 `pulse.db`, `pulse.metrics.db` and `manifest.json`. The complete directory is published only after both copies and the manifest are fsynced. Copy that entire directory to encrypted storage and test restoration periodically. Writers can wait or time out during a large backup; schedule it outside peak ingestion periods. Failed backups may leave an unpublished `.partial` directory, which is not a usable backup.
+
+The schema-3 to schema-4 split first creates and verifies a **single-file pre-upgrade backup** beside the original control database. Stop the old Service before upgrading. Migration uses a rollback-journal transaction across both files, verifies all copied snapshot/probe/traffic fields, and only then removes the old metric tables. Insufficient space, newer schemas, a mismatched pair or an occupied destination fail closed. An interrupted migration is recovered by SQLite's journals; do not delete journal files manually. Allow extra disk space for the pre-upgrade backup, new metrics file, rollback journals and temporary verification work. Dropping old tables frees reusable pages inside the control file but does not automatically shrink it.
 
 Restore only while the Service is stopped:
 
 1. Stop `pulse-service` and take one final filesystem copy of the state directory.
-2. Replace `pulse.db` with a verified backup; do not mix old `-wal` or `-shm` files into the restore.
-3. Set ownership to `pulse:pulse`, directory mode to 0700, and database mode to 0600.
+2. Restore **both files from the same backup directory**, using the filenames expected by `PULSE_DATABASE_PATH`. Move the previous database pair and its `-wal`/`-shm` files together into the saved state copy; never mix them into the restore. The pair ID rejects unrelated databases, but it does not prove that two backups of the same installation were taken at the same time: always use one complete backup directory.
+3. Set ownership to `pulse:pulse`, directory mode to 0700, and both database modes to 0600.
 4. Start the Service and verify `/healthz`, the dashboard, Agent ingestion, and recent history.
 
-Pulse performs forward-only schema migrations and does not automatically downgrade a database. Restore a pre-upgrade backup before rolling back across a schema change.
+Pulse performs forward-only schema migrations and does not automatically downgrade a database. To roll back across the split, restore the single-file pre-upgrade backup with the previous binary, retaining the split pair separately rather than mixing it with the old file. Never replace a missing metrics database with an empty file.
 
 ## Upgrade, rollback, and uninstall
 
@@ -225,7 +234,7 @@ Take a backup before manually deleting preserved paths under `/var/lib/pulse`, `
 
 ## Capacity and metric selection
 
-`PULSE_RETENTION_DAYS`, `PULSE_MAX_NODES`, and `PULSE_MAX_DATABASE_BYTES` form hard Service bounds. The defaults are 7 days, 100 active nodes, and 2 GiB. Expired snapshots are removed in bounded batches before new inserts, once at startup, and hourly even when no Agent is reporting, so a database at its page limit can reclaim expired pages before accepting another sample. The Service also limits request concurrency, request bodies, history responses, and the SQLite page cache. Monitor filesystem free space independently and alert before the configured database limit is reached.
+`PULSE_RETENTION_DAYS`, `PULSE_MAX_NODES`, and `PULSE_MAX_DATABASE_BYTES` form hard Service bounds. The defaults are 7 days, 100 active nodes, and **2 GiB per database file** (up to 4 GiB across the pair, excluding WAL files, backups and migration scratch space). The size limit is checked and enforced independently on both files. Expired history is removed in bounded batches at startup, by hourly maintenance even without Agents, and at most once per minute on the ingestion path. A failed write is not acknowledged; Agents retry while retention can reclaim space. The Service also limits request concurrency, request bodies, history responses, its statement cache (32 entries), and SQLite page caches (1 MiB control + 3 MiB metrics; authentication has its own existing 1 MiB cache). Monitor filesystem free space independently and alert before limits are reached.
 
 The Agent interval is bounded to 1–300 seconds, defaulting to three seconds. The administrator can change it centrally; each Agent refreshes authenticated configuration every 30 seconds. Faster intervals increase disk usage; adjust capacity and retention together. By default, disks are deduplicated by device identity and loopback network interfaces are excluded. Container mounts, aliases, bridges, or virtual interfaces can still make aggregate metrics misleading; set exact comma-separated `PULSE_DISK_MOUNT_POINTS` and `PULSE_NETWORK_INTERFACES` allowlists when required.
 
