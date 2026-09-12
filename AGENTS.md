@@ -3,7 +3,7 @@
 - Keep Pulse focused on server health monitoring. Do not add remote shells, file management, arbitrary command execution, or unrelated administration features.
 - Optimize for predictable, low resident memory. Every persistent cache, background task, queue, and database buffer must have an explicit bound.
 - Agents initiate outbound connections only. The Service must never gain a general-purpose command channel to an Agent.
-- Do not add telemetry, crash uploads, analytics, or calls to third-party services unless an administrator explicitly configures them.
+- Do not add telemetry, crash uploads, analytics, or calls to third-party services unless an administrator explicitly configures them. The sole default-enabled exception is Agent country discovery through GeoJS: disclose it in installation/upgrade instructions, retain an explicit disable option and manual-region priority, and never send Pulse credentials or host metrics. Other third-party integrations still require explicit configuration.
 - Released database schemas use tested, forward-only migrations. Back up before migration and fail closed on migration errors.
 - Keep protocol changes versioned and explicit. Remove superseded pre-release implementations instead of maintaining hidden compatibility paths.
 - Prefer memory-safe Rust and mature crates. Any `unsafe` block requires a documented invariant and focused tests.

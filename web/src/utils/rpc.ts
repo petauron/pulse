@@ -1,6 +1,8 @@
+import { getSessionGeneration, requireLogin } from './session'
+
 const DEFAULT_RPC_API_BASE = '/api'
 const DEFAULT_TIMEOUT_MS = 15_000
-const MAX_RESPONSE_CHARACTERS = 2 * 1024 * 1024
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 interface JsonRpcResponse<T> {
   jsonrpc: '2.0'
@@ -146,6 +148,7 @@ export class RpcClient {
     params: Record<string, unknown> = {},
     signal?: AbortSignal,
   ): Promise<T> {
+    const generation = getSessionGeneration()
     const controller = new AbortController()
     let timedOut = false
     const timer = window.setTimeout(() => {
@@ -166,12 +169,38 @@ export class RpcClient {
         body: JSON.stringify({ jsonrpc: '2.0', method, params, id }),
         signal: controller.signal,
       })
-      if (!response.ok)
+      if (!response.ok) {
+        if (response.status === 401)
+          requireLogin(generation)
         throw new RpcError(response.status, `RPC request failed with HTTP ${response.status}`)
+      }
 
-      const text = await response.text()
-      if (text.length > MAX_RESPONSE_CHARACTERS)
+      const declaredSize = Number(response.headers.get('content-length'))
+      if (Number.isFinite(declaredSize) && declaredSize > MAX_RESPONSE_BYTES) {
+        controller.abort()
         throw new RpcError(-32001, 'RPC response exceeded the client safety limit')
+      }
+      let text = ''
+      let bytes = 0
+      const reader = response.body?.getReader()
+      if (reader) {
+        const decoder = new TextDecoder()
+        try {
+          while (true) {
+            const chunk = await reader.read()
+            if (chunk.done)
+              break
+            bytes += chunk.value.byteLength
+            if (bytes > MAX_RESPONSE_BYTES) {
+              controller.abort()
+              throw new RpcError(-32001, 'RPC response exceeded the client safety limit')
+            }
+            text += decoder.decode(chunk.value, { stream: true })
+          }
+          text += decoder.decode()
+        }
+        finally { reader.releaseLock() }
+      }
       const payload = JSON.parse(text) as JsonRpcResponse<T>
       if (payload.id !== id || payload.jsonrpc !== '2.0')
         throw new RpcError(-32603, 'Invalid RPC response')

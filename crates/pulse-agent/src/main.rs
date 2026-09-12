@@ -1,3 +1,8 @@
+mod extended_metrics;
+mod probes;
+mod region;
+mod system_command;
+
 use std::{
     collections::HashSet,
     env,
@@ -19,8 +24,8 @@ use tokio::time::{MissedTickBehavior, interval};
 use uuid::Uuid;
 
 const DEFAULT_SERVICE_URL: &str = "http://127.0.0.1:8080";
-const DEFAULT_INTERVAL_SECONDS: u64 = 30;
-const MIN_INTERVAL_SECONDS: u64 = 5;
+const DEFAULT_INTERVAL_SECONDS: u64 = 3;
+const MIN_INTERVAL_SECONDS: u64 = 1;
 const MAX_INTERVAL_SECONDS: u64 = 300;
 const MAX_RESPONSE_BYTES: usize = 16 * 1024;
 
@@ -32,11 +37,14 @@ struct AgentConfig {
     enrollment_token_file: Option<PathBuf>,
     node_name: String,
     region: String,
+    geoip_provider: region::Provider,
     group: String,
     virtualization: String,
     interval: Duration,
     disk_mount_points: Option<HashSet<String>>,
     network_interfaces: Option<HashSet<String>>,
+    extended_metrics: bool,
+    gpu_metrics: bool,
 }
 
 impl AgentConfig {
@@ -65,7 +73,7 @@ impl AgentConfig {
             );
         }
 
-        let config = Self {
+        let mut config = Self {
             service_url,
             credentials_path,
             enrollment_token,
@@ -76,16 +84,26 @@ impl AgentConfig {
                 .or_else(System::host_name)
                 .unwrap_or_else(|| "unnamed-node".to_owned()),
             region: env::var("PULSE_NODE_REGION").unwrap_or_default(),
+            geoip_provider: region::Provider::parse(
+                &env::var("PULSE_GEOIP_PROVIDER").unwrap_or_default(),
+            )?,
             group: env::var("PULSE_NODE_GROUP").unwrap_or_default(),
             virtualization: env::var("PULSE_NODE_VIRTUALIZATION").unwrap_or_default(),
             interval: Duration::from_secs(interval_seconds),
             disk_mount_points: parse_allowlist("PULSE_DISK_MOUNT_POINTS")?,
             network_interfaces: parse_allowlist("PULSE_NETWORK_INTERFACES")?,
+            extended_metrics: parse_enabled("PULSE_EXTENDED_METRICS")?,
+            gpu_metrics: parse_enabled("PULSE_GPU_METRICS")?,
         };
         validate_local_text("PULSE_NODE_NAME", &config.node_name, 1, 128)?;
         validate_local_text("PULSE_NODE_REGION", &config.region, 0, 16)?;
         validate_local_text("PULSE_NODE_GROUP", &config.group, 0, 128)?;
         validate_local_text("PULSE_NODE_VIRTUALIZATION", &config.virtualization, 0, 64)?;
+        if config.virtualization.trim().is_empty()
+            && parse_enabled("PULSE_AUTODETECT_VIRTUALIZATION")?
+        {
+            config.virtualization = extended_metrics::detect_virtualization().unwrap_or_default();
+        }
         Ok(config)
     }
 }
@@ -125,6 +143,7 @@ impl Collector {
     fn collect(
         &mut self,
         config: &AgentConfig,
+        extra: extended_metrics::ExtendedSnapshot,
     ) -> Result<SystemSnapshot, Box<dyn Error + Send + Sync>> {
         self.system.refresh_memory();
         self.system.refresh_cpu_usage();
@@ -213,7 +232,10 @@ impl Collector {
             network_transmit_bytes_per_second: rate_per_second(network_transmitted, elapsed),
             network_total_received_bytes: network_total_received,
             network_total_transmitted_bytes: network_total_transmitted,
-            process_count: None,
+            process_count: extra.process_count,
+            tcp_connection_count: extra.tcp_connection_count,
+            udp_connection_count: extra.udp_connection_count,
+            gpus: extra.gpus,
         })
     }
 }
@@ -233,6 +255,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .user_agent(concat!("pulse-agent/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let credentials = load_or_enroll(&client, &config).await?;
+    let region = region::RegionResolver::start(&config.region, config.geoip_provider);
+    let extended =
+        extended_metrics::ExtendedCollector::start(config.extended_metrics, config.gpu_metrics);
+    let mut probes = probes::ProbeRunner::start(
+        client.clone(),
+        config.service_url.clone(),
+        credentials.agent_token.clone(),
+        config.interval,
+    )?;
     tracing::info!(node_id = %credentials.node_id, "Pulse Agent started");
 
     let mut collector = Collector::new().await;
@@ -240,8 +271,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
     loop {
-        ticker.tick().await;
-        let snapshot = collector.collect(&config)?;
+        tokio::select! {
+            _ = ticker.tick() => {}
+            changed = probes.interval.changed() => {
+                changed.map_err(|_| "Agent configuration worker stopped")?;
+                let configured_interval = *probes.interval.borrow_and_update();
+                if ticker.period() != configured_interval {
+                    ticker = interval(configured_interval);
+                    ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+                    tracing::info!(interval_seconds = configured_interval.as_secs(), "metrics interval updated");
+                }
+                continue;
+            }
+        }
+        let mut snapshot = collector.collect(&config, extended.current())?;
+        snapshot.region = region.current();
         match send_snapshot(
             &client,
             &config.service_url,
@@ -396,15 +440,31 @@ async fn send_snapshot(
 }
 
 async fn read_json_limited<T>(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
 ) -> Result<T, Box<dyn Error + Send + Sync>>
 where
     T: serde::de::DeserializeOwned,
 {
+    read_json_with_limit(response, MAX_RESPONSE_BYTES).await
+}
+
+async fn read_json_with_limit<T>(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<T, Box<dyn Error + Send + Sync>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    if response
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err("Pulse Service response exceeded its size limit".into());
+    }
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await? {
-        if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
-            return Err("Pulse Service response exceeded 16 KiB".into());
+        if body.len().saturating_add(chunk.len()) > limit {
+            return Err("Pulse Service response exceeded its size limit".into());
         }
         body.extend_from_slice(&chunk);
     }
@@ -594,6 +654,14 @@ fn parse_allowlist(name: &str) -> Result<Option<HashSet<String>>, Box<dyn Error 
     Ok(Some(entries))
 }
 
+fn parse_enabled(name: &str) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    match env::var(name).unwrap_or_default().trim() {
+        "" | "enabled" => Ok(true),
+        "disabled" => Ok(false),
+        _ => Err(format!("{name} must be enabled or disabled").into()),
+    }
+}
+
 fn validate_local_text(
     name: &str,
     value: &str,
@@ -646,11 +714,14 @@ mod tests {
             enrollment_token_file: None,
             node_name: "test-node".to_owned(),
             region: String::new(),
+            geoip_provider: region::Provider::Disabled,
             group: String::new(),
             virtualization: String::new(),
             interval: Duration::from_secs(5),
             disk_mount_points: None,
             network_interfaces: None,
+            extended_metrics: false,
+            gpu_metrics: false,
         };
 
         assert!(load_or_enroll(&Client::new(), &config).await.is_err());

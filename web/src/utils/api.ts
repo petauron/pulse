@@ -1,15 +1,20 @@
+import { getSessionGeneration, requireLogin } from './session'
+
 const DEFAULT_API_BASE = '/api'
 const DEFAULT_TIMEOUT_MS = 15_000
-const MAX_RESPONSE_CHARACTERS = 256 * 1024
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+// Administration can contain up to 1000 nodes and 128 bounded assignment lists.
+const MAX_ADMIN_RESPONSE_BYTES = 32 * 1024 * 1024
+let csrfToken = ''
+
+export function setCsrfToken(value: string): void {
+  csrfToken = value
+}
 
 interface ApiResponse<T> {
   status: 'success' | 'error'
   message: string
   data: T
-}
-
-export interface MeInfo {
-  logged_in: boolean
 }
 
 export interface PublicSettings {
@@ -53,26 +58,66 @@ export class PulseApi {
       throw new ApiError('Pulse Web API must be served from the same origin')
   }
 
-  private async request<T>(path: string, wrapped: boolean): Promise<T> {
+  private async request<T>(path: string, wrapped: boolean, body?: unknown, signal?: AbortSignal): Promise<T> {
+    const generation = getSessionGeneration()
     const controller = new AbortController()
     const timer = window.setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS)
+    const cancel = () => controller.abort()
+    if (signal?.aborted)
+      controller.abort()
+    signal?.addEventListener('abort', cancel, { once: true })
     try {
       const response = await fetch(new URL(path, this.baseUrl), {
+        cache: 'no-store',
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? undefined : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+        body: body === undefined ? undefined : JSON.stringify(body),
         credentials: 'same-origin',
         signal: controller.signal,
       })
-      if (!response.ok)
-        throw new ApiError(`API request failed with HTTP ${response.status}`, response.status)
 
+      const maximumBytes = path === 'admin/state' ? MAX_ADMIN_RESPONSE_BYTES : MAX_RESPONSE_BYTES
       const contentLength = Number(response.headers.get('content-length'))
-      if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_CHARACTERS)
+      if (Number.isFinite(contentLength) && contentLength > maximumBytes) {
+        controller.abort()
         throw new ApiError('API response exceeded the client safety limit')
+      }
+      let text = ''
+      let bytes = 0
+      const reader = response.body?.getReader()
+      if (reader) {
+        const decoder = new TextDecoder()
+        try {
+          while (true) {
+            const chunk = await reader.read()
+            if (chunk.done)
+              break
+            bytes += chunk.value.byteLength
+            if (bytes > maximumBytes) {
+              controller.abort()
+              throw new ApiError('API response exceeded the client safety limit')
+            }
+            text += decoder.decode(chunk.value, { stream: true })
+          }
+          text += decoder.decode()
+        }
+        finally { reader.releaseLock() }
+      }
 
-      const text = await response.text()
-      if (text.length > MAX_RESPONSE_CHARACTERS)
-        throw new ApiError('API response exceeded the client safety limit')
-
-      const payload: unknown = JSON.parse(text)
+      let payload: unknown
+      try {
+        payload = text ? JSON.parse(text) : null
+      }
+      catch {
+        throw new ApiError(`服务返回了无法读取的响应（HTTP ${response.status}）`, response.status)
+      }
+      if (!response.ok) {
+        if (response.status === 401 && !path.startsWith('auth/'))
+          requireLogin(generation)
+        const failure = payload as { error?: string | { message?: string }, message?: string } | null
+        const message = typeof failure?.error === 'string' ? failure.error : failure?.error?.message
+        throw new ApiError(message || failure?.message || `请求失败（HTTP ${response.status}）`, response.status)
+      }
       if (!wrapped)
         return payload as T
 
@@ -90,11 +135,16 @@ export class PulseApi {
     }
     finally {
       window.clearTimeout(timer)
+      signal?.removeEventListener('abort', cancel)
     }
   }
 
-  getMe(): Promise<MeInfo> {
-    return this.request<MeInfo>('me', false)
+  get<T>(path: string, signal?: AbortSignal): Promise<T> {
+    return this.request<T>(path, false, undefined, signal)
+  }
+
+  post<T>(path: string, body: unknown = {}): Promise<T> {
+    return this.request<T>(path, false, body)
   }
 
   getPublicSettings(): Promise<PublicSettings> {

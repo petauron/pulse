@@ -15,6 +15,7 @@ import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
 
 const LoadChart = defineAsyncComponent(() => import('@/components/LoadChart.vue'))
+const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistory.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -302,6 +303,9 @@ const trafficProgressStyle = computed(() => ({
       </div>
 
       <LoadChart :uuid="data.uuid" class="px-4" />
+      <div class="px-4">
+        <ProbeHistory :uuid="data.uuid" />
+      </div>
     </template>
   </div>
 </template>

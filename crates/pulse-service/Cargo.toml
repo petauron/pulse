@@ -8,6 +8,11 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+argon2.workspace = true
+base64.workspace = true
+subtle.workspace = true
+totp-rs.workspace = true
+reqwest.workspace = true
 axum.workspace = true
 hex.workspace = true
 mime_guess.workspace = true

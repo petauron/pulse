@@ -39,7 +39,7 @@ function handleButtonClick(action: string) {
       appStore.updateThemeMode()
       break
     case 'jumpToSetting':
-      location.href = '/admin'
+      void router.push('/admin')
       break
   }
 }

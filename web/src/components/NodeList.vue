@@ -47,7 +47,7 @@ const columns: ColumnConfig[] = [
   { key: 'disk', label: '硬盘', width: '100px', sortable: true },
   { key: 'traffic', label: '流量', width: '100px', sortable: true },
   { key: 'rate', label: '速率', width: '80px', sortable: true },
-  { key: 'networks', label: '三网', width: '136px', sortable: false },
+  { key: 'networks', label: '探测', width: '136px', sortable: false },
 ]
 
 const sortKey = ref<string>('')
@@ -234,13 +234,12 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                 </div>
               </div>
 
-              <!-- 三网 -->
+              <!-- 探测详情 -->
               <div
                 v-else-if="col.key === 'networks'"
                 class="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
-                title="当前 Agent 不采集延迟和丢包"
               >
-                N/A
+                详情查看延迟与丢包
               </div>
 
               <!-- 操作系统 -->
