@@ -1,6 +1,6 @@
 # Monitoring administration
 
-This document describes the development branch, not the published Alpha.2 image.
+This document describes Alpha.3 and later, not the older Alpha.2 image.
 Complete [administrator setup](AUTH.md) before using `/admin`. The administration
 area reuses the existing Emerald components and visual tokens.
 
