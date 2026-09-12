@@ -24,7 +24,9 @@ as part of that workflow. No production restart or release is implied.
 - [x] Required local Web static checks, unit tests, type check and production build
 - [x] Required local Rust formatting, Clippy and complete workspace regression tests
 - [x] Regenerate checked-in Web distribution and Rust license bundle, then verify
-- [ ] Complete browser tests and protected GitHub CI gates
+- Browser tests and protected GitHub CI are required before merge; see the
+  [integration PR checks](https://github.com/petauron/pulse/pull/12/checks) for the
+  final revision's live result.
 - [ ] Separately authorized publication and catalog artifact update
 
 The Web license check, lint, 24 unit tests, Vue type check and production build

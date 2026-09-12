@@ -71,10 +71,12 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     await page.getByLabel('间隔（秒）', { exact: true }).fill('5')
     await page.getByLabel('超时（秒）', { exact: true }).fill('2')
     await page.getByLabel('e2e-node', { exact: true }).check()
+    const saved = page.waitForResponse(response => response.url().endsWith('/api/admin/probes') && response.request().method() === 'POST')
     await page.getByRole('button', { name: '保存任务' }).click()
-    await expect(page.getByText(name, { exact: true }).first()).toBeVisible()
+    expect((await saved).ok()).toBe(true)
     const state = await (await page.request.get('/api/admin/state')).json()
     taskId = state.probes.find((task: { name: string }) => task.name === name).id
+    await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible()
     await expect.poll(async () => {
       const response = await page.request.get(`/api/v1/nodes/${id}/probes?hours=1`)
       return (await response.json()).records.some((record: { task_id: string, success: boolean, latency_ms: number }) => record.task_id === taskId && record.success && record.latency_ms >= 0)
