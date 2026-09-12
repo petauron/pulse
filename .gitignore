@@ -9,6 +9,8 @@
 /pulse.db-shm
 /pulse.db-wal
 /pulse.db.backup-*
+# Pre-migration copies, paired backup directories and unpublished partial backups.
+*.backup-*
 .DS_Store
 .env
 .env.*

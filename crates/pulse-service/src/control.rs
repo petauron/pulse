@@ -473,6 +473,11 @@ impl Storage {
         }
         configuration_audit(&tx, "configuration.delete", &format!("{table}:{id}"))?;
         tx.commit()?;
+        // The control deletion is authoritative if cleanup is interrupted.
+        // Startup also removes results whose task no longer exists.
+        if kind == "probes" {
+            db.execute("DELETE FROM metrics.probe_results WHERE task_id=?1", [id])?;
+        }
         Ok(())
     }
 
@@ -517,6 +522,7 @@ impl Storage {
         let tx = db.transaction()?;
         let node = authenticated_node(&tx, token)?;
         let tasks = list::<ProbeDefinition>(&tx, "probe_tasks", MAX_CONFIG_ROWS)?;
+        let pruned = self.prune_before_ingest(&tx, now, retention_days)?;
         for result in &batch.results {
             let task = tasks
                 .iter()
@@ -567,12 +573,12 @@ impl Storage {
             if recent >= 2 {
                 return Err(StorageError::RateLimited);
             }
-            tx.execute("INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",params![node,result.task_id,result.sample_id,integer(result.collected_at_unix_ms),integer(now),result.latency_ms,result.success,result.error])?;
+            tx.prepare_cached("INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)")?.execute(params![node,result.task_id,result.sample_id,integer(result.collected_at_unix_ms),integer(now),result.latency_ms,result.success,result.error])?;
         }
-        tx.execute("DELETE FROM probe_results WHERE id IN (SELECT id FROM probe_results WHERE received_at_ms<?1 ORDER BY received_at_ms LIMIT 10000)",[integer(now.saturating_sub(u64::from(retention_days)*86_400_000))])?;
         // Hard per-node cap, independent of retention or sample frequency.
         tx.execute("DELETE FROM probe_results WHERE id IN (SELECT id FROM probe_results WHERE node_id=?1 ORDER BY received_at_ms DESC,id DESC LIMIT 10000 OFFSET 100000)",[node])?;
         tx.commit()?;
+        self.record_ingest_prune(pruned, now);
         Ok(())
     }
 
@@ -591,9 +597,9 @@ impl Storage {
             .filter(|t| t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node))
             .collect();
         let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
-        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND received_at_ms>=?2 ORDER BY received_at_ms DESC,id DESC LIMIT ?3")?;
+        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 ORDER BY received_at_ms DESC,id DESC LIMIT ?3")?;
         let records=statement.query_map(params![node,start,i64::try_from(MAX_PROBE_HISTORY).expect("probe history limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
-        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND received_at_ms>=?2 GROUP BY task_id")?;
+        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 GROUP BY task_id")?;
         let summary=statement.query_map(params![node,start],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
         // Public readers need names/types, never private probe targets or node assignments.
         let tasks:Vec<_>=tasks.into_iter().map(|t|json!({"id":t.id,"name":t.name,"kind":t.kind,"interval_seconds":t.interval_seconds})).collect();
@@ -786,7 +792,7 @@ pub(crate) fn update_traffic(
             )
         },
     );
-    tx.execute("INSERT INTO traffic_periods VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(node_id) DO UPDATE SET cycle_start_ms=excluded.cycle_start_ms,raw_up=excluded.raw_up,raw_down=excluded.raw_down,used_up=excluded.used_up,used_down=excluded.used_down",params![node,cycle,up,down,used_up,used_down])?;
+    tx.prepare_cached("INSERT INTO traffic_periods VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT(node_id) DO UPDATE SET cycle_start_ms=excluded.cycle_start_ms,raw_up=excluded.raw_up,raw_down=excluded.raw_down,used_up=excluded.used_up,used_down=excluded.used_down WHERE cycle_start_ms IS NOT excluded.cycle_start_ms OR raw_up IS NOT excluded.raw_up OR raw_down IS NOT excluded.raw_down OR used_up IS NOT excluded.used_up OR used_down IS NOT excluded.used_down")?.execute(params![node,cycle,up,down,used_up,used_down])?;
     Ok(())
 }
 

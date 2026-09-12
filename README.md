@@ -40,7 +40,7 @@ Pulse now provides an end-to-end monitoring path:
 - one-time Agent enrollment and per-node credentials;
 - outbound-only periodic host collection;
 - authenticated and idempotent snapshot ingestion;
-- bounded SQLite storage with configurable retention;
+- separate bounded control/metrics SQLite stores with configurable retention and paired backups;
 - online/offline state, node cards, list view, detail view, and load history;
 - the Komari Emerald interface, built into the Service binary.
 
