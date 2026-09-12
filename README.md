@@ -44,7 +44,7 @@ Pulse now provides an end-to-end monitoring path:
 - online/offline state, node cards, list view, detail view, and load history;
 - the Komari Emerald interface, built into the Service binary.
 
-The current development branch adds administrator setup/login, private reads,
+Alpha.3 adds administrator setup/login, private reads,
 TOTP and optional GitHub OAuth, an Emerald management area, bounded network probes,
 alerts, asset fields, monthly traffic accounting and optional extended metrics.
 These additions are **not included in the published Alpha.2 artifacts**. See

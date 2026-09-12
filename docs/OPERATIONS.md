@@ -4,7 +4,7 @@ Pulse has two deployment roles: run `pulse-service` on the monitoring host, and 
 
 ## Trust boundary
 
-The development version includes administrator authentication and defaults to a private dashboard. Until the first administrator is created, all monitoring read APIs fail closed; afterward, only an administrator can deliberately enable public reads. Administrative mutations always require an authenticated session, exact Origin and CSRF protection. Configure the HTTPS browser origin and private bootstrap token before upgrading; see [AUTH.md](AUTH.md). Published Alpha.2 artifacts still require external dashboard authentication. Keep the default loopback bind and an HTTPS reverse proxy; do not expose port 8080 directly to the Internet.
+Alpha.3 includes administrator authentication and defaults to a private dashboard. Until the first administrator is created, all monitoring read APIs fail closed; afterward, only an administrator can deliberately enable public reads. Administrative mutations always require an authenticated session, exact Origin and CSRF protection. Configure the HTTPS browser origin and private bootstrap token before upgrading; see [AUTH.md](AUTH.md). Older Alpha.2 artifacts require external dashboard authentication. Keep the default loopback bind and an HTTPS reverse proxy; do not expose port 8080 directly to the Internet.
 
 Remote Agents accept only HTTPS Service URLs. Pulse has no analytics, telemetry, runtime CDN, or mandatory third-party account. Metrics go only to the configured Service.
 
@@ -19,7 +19,7 @@ Download the archive for the host architecture together with `SHA256SUMS`, its S
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify pulse-v0.1.0-alpha.2-linux-x86_64.tar.gz --repo petauron/pulse
+gh attestation verify pulse-v0.1.0-alpha.3-linux-x86_64.tar.gz --repo petauron/pulse
 ```
 
 Official Linux archives target `x86_64` and `aarch64` GNU/Linux with a Debian 12 (glibc 2.36) runtime baseline. Both binaries are built in the pinned Debian 12 Rust image and must start in a clean Debian 12 runtime before packaging. The same build/verification script runs in CI. Use the container or build from source for other environments, including musl-based distributions.
@@ -143,10 +143,10 @@ docker run --detach --name pulse --restart unless-stopped \
   --volume /srv/pulse-setup-token:/run/secrets/setup-token:ro \
   --env PULSE_PUBLIC_URL=https://pulse.example.com \
   --env PULSE_SETUP_TOKEN_FILE=/run/secrets/setup-token \
-  ghcr.io/petauron/pulse:VERSION
+  ghcr.io/petauron/pulse:v0.1.0-alpha.3
 ```
 
-Select a version containing these authentication changes, not Alpha.2. Even though the process listens on all interfaces inside the container, publish it to loopback and terminate TLS at the reverse proxy. Open `/login` for initial setup; afterward remove both the setup-token mount and environment setting when recreating the container, then remove its source file. The [Compose example](../deploy/docker-compose.yml) provides the same explicit configuration. Run local administration with `docker exec`, using the same database path already present in the image environment.
+Alpha.3 contains these authentication changes; Alpha.2 does not. Even though the process listens on all interfaces inside the container, publish it to loopback and terminate TLS at the reverse proxy. Open `/login` for initial setup; afterward remove both the setup-token mount and environment setting when recreating the container, then remove its source file. The [Compose example](../deploy/docker-compose.yml) provides the same explicit configuration. Run local administration with `docker exec`, using the same database path already present in the image environment.
 
 ## Credential lifecycle
 

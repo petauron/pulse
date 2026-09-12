@@ -6,9 +6,9 @@ metadata and billing-period traffic, additional host metrics, faster reporting,
 and preservation of region configuration through Vastora upgrades. Reuse Emerald;
 remote shells, file management and arbitrary commands remain out of scope.
 
-Work is kept on feature branches. Existing GeoIP work is preserved. Submission
-and PR merge were explicitly requested; repository-required checks are being run
-as part of that workflow. No production restart or release is implied.
+The core implementation was merged through protected PR #12. Alpha.3 publication
+was subsequently authorized and prepared on a separate release branch. Required
+CI and release checks still gate publication; no production restart is implied.
 
 ## Work slices
 
@@ -27,7 +27,8 @@ as part of that workflow. No production restart or release is implied.
 - Browser tests and protected GitHub CI are required before merge; see the
   [integration PR checks](https://github.com/petauron/pulse/pull/12/checks) for the
   final revision's live result.
-- [ ] Separately authorized publication and catalog artifact update
+- Alpha.3 publication is tracked on the [release page](https://github.com/petauron/pulse/releases/tag/v0.1.0-alpha.3).
+- [ ] Separately completed Vastora program integration and signed catalog publication
 
 The Web license check, lint, 24 unit tests, Vue type check and production build
 have passed. Rust formatting, strict Clippy and all 73 workspace tests have
@@ -42,8 +43,9 @@ were fixed and re-reviewed. Regression tests cover non-page-aligned byte limits,
 administrator access during delayed OAuth identity lookup, and rejecting a stale
 OAuth flow after credential revocation.
 
-Pulse is on `kuddy/agent-auto-region`. Vastora changes are isolated on
-`kuddy/pulse-monitoring-config`; the original Vastora `main` worktree and its
-unrelated changes were left alone.
-The catalog still points to Alpha.2 artifacts; do not deploy that source change
-without a corresponding new Pulse release and normal catalog update.
+Vastora changes remain isolated in [PR #405](https://github.com/petauron/vastora/pull/405);
+its unrelated working-tree changes are not part of Pulse's release. The new
+initialization/configuration semantics require updated compiled Vastora executor
+contracts and a compatible program release, followed by the independently signed
+catalog with verified Pulse artifact pins. A catalog refresh only advertises
+versions; it never upgrades an installed application automatically.
