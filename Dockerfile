@@ -19,7 +19,7 @@ COPY crates/ crates/
 COPY --from=web-builder /src/web/dist web/dist
 RUN cargo build --locked --release -p pulse-service -p pulse-agent
 
-FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS runtime
 ARG PULSE_BUILD_GIT_HASH=unknown
 LABEL org.opencontainers.image.source="https://github.com/petauron/pulse" \
       org.opencontainers.image.description="Self-hosted node monitoring with an outbound-only Agent" \
