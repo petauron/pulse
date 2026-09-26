@@ -142,6 +142,42 @@ jobs:
           cache-to: type=gha,mode=max,scope=release-container
           build-args: PULSE_BUILD_GIT_HASH=${{ github.sha }}
 
+  notify-catalog:
+    name: Notify independent catalog
+    needs: publish
+    if: github.repository == 'petauron/pulse'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: catalog-notify
+    permissions: {}
+    steps:
+      - name: Require catalog notification credentials
+        env:
+          APP_ID: ${{ vars.CATALOG_NOTIFY_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.CATALOG_NOTIFY_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+            echo '::error::Catalog notification blocked: provision the catalog-only GitHub App. The published Pulse release is retained.'
+            exit 1
+          fi
+      - name: Create a short-lived catalog-only dispatch token
+        id: token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ vars.CATALOG_NOTIFY_APP_ID }}
+          private-key: ${{ secrets.CATALOG_NOTIFY_APP_PRIVATE_KEY }}
+          owner: petauron
+          repositories: catalog
+          permission-actions: write
+      - name: Submit a release hint without waiting for signing or deployment
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          gh api --method POST repos/petauron/catalog/actions/workflows/publish.yml/dispatches \
+            -f ref=main -f 'inputs[kind]=release' -f 'inputs[application]=pulse' \
+            -f "inputs[tag]=$GITHUB_REF_NAME" -f "inputs[sha]=$GITHUB_SHA" -f "inputs[run_id]=$GITHUB_RUN_ID"
+          echo 'Catalog request accepted. This does not confirm catalog publication or upgrade any node.'
+
   publish:
     name: Publish GitHub release
     needs: [binaries, container]
