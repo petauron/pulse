@@ -1,0 +1,265 @@
+diff --git a/package-lock.json b/package-lock.json
+index 1b4ad0f..ade7fe7 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -3331,9 +3331,9 @@
+       }
+     },
+     "node_modules/react-router": {
+-      "version": "7.17.0",
+-      "resolved": "https://registry.npmjs.org/react-router/-/react-router-7.17.0.tgz",
+-      "integrity": "sha512-FDELK7rTMlCHO5+reyXsPlmfr7N1F91lPHsWYfMEGQm/KQ+F4JFM8jGoeQDmDvdTs93Fw9aSilH+uKRb4/jXvQ==",
++      "version": "7.18.4",
++      "resolved": "https://registry.npmjs.org/react-router/-/react-router-7.18.4.tgz",
++      "integrity": "sha512-PUPQcMhMGRAslLcvtlPz/kmzBEWPhLdgLFrL7pLNepBL6dX0lWj4WD2cUYVgYCuT3jxvghYFg81cDTj44DhetQ==",
+       "license": "MIT",
+       "dependencies": {
+         "cookie": "^1.0.1",
+@@ -3353,12 +3353,12 @@
+       }
+     },
+     "node_modules/react-router-dom": {
+-      "version": "7.17.0",
+-      "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-7.17.0.tgz",
+-      "integrity": "sha512-fyU2yjGups/hE6Xz0I5ZYbVL8Gx29eCjgpHaRaTaVU+OOAdfRX05KsvyRm0GO8YQwOkhpU3MurW1jyMUJn+zSw==",
++      "version": "7.18.4",
++      "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-7.18.4.tgz",
++      "integrity": "sha512-yrfmJHIpDG7taCpqKjT1G5B6q3O2K+RN8/fgNf0lTjCwiPbQ0ei6vXX9ZjQR+7ld8Tr7Z5xmyMnZ8YJrphWQUw==",
+       "license": "MIT",
+       "dependencies": {
+-        "react-router": "7.17.0"
++        "react-router": "7.18.4"
+       },
+       "engines": {
+         "node": ">=20.0.0"
+diff --git a/src/services/__tests__/api.envelope.test.ts b/src/services/__tests__/api.envelope.test.ts
+index 0a2e7fa..18a4393 100644
+--- a/src/services/__tests__/api.envelope.test.ts
++++ b/src/services/__tests__/api.envelope.test.ts
+@@ -6,9 +6,28 @@ vi.mock("@/services/rpc2Client", () => ({
+   getRpc2Client: () => ({ call: rpcCallMock }),
+ }));
+ 
+-import { getPublic } from "@/services/api";
++import { getPublic, saveThemeSettings } from "@/services/api";
+ 
+ describe("API envelope parsing", () => {
++  it("adds Pulse CSRF to a theme settings save", async () => {
++    const token = "a".repeat(64);
++    const fetchMock = vi.fn()
++      .mockResolvedValueOnce(new Response(JSON.stringify({ csrf_token: token })))
++      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "success" })));
++    vi.stubGlobal("fetch", fetchMock);
++    await saveThemeSettings("LuminaPlus", { showPingChart: true });
++    expect(fetchMock.mock.calls[0][0]).toBe("/api/auth/status");
++    expect(fetchMock.mock.calls[1][1].headers["X-CSRF-Token"]).toBe(token);
++  });
++
++  it("supports native Komari when the Pulse endpoint is absent", async () => {
++    const fetchMock = vi.fn()
++      .mockResolvedValueOnce(new Response(null, { status: 404 }))
++      .mockResolvedValueOnce(new Response(JSON.stringify({ status: "success" })));
++    vi.stubGlobal("fetch", fetchMock);
++    await saveThemeSettings("LuminaPlus", {});
++    expect(fetchMock.mock.calls[1][1].headers["X-CSRF-Token"]).toBeUndefined();
++  });
+   afterEach(() => {
+     vi.unstubAllGlobals();
+     rpcCallMock.mockReset();
+diff --git a/src/services/__tests__/ipInfo.test.ts b/src/services/__tests__/ipInfo.test.ts
+index f7c7794..2702f9a 100644
+--- a/src/services/__tests__/ipInfo.test.ts
++++ b/src/services/__tests__/ipInfo.test.ts
+@@ -1,8 +1,17 @@
+ import { afterEach, describe, expect, it, vi } from "vitest";
+-import { getIpInfo, getIpRefreshWarning, selectIpClassification } from "../ipInfo";
++import { forceRefreshIpInfo, getIpInfo, getIpRefreshWarning, selectIpClassification } from "../ipInfo";
+ 
+ describe("IP refresh results", () => {
+   afterEach(() => vi.unstubAllGlobals());
++  it("sends Pulse CSRF on administrative IP refresh", async () => {
++    const fetch = vi.fn()
++      .mockResolvedValueOnce(new Response(JSON.stringify({ csrf_token: "a".repeat(64) })))
++      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { message: "provider unavailable" } }), { status: 503 }));
++    vi.stubGlobal("fetch", fetch);
++    await expect(forceRefreshIpInfo("node", "1.1.1.1")).rejects.toThrow("provider unavailable");
++    expect(fetch.mock.calls[1][0]).toBe("/api/admin/ip-info/v1/refresh");
++    expect(fetch.mock.calls[1][1].headers["X-CSRF-Token"]).toBe("a".repeat(64));
++  });
+   it("retains the exact query address when the backend returns canonical IPv6", async () => {
+     const original = "2606:4700:4700:0:0:0:0:AAAA";
+     const canonical = "2606:4700:4700::aaaa";
+diff --git a/src/services/__tests__/pulse.history.test.ts b/src/services/__tests__/pulse.history.test.ts
+new file mode 100644
+index 0000000..a46ad99
+--- /dev/null
++++ b/src/services/__tests__/pulse.history.test.ts
+@@ -0,0 +1,13 @@
++import { expect, it } from "vitest";
++import { LoadRecordSchema } from "@/types/komari";
++
++it("retains load and traffic history when optional hardware metrics are unavailable", () => {
++  const sample = LoadRecordSchema.parse({
++    time: "2026-09-26T00:00:00Z", cpu: 25, ram: 1024,
++    net_total_up: 3000, net_total_down: 4000,
++    gpu: null, temp: null, process: null, connections: null, connections_udp: null,
++  });
++  expect(sample.cpu).toBe(25);
++  expect(sample.net_total_up).toBe(3000);
++  expect(sample.net_total_down).toBe(4000);
++});
+diff --git a/src/services/__tests__/rpc2Client.pulse.test.ts b/src/services/__tests__/rpc2Client.pulse.test.ts
+new file mode 100644
+index 0000000..e76143a
+--- /dev/null
++++ b/src/services/__tests__/rpc2Client.pulse.test.ts
+@@ -0,0 +1,22 @@
++import { afterEach, expect, it, vi } from "vitest";
++
++afterEach(() => {
++  vi.unstubAllGlobals();
++  vi.unstubAllEnvs();
++  vi.resetModules();
++});
++
++it("uses HTTP without attempting WebSocket in the Pulse package", async () => {
++  vi.stubEnv("VITE_PULSE_HTTP_RPC", "true");
++  const ws = vi.fn();
++  vi.stubGlobal("WebSocket", ws);
++  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
++    jsonrpc: "2.0", id: 1, result: { online: true },
++  })));
++  vi.stubGlobal("fetch", fetchMock);
++  const { getRpc2Client } = await import("@/services/rpc2Client");
++  const client = getRpc2Client();
++  await expect(client.call("common:getNodesLatestStatus")).resolves.toEqual({ online: true });
++  expect(ws).not.toHaveBeenCalled();
++  expect(fetchMock).toHaveBeenCalledTimes(1);
++});
+diff --git a/src/services/api.ts b/src/services/api.ts
+index daf6536..6e45066 100644
+--- a/src/services/api.ts
++++ b/src/services/api.ts
+@@ -1131,10 +1131,28 @@ export async function getAdminEntryPath(options?: ApiCallOptions): Promise<strin
+     : "/admin";
+ }
+ 
++export async function pulseCsrfToken(): Promise<string | undefined> {
++  try {
++    const response = await fetchWithTimeout(
++      "/api/auth/status",
++      { credentials: "include", headers: { Accept: "application/json" } },
++      DEFAULT_API_TIMEOUT_MS,
++    );
++    if (!response.ok) return undefined;
++    const status = (await response.json()) as { csrf_token?: unknown };
++    const token = status.csrf_token;
++    return typeof token === "string" && /^[a-f0-9]{64}$/i.test(token) ? token : undefined;
++  } catch {
++    // Native Komari has no Pulse authentication endpoint.
++    return undefined;
++  }
++}
++
+ export async function saveThemeSettings(
+   theme: string,
+   settings: Record<string, unknown>,
+ ): Promise<void> {
++  const csrfToken = await pulseCsrfToken();
+   const resp = await fetchWithTimeout(
+     `/api/admin/theme/settings?theme=${encodeURIComponent(theme)}`,
+     {
+@@ -1143,6 +1161,7 @@ export async function saveThemeSettings(
+       headers: {
+         Accept: "application/json",
+         "Content-Type": "application/json",
++        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+       },
+       body: JSON.stringify(settings),
+     },
+diff --git a/src/services/ipInfo.ts b/src/services/ipInfo.ts
+index 1b4f8b2..6a0d133 100644
+--- a/src/services/ipInfo.ts
++++ b/src/services/ipInfo.ts
+@@ -1,5 +1,6 @@
+ import { z } from "zod";
+ import { fetchWithTimeout } from "@/utils/abort";
++import { pulseCsrfToken } from "./api";
+ 
+ const nullableString = z.string().nullable().default(null);
+ const nullableNumber = z.number().nullable().default(null);
+@@ -245,6 +246,7 @@ export function getIpNetworkProfile(uuid: string, ip: string, signal?: AbortSign
+ }
+ 
+ export async function forceRefreshIpInfo(uuid: string, ip: string, signal?: AbortSignal) {
++  const csrfToken = await pulseCsrfToken();
+   const response = await fetchWithTimeout(
+     "/api/admin/ip-info/v1/refresh",
+     {
+@@ -254,6 +256,7 @@ export async function forceRefreshIpInfo(uuid: string, ip: string, signal?: Abor
+       headers: {
+         Accept: "application/json",
+         "Content-Type": "application/json",
++        ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
+       },
+       body: JSON.stringify({ uuid, ip, force: true, include_latency: true }),
+     },
+diff --git a/src/services/rpc2Client.ts b/src/services/rpc2Client.ts
+index 2be9bfe..fc600d6 100644
+--- a/src/services/rpc2Client.ts
++++ b/src/services/rpc2Client.ts
+@@ -69,7 +69,10 @@ class RPC2Client {
+   private state: "disconnected" | "connecting" | "connected" | "reconnecting" | "error" =
+     "disconnected";
+ 
+-  constructor(private readonly baseUrl = "/api/rpc2") {
++  constructor(
++    private readonly baseUrl = "/api/rpc2",
++    private readonly useWebSocket = import.meta.env.VITE_PULSE_HTTP_RPC !== "true",
++  ) {
+     this.autoConnect();
+   }
+ 
+@@ -97,7 +100,9 @@ class RPC2Client {
+   }
+ 
+   private autoConnect() {
+-    if (this.closed) return;
++    // Pulse provides authenticated, bounded HTTP RPC. Native Komari also accepts
++    // this transport, so the Pulse package does not open a failing WS handshake.
++    if (this.closed || !this.useWebSocket) return;
+     void this.connect().catch(() => {
+       // socket 不可用时仍可走 HTTP 兜底。
+     });
+diff --git a/src/types/komari.ts b/src/types/komari.ts
+index 9c048c4..76bbce2 100644
+--- a/src/types/komari.ts
++++ b/src/types/komari.ts
+@@ -218,22 +218,22 @@ export type Me = z.output<typeof MeSchema>;
+ export const LoadRecordSchema = z
+   .object({
+     cpu: z.number().default(0),
+-    gpu: z.number().default(0),
++    gpu: z.number().nullish().transform((value) => value ?? 0),
+     ram: z.number().default(0),
+     ram_total: z.number().default(0),
+     swap: z.number().default(0),
+     swap_total: z.number().default(0),
+     load: z.number().default(0),
+-    temp: z.number().default(0),
++    temp: z.number().nullish().transform((value) => value ?? 0),
+     disk: z.number().default(0),
+     disk_total: z.number().default(0),
+     net_in: z.number().default(0),
+     net_out: z.number().default(0),
+     net_total_up: z.number().default(0),
+     net_total_down: z.number().default(0),
+-    process: z.number().default(0),
+-    connections: z.number().default(0),
+-    connections_udp: z.number().default(0),
++    process: z.number().nullish().transform((value) => value ?? 0),
++    connections: z.number().nullish().transform((value) => value ?? 0),
++    connections_udp: z.number().nullish().transform((value) => value ?? 0),
+     time: z.union([z.string(), z.number()]),
+     client: z.string().default(""),
+   })

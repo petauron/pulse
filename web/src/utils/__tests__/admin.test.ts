@@ -13,6 +13,8 @@ describe('node metadata updates', () => {
       hidden: false,
       tags: '',
       public_remark: '',
+      ipv4: '1.1.1.1',
+      ipv6: '',
       price: 2.5,
       currency: 'USD',
       billing_cycle_days: 30,

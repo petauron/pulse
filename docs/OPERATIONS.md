@@ -19,7 +19,7 @@ Download the archive for the host architecture together with `SHA256SUMS`, its S
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify pulse-v0.1.0-alpha.4-linux-x86_64.tar.gz --repo petauron/pulse
+gh attestation verify pulse-v0.1.0-alpha.5-linux-x86_64.tar.gz --repo petauron/pulse
 ```
 
 Official Linux archives target `x86_64` and `aarch64` GNU/Linux with a Debian 12 (glibc 2.36) runtime baseline. Both binaries are built in the pinned Debian 12 Rust image and must start in a clean Debian 12 runtime before packaging. The same build/verification script runs in CI. Use the container or build from source for other environments, including musl-based distributions.
@@ -143,7 +143,7 @@ docker run --detach --name pulse --restart unless-stopped \
   --volume /srv/pulse-setup-token:/run/secrets/setup-token:ro \
   --env PULSE_PUBLIC_URL=https://pulse.example.com \
   --env PULSE_SETUP_TOKEN_FILE=/run/secrets/setup-token \
-  ghcr.io/petauron/pulse:v0.1.0-alpha.4
+  ghcr.io/petauron/pulse:v0.1.0-alpha.5
 ```
 
 Alpha.3 contains these authentication changes; Alpha.2 does not. Even though the process listens on all interfaces inside the container, publish it to loopback and terminate TLS at the reverse proxy. Open `/login` for initial setup; afterward remove both the setup-token mount and environment setting when recreating the container, then remove its source file. The [Compose example](../deploy/docker-compose.yml) provides the same explicit configuration. Run local administration with `docker exec`, using the same database path already present in the image environment.

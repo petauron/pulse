@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-09-26
+
+### Added
+
+- Administrator-installed Komari theme ZIP packages, explicit activation, persisted theme settings, bounded extraction, and built-in Emerald fallback for authentication and administration.
+- LuminaPlus v1.3.5 compatibility for dashboards, node histories, numeric Ping task bindings, assets, theme settings and mobile layouts. A reproducible Pulse-adapted theme ZIP and its upstream MIT license are included in the release.
+- Optional, default-disabled IP information: registered public IPv4/IPv6, geography, ASN/network ownership, native/broadcast/anycast classification, six-location global latency, and CSRF-protected refresh in the original LuminaPlus interface.
+
+### Fixed
+
+- JavaScript-safe numeric probe identifiers and cross-node Ping history compatibility, settings-save CSRF support, and the LuminaPlus administration link.
+- Nullable optional hardware samples no longer discard valid load or traffic history in the adapted theme.
+- IP information APIs require administrator authentication even under the compatibility `/public/` path, validate node/address binding on every query, and never expose registered addresses to anonymous viewers.
+
+### Upgrade notes
+
+- Back up the entire Service state directory before upgrading. This release retains the alpha.4 database schemas and Agent protocol v2; existing Agent credentials remain valid and an Agent upgrade is not required for the theme/IP features.
+- Install the bundled `LuminaPlus-v1.3.5-pulse.zip` through Admin → Themes, then activate it. Export existing theme settings before replacing an installed package; installation does not silently overwrite or activate a theme.
+- IP information is disabled by default. Enable it in site settings and register node addresses explicitly. This permits Service-side requests containing the selected IP to Net.Coffee; no Pulse credentials or host metrics are sent. Mainland-China nodes are excluded. See `docs/THEMES.md` for quotas, cache bounds and third-party availability limits.
+- LuminaPlus's default asset exchange-rate calculation permits browser requests to Frankfurter only while that theme is active. Custom external media/rate sources require explicit HTTPS settings.
+- Theme packages are trusted administrator-installed browser code. This is not a general Komari plugin runtime, remote shell, file manager, or Komari Agent replacement.
+- Publication does not deploy A1 or update Vastora's separate application catalog.
+
+### Validation
+
+- 106 Rust workspace tests, 24 management frontend tests and 379 LuminaPlus tests passed before release preparation, with strict Clippy and frontend lint checks.
+- Real isolated Service/Agent browser verification covered desktop/mobile settings, registered addresses, real IP lookup, six-location latency, CSRF refresh, anonymous isolation and disabling the feature. No production nodes were used.
+
 ## [0.1.0-alpha.4] - 2026-09-12
 
 ### Changed

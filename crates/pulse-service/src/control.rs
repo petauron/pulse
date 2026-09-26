@@ -23,6 +23,7 @@ pub(crate) struct Settings {
     pub site_name: String,
     pub private_site: bool,
     pub agent_interval_seconds: u64,
+    pub ip_info_enabled: bool,
 }
 
 impl Default for Settings {
@@ -31,6 +32,7 @@ impl Default for Settings {
             site_name: "Pulse".into(),
             private_site: true,
             agent_interval_seconds: 3,
+            ip_info_enabled: false,
         }
     }
 }
@@ -46,6 +48,8 @@ pub(crate) struct NodeOptions {
     pub hidden: bool,
     pub tags: String,
     pub public_remark: String,
+    pub ipv4: String,
+    pub ipv6: String,
     pub price: f64,
     pub currency: String,
     pub billing_cycle_days: u32,
@@ -306,6 +310,8 @@ impl Storage {
             || !text(&options.group, 128)
             || !text(&options.tags, 512)
             || !text(&options.public_remark, 2048)
+            || !crate::ip_info::valid_address(&options.ipv4, false)
+            || !crate::ip_info::valid_address(&options.ipv6, true)
             || !options.price.is_finite()
             || !(0.0..=1_000_000_000.0).contains(&options.price)
             || options.currency.len() != 3
@@ -582,6 +588,32 @@ impl Storage {
         Ok(())
     }
 
+    pub(crate) fn public_ping_tasks(&self) -> Result<Vec<Value>, StorageError> {
+        let db = self.connection()?;
+        let mut tasks = Vec::new();
+        for task in list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)? {
+            if !task.enabled {
+                continue;
+            }
+            let mut clients = Vec::new();
+            for node in &task.node_ids {
+                if visible(&db, node)? {
+                    clients.push(node.clone());
+                }
+            }
+            // Targets and hidden node assignments are private, even for public sites.
+            tasks.push(json!({
+                "id": task.id,
+                "name": task.name,
+                "type": task.kind,
+                "interval": task.interval_seconds,
+                "clients": clients,
+                "default_on": task.node_ids.is_empty()
+            }));
+        }
+        Ok(tasks)
+    }
+
     pub(crate) fn probe_history(
         &self,
         node: &str,
@@ -606,6 +638,53 @@ impl Storage {
         Ok(
             json!({"tasks":tasks,"records":records,"summary":summary,"limit":MAX_PROBE_HISTORY,"history_order":"newest_first"}),
         )
+    }
+    /// Bounded public cross-node probe history for Komari-style overview charts.
+    pub(crate) fn probe_overview(
+        &self,
+        hours: u32,
+        now: u64,
+        task_id: Option<&str>,
+    ) -> Result<Vec<Value>, StorageError> {
+        let db = self.connection()?;
+        let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
+        let mut statement = db.prepare(
+            "SELECT node_id,task_id,received_at_ms,latency_ms,success
+             FROM probe_results
+             WHERE received_at_ms>=?1 AND (?2 IS NULL OR task_id=?2)
+             ORDER BY received_at_ms DESC,id DESC LIMIT 4000",
+        )?;
+        let rows = statement.query_map(params![start, task_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<f64>>(3)?,
+                row.get::<_, bool>(4)?,
+            ))
+        })?;
+        let mut visibility = std::collections::HashMap::new();
+        let mut records = Vec::new();
+        for row in rows {
+            let (node, task, time, latency, success) = row?;
+            let allowed = if let Some(allowed) = visibility.get(&node) {
+                *allowed
+            } else {
+                let allowed = visible(&db, &node)?;
+                visibility.insert(node.clone(), allowed);
+                allowed
+            };
+            if allowed {
+                records.push(json!({
+                    "node_id": node,
+                    "task_id": task,
+                    "received_at_unix_ms": time,
+                    "latency_ms": latency,
+                    "success": success
+                }));
+            }
+        }
+        Ok(records)
     }
 }
 

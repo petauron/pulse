@@ -4,6 +4,7 @@ export interface SiteSettings {
   site_name: string
   private_site: boolean
   agent_interval_seconds: number
+  ip_info_enabled?: boolean
 }
 
 export interface ManagedNode {
@@ -15,6 +16,8 @@ export interface ManagedNode {
   hidden: boolean
   tags: string
   public_remark: string
+  ipv4?: string
+  ipv6?: string
   price: number
   currency: string
   billing_cycle_days: number
@@ -96,8 +99,8 @@ export interface ProbeHistory {
 
 /** Do not send read-only counters or newly added admin-state fields as metadata. */
 export function nodeMetadata(node: ManagedNode): ManagedNode {
-  const { id, name, region, group, weight, hidden, tags, public_remark, price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day } = node
-  return { id, name, region, group, weight, hidden, tags, public_remark, price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day }
+  const { id, name, region, group, weight, hidden, tags, public_remark, ipv4, ipv6, price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day } = node
+  return { id, name, region, group, weight, hidden, tags, public_remark, ipv4: ipv4 ?? '', ipv6: ipv6 ?? '', price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day }
 }
 
 export function fetchProbeHistory(id: string, hours: number, signal?: AbortSignal): Promise<ProbeHistory> {

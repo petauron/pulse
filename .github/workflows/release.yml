@@ -83,13 +83,14 @@ jobs:
         env:
           ARCHIVE_NAME: pulse-${{ github.ref_name }}-linux-${{ matrix.arch }}
         run: |
-          install -d "release/$ARCHIVE_NAME/deploy" "release/$ARCHIVE_NAME/docs" "release/$ARCHIVE_NAME/web"
+          install -d "release/$ARCHIVE_NAME/deploy" "release/$ARCHIVE_NAME/docs" "release/$ARCHIVE_NAME/web" "release/$ARCHIVE_NAME/compat/luminaplus"
           install -m 0755 target/release/pulse-service target/release/pulse-agent "release/$ARCHIVE_NAME/"
           install -m 0755 deploy/*.sh "release/$ARCHIVE_NAME/deploy/"
           install -m 0644 deploy/*.service deploy/*.env.example "release/$ARCHIVE_NAME/deploy/"
           install -m 0644 deploy/docker-compose.yml "release/$ARCHIVE_NAME/deploy/"
           install -m 0644 README.md CHANGELOG.md LICENSE NOTICE SECURITY.md Cargo.lock RUST_THIRD_PARTY_LICENSES.html RUST_STDLIB_LICENSES.html "release/$ARCHIVE_NAME/"
-          install -m 0644 docs/OPERATIONS.md docs/ARCHITECTURE.md docs/AUTH.md docs/MONITORING.md docs/STORAGE-BENCHMARK.md "release/$ARCHIVE_NAME/docs/"
+          install -m 0644 docs/OPERATIONS.md docs/ARCHITECTURE.md docs/AUTH.md docs/MONITORING.md docs/STORAGE-BENCHMARK.md docs/THEMES.md "release/$ARCHIVE_NAME/docs/"
+          install -m 0644 compat/luminaplus/* "release/$ARCHIVE_NAME/compat/luminaplus/"
           install -m 0644 web/THIRD_PARTY_NOTICES.md web/LICENSE.* web/package-lock.json "release/$ARCHIVE_NAME/web/"
           install -m 0644 web/dist/THIRD_PARTY_LICENSES.md "release/$ARCHIVE_NAME/web/"
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
@@ -163,9 +164,13 @@ jobs:
           pattern: release-linux-*
           path: release
           merge-multiple: true
+      - name: Stage adapted theme package and license
+        run: |
+          install -m 0644 compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip release/
+          install -m 0644 compat/luminaplus/LICENSE release/LICENSE.LuminaPlus
       - name: Create checksums
         working-directory: release
-        run: sha256sum pulse-*.tar.gz pulse-*.spdx.json > SHA256SUMS
+        run: sha256sum pulse-*.tar.gz pulse-*.spdx.json LuminaPlus-v1.3.5-pulse.zip LICENSE.LuminaPlus > SHA256SUMS
       - name: Attest binary provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
