@@ -49,6 +49,8 @@ TOTP and optional GitHub OAuth, an Emerald management area, bounded network prob
 alerts, asset fields, monthly traffic accounting and optional extended metrics.
 These additions are **not included in the published Alpha.2 artifacts**. See
 [authentication setup](docs/AUTH.md) and [monitoring administration](docs/MONITORING.md).
+Development builds also support administrator-installed Komari-style theme bundles and
+a bounded read-only monitoring API compatibility layer; see [theme support](docs/THEMES.md).
 
 ### Run the Service
 

@@ -6,6 +6,7 @@ import AccountSecurity from '@/components/admin/AccountSecurity.vue'
 import AdminAlerts from '@/components/admin/AdminAlerts.vue'
 import AdminNodes from '@/components/admin/AdminNodes.vue'
 import AdminProbes from '@/components/admin/AdminProbes.vue'
+import AdminThemes from '@/components/admin/AdminThemes.vue'
 import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
 import { Input } from '@/components/ui/input'
@@ -25,7 +26,7 @@ const loading = ref(false)
 const loadError = ref('')
 let controller: AbortController | null = null
 let disposed = false
-const sections = [{ id: 'nodes', label: '节点' }, { id: 'probes', label: '探测' }, { id: 'alerts', label: '通知与告警' }, { id: 'site', label: '站点设置' }, { id: 'security', label: '账号安全' }]
+const sections = [{ id: 'nodes', label: '节点' }, { id: 'probes', label: '探测' }, { id: 'alerts', label: '通知与告警' }, { id: 'themes', label: '主题' }, { id: 'site', label: '站点设置' }, { id: 'security', label: '账号安全' }]
 const section = computed(() => sections.some(item => item.id === route.query.section) ? route.query.section : 'nodes')
 
 async function refresh(): Promise<void> {
@@ -113,12 +114,17 @@ async function logout(): Promise<void> {
       <AdminProbes v-else-if="section === 'probes'" :nodes="state.nodes" :probes="state.probes" :refresh="refresh" />
       <AdminAlerts v-else-if="section === 'alerts'" :nodes="state.nodes" :channels="state.channels" :rules="state.alert_rules" :incidents="state.incidents" :failures="state.notification_failures" :refresh="refresh" />
       <AccountSecurity v-else-if="section === 'security'" />
+      <AdminThemes v-else-if="section === 'themes'" />
       <CardX v-else title="站点设置" content-class="space-y-4">
         <form class="max-w-xl space-y-4" :aria-busy="busy" @submit.prevent="saveSettings">
           <fieldset :disabled="busy" class="space-y-4">
             <label class="grid gap-2 text-sm">站点名称<Input v-model="settings.site_name" required maxlength="128" /></label>
             <label class="grid gap-2 text-sm">Agent 上报间隔（秒）<Input v-model="settings.agent_interval_seconds" type="number" min="1" max="300" step="1" required /></label>
             <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="settings.private_site" type="checkbox" class="size-4 accent-primary">私有站点：登录后才能查看监控数据</label>
+            <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="settings.ip_info_enabled" type="checkbox" class="size-4 accent-primary" aria-describedby="ip-info-privacy">启用 IP 信息查询（仅管理员）</label>
+            <p id="ip-info-privacy" class="text-sm text-muted-foreground">
+              默认关闭。启用后，管理员查看 IP 信息时会将已登记的节点公网 IP 发送给 Net.Coffee，查询归属、原生性与全球延迟。不发送 Pulse 凭据或主机指标；第三方结果可能不准确或暂时不可用。节点地址请在“节点”中登记，中国大陆节点不查询。
+            </p>
             <p class="text-sm text-muted-foreground">
               关闭私有站点后，未隐藏节点的监控数据对访客公开。
             </p>

@@ -30,10 +30,14 @@ mod auth;
 mod control;
 #[cfg(test)]
 mod control_tests;
+mod ip_info;
+mod komari;
+mod luminaplus;
 mod management;
 mod notifications;
 mod session_gate;
 mod storage;
+mod themes;
 
 pub use auth::{AuthConfig, GithubOAuthConfig};
 pub use storage::{AuditEvent, EnrollmentSecret};
@@ -89,6 +93,8 @@ pub struct AppState {
     max_nodes: u32,
     auth: auth::AuthState,
     session_gate: session_gate::SessionGate,
+    themes: Arc<themes::ThemeStore>,
+    ip_info: Arc<ip_info::IpInfo>,
 }
 
 impl AppState {
@@ -108,6 +114,9 @@ impl AppState {
             config.max_database_bytes,
         )?;
         let session_gate = auth.session_gate().clone();
+        let themes = Arc::new(
+            themes::ThemeStore::open(&config.database_path).map_err(std::io::Error::other)?,
+        );
         Ok(Self {
             storage: Arc::new(storage),
             database_permit: Arc::new(Semaphore::new(1)),
@@ -118,6 +127,8 @@ impl AppState {
             max_nodes: config.max_nodes,
             auth,
             session_gate,
+            themes,
+            ip_info: Arc::new(ip_info::IpInfo::new()?),
         })
     }
 
@@ -333,15 +344,28 @@ pub fn router(state: AppState) -> Router {
             get(management::probe_history),
         )
         .merge(management::routes())
+        .merge(ip_info::routes())
         .route("/api/rpc2", post(rpc_handler))
+        .route(
+            "/admin/ping",
+            get(|| async { axum::response::Redirect::temporary("/admin?section=probes") }),
+        )
         .route("/api/public", get(public_settings))
         .route("/api/me", get(me))
         .route("/api/version", get(version))
         .route("/api/records/load", get(load_records))
+        .route("/api/nodes", get(komari::nodes))
+        .route("/api/task/ping", get(luminaplus::ping_tasks))
+        .route("/api/records/ping", get(luminaplus::ping_records))
+        .route("/api/admin/ping", get(luminaplus::admin_ping_tasks))
+        .route("/api/admin/client/list", get(luminaplus::admin_clients))
+        .route("/api/admin/plugin/list", get(luminaplus::admin_plugins))
+        .route("/api/recent/{uuid}", get(komari::recent))
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
+        .merge(themes::routes())
         .fallback(assets::static_asset)
         .with_state(state.clone())
         .merge(authentication)
-        .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
         .layer(middleware::from_fn_with_state(state, request_guard))
 }
 
@@ -359,12 +383,23 @@ async fn request_guard(
         return ApiError::unavailable("server is busy; retry later").into_response();
     };
     let path = request.uri().path();
-    let administrative = path.starts_with("/api/admin/");
+    let handler_timeout =
+        if path.starts_with("/api/public/ip-info/") || path.starts_with("/api/admin/ip-info/") {
+            Duration::from_secs(30)
+        } else {
+            HANDLER_TIMEOUT
+        };
+    let administrative =
+        path.starts_with("/api/admin/") || path.starts_with("/api/public/ip-info/");
     let protected = administrative
         || path == "/api/rpc2"
         || path == "/api/v1/nodes"
         || path.starts_with("/api/v1/nodes/")
         || path.starts_with("/api/records/");
+    let protected = protected
+        || path == "/api/nodes"
+        || path == "/api/task/ping"
+        || path.starts_with("/api/recent/");
     let auth_mutation = path.starts_with("/api/auth/")
         && !matches!(
             *request.method(),
@@ -390,7 +425,7 @@ async fn request_guard(
         None
     };
     let response = session_gate::scope(lease, async move {
-        timeout(HANDLER_TIMEOUT, async move {
+        timeout(handler_timeout, async move {
             if protected {
                 let private_site = match state.database(Storage::settings).await {
                     Ok(settings) => settings.private_site,
@@ -571,12 +606,27 @@ struct RpcRequest {
 
 async fn rpc_handler(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(request): Json<RpcRequest>,
 ) -> Json<Value> {
     if request.jsonrpc != "2.0" {
         return rpc_error(&request.id, -32600, "Invalid Request");
     }
     let result = rpc_result(&state, &request).await;
+    let result = match result {
+        Ok(mut value)
+            if matches!(
+                request.method.as_str(),
+                "common:getNodes" | "public:getNodesInformation"
+            ) =>
+        {
+            match ip_info::enrich_nodes(&state, &headers, &mut value).await {
+                Ok(()) => Ok(value),
+                Err(error) => Err(error),
+            }
+        }
+        other => other,
+    };
     match result {
         Ok(result) => Json(json!({ "jsonrpc": "2.0", "result": result, "id": request.id })),
         Err(ApiError {
@@ -597,8 +647,73 @@ async fn rpc_handler(
 async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, ApiError> {
     match request.method.as_str() {
         "rpc.ping" => Ok(json!("pong")),
-        "rpc.getVersion" | "common:getBackendVersion" => Ok(version_data()),
-        "common:getPublicInfo" => public_settings_data(state).await,
+        "rpc.getVersion"
+        | "common:getBackendVersion"
+        | "common:getVersion"
+        | "public:getVersion" => Ok(version_data()),
+        "common:getPublicInfo" | "public:getPublicSettings" => public_settings_data(state).await,
+        "rpc.version" => Ok(json!("2.0")),
+        "rpc.methods" => Ok(json!([
+            "rpc.ping",
+            "rpc.version",
+            "rpc.methods",
+            "common:getNodes",
+            "common:getNodesLatestStatus",
+            "common:getPublicInfo",
+            "common:getVersion",
+            "common:getNodeRecentStatus",
+            "common:getRecords",
+            "public:getNodesInformation",
+            "public:getPublicSettings",
+            "public:getVersion",
+            "public:getPublicPingTasks"
+        ])),
+        "public:getPublicPingTasks" => Ok(json!(luminaplus::public_tasks_data(state).await?)),
+        "common:getNodes" | "public:getNodesInformation" | "common:getNodesLatestStatus" => {
+            let offline_after = state.offline_after_seconds;
+            let max_nodes = state.max_nodes;
+            let dashboard = state
+                .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+                .await?;
+            let key = if request.method == "common:getNodesLatestStatus" {
+                "statuses"
+            } else {
+                "clients"
+            };
+            let mut values = dashboard[key].clone();
+            if let Some(uuid) = request.params.get("uuid").and_then(Value::as_str) {
+                if Uuid::parse_str(uuid).is_err() {
+                    return Err(ApiError::bad_request("uuid is invalid"));
+                }
+                return Ok(values.get(uuid).cloned().unwrap_or(Value::Null));
+            }
+            if let Some(uuids) = request.params.get("uuids").and_then(Value::as_array) {
+                if uuids.len() > usize::try_from(state.max_nodes).unwrap_or(100)
+                    || uuids
+                        .iter()
+                        .any(|id| id.as_str().is_none_or(|id| Uuid::parse_str(id).is_err()))
+                {
+                    return Err(ApiError::bad_request("invalid uuids"));
+                }
+                let mut selected = serde_json::Map::new();
+                for uuid in uuids {
+                    let id = uuid.as_str().unwrap_or_default();
+                    if let Some(value) = values.get(id) {
+                        selected.insert(id.to_owned(), value.clone());
+                    }
+                }
+                values = Value::Object(selected);
+            }
+            if request.method == "public:getNodesInformation" {
+                return Ok(json!(
+                    values
+                        .as_object()
+                        .map(|items| items.values().cloned().collect::<Vec<_>>())
+                        .unwrap_or_default()
+                ));
+            }
+            Ok(values)
+        }
         "common:getDashboard" => {
             let offline_after = state.offline_after_seconds;
             let max_nodes = state.max_nodes;
@@ -607,42 +722,44 @@ async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, Api
                 .await
         }
         "common:getNodeRecentStatus" | "common:getRecords" => {
-            let node_id = rpc_node_id(&request.params)?.to_owned();
-            let hours = history_hours(
-                request
-                    .params
-                    .get("hours")
-                    .and_then(Value::as_u64)
-                    .and_then(|value| u32::try_from(value).ok()),
-                state.retention_days,
-            );
-            let limit = request
-                .params
-                .get("max_count")
-                .or_else(|| request.params.get("limit"))
-                .and_then(Value::as_u64)
-                .and_then(|value| u32::try_from(value).ok())
-                .unwrap_or(150)
-                .clamp(1, MAX_HISTORY_POINTS);
-            let now = current_time()?;
-            if request.params.get("type").and_then(Value::as_str) == Some("ping") {
-                let mut result = state
-                    .database(move |storage| storage.probe_history(&node_id, hours, now))
-                    .await?;
-                let count = result["records"].as_array().map_or(0, Vec::len);
-                result["count"] = json!(count);
-                return Ok(result);
-            }
-            let series = state
-                .database(move |storage| storage.history(&node_id, hours, limit, now))
-                .await?;
-            Ok(history_result(&series))
+            rpc_history(state, &request.params).await
         }
         _ => Err(ApiError {
             status: StatusCode::NOT_FOUND,
             message: "method not found".to_owned(),
         }),
     }
+}
+
+async fn rpc_history(state: &AppState, params: &Value) -> Result<Value, ApiError> {
+    let requested_hours = params
+        .get("hours")
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok());
+    if params.get("type").and_then(Value::as_str) == Some("ping") {
+        return luminaplus::ping_records_data(
+            state,
+            params.get("uuid").and_then(Value::as_str),
+            requested_hours,
+            params.get("task_id").and_then(Value::as_u64),
+        )
+        .await;
+    }
+    let node_id = rpc_node_id(params)?.to_owned();
+    let hours = history_hours(requested_hours, state.retention_days);
+    let limit = params
+        .get("max_count")
+        .or_else(|| params.get("maxCount"))
+        .or_else(|| params.get("limit"))
+        .and_then(Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(150)
+        .clamp(1, MAX_HISTORY_POINTS);
+    let now = current_time()?;
+    let series = state
+        .database(move |storage| storage.history(&node_id, hours, limit, now))
+        .await?;
+    Ok(history_result(&series))
 }
 
 fn history_result(series: &HistorySeries) -> Value {
@@ -680,6 +797,21 @@ async fn public_settings(State(state): State<AppState>) -> Result<Json<Value>, A
 async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
     let settings = state.database(Storage::settings).await?;
     let oauth_enabled = state.auth.oauth_enabled();
+    let theme_settings = if state.themes.active() == "emerald" {
+        json!({
+            "dataUpdateInterval": settings.agent_interval_seconds,
+            "rpcTransportMode": "http",
+            "defaultViewMode": "card",
+            "earthViewMode": "earth",
+            "visitorInfoCardEnabled": false,
+            "hideAdminEntryWhenLoggedOut": false,
+            "offlineNodesLast": true,
+            "backgroundEnabled": false,
+            "alertEnabled": false
+        })
+    } else {
+        state.themes.settings()
+    };
     Ok(json!({
         "allow_cors": false,
         "custom_body": "",
@@ -693,18 +825,8 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
         "record_enabled": true,
         "record_preserve_time": state.retention_days * 24,
         "sitename": settings.site_name,
-        "theme": "emerald",
-        "theme_settings": {
-            "dataUpdateInterval": settings.agent_interval_seconds,
-            "rpcTransportMode": "http",
-            "defaultViewMode": "card",
-            "earthViewMode": "earth",
-            "visitorInfoCardEnabled": false,
-            "hideAdminEntryWhenLoggedOut": false,
-            "offlineNodesLast": true,
-            "backgroundEnabled": false,
-            "alertEnabled": false
-        }
+        "theme": state.themes.active(),
+        "theme_settings": theme_settings
     }))
 }
 
@@ -1210,6 +1332,9 @@ mod tests {
         let (_directory, state) = test_state();
         for path in [
             "/api/v1/nodes",
+            "/api/nodes",
+            "/api/task/ping",
+            "/api/records/ping?uuid=00000000-0000-0000-0000-000000000000",
             "/api/records/load?uuid=00000000-0000-0000-0000-000000000000",
             "/api/v1/nodes/00000000-0000-0000-0000-000000000000/probes",
             "/api/admin/state",
@@ -1272,6 +1397,205 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(admin.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn ip_info_is_admin_only_disabled_by_default_and_refresh_requires_csrf() {
+        let (_directory, state) = test_state();
+        let (cookie, _) = initialize_admin(&state).await;
+        let mut settings = state.storage.settings().unwrap();
+        settings.private_site = false;
+        state.storage.save_settings(&settings).unwrap();
+        for path in [
+            "/api/public/ip-info/v1/status",
+            "/api/public/ip-info/v1/lookup",
+            "/api/public/ip-info/v1/latency",
+            "/api/admin/ip-info/v1/status",
+        ] {
+            let response = router(state.clone())
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+        }
+        let response = router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/public/ip-info/v1/status")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response_json(response).await["data"]["available"], false);
+        let response = router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/ip-info/v1/refresh")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        for ip in ["127.0.0.1", "1.1.1.1"] {
+            let path = format!(
+                "/api/public/ip-info/v1/lookup?uuid={}&ip={ip}",
+                Uuid::new_v4()
+            );
+            let response = router(state.clone())
+                .oneshot(
+                    Request::builder()
+                        .uri(path)
+                        .header(header::COOKIE, &cookie)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+    }
+
+    #[tokio::test]
+    async fn ip_info_addresses_are_bound_and_never_exposed_to_visitors() {
+        let (_directory, state) = test_state();
+        let (cookie, _) = initialize_admin(&state).await;
+        let mut settings = state.storage.settings().unwrap();
+        settings.private_site = false;
+        settings.ip_info_enabled = true;
+        state.storage.save_settings(&settings).unwrap();
+        let secret = state
+            .storage
+            .create_enrollment(600, unix_time_ms().unwrap())
+            .unwrap();
+        let response = router(state.clone()).oneshot(json_request("/api/v1/agents/enroll", &json!({
+            "protocol_version": PROTOCOL_VERSION,"node_name":"IP QA","agent_version":"test","region":"SG","group":""
+        }),Some(&secret.token))).await.unwrap();
+        let enrolled: EnrollmentResponse =
+            serde_json::from_value(response_json(response).await).unwrap();
+        let node = state.storage.admin_state().unwrap()["nodes"][0].clone();
+        let mut node = node.as_object().unwrap().clone();
+        for key in ["disabled", "traffic_used_up", "traffic_used_down"] {
+            node.remove(key);
+        }
+        let mut options: control::NodeOptions = serde_json::from_value(json!(node)).unwrap();
+        options.ipv4 = "1.1.1.1".into();
+        state
+            .storage
+            .save_node_options(&enrolled.node_id, &mut options)
+            .unwrap();
+        let mut private = json!({"uuid":enrolled.node_id});
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(header::COOKIE, cookie.parse().unwrap());
+        ip_info::enrich_nodes(&state, &headers, &mut private)
+            .await
+            .unwrap();
+        assert_eq!(private["ipv4"], "1.1.1.1");
+        let mut public = json!({"uuid":enrolled.node_id});
+        ip_info::enrich_nodes(&state, &axum::http::HeaderMap::new(), &mut public)
+            .await
+            .unwrap();
+        assert!(public.get("ipv4").is_none());
+        options.ipv4 = "127.0.0.1".into();
+        assert!(
+            state
+                .storage
+                .save_node_options(&enrolled.node_id, &mut options)
+                .is_err()
+        );
+        let path = format!(
+            "/api/public/ip-info/v1/lookup?uuid={}&ip=8.8.8.8",
+            enrolled.node_id
+        );
+        let response = router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let path = format!(
+            "/api/public/ip-info/v1/lookup?uuid={}&ip=1.1.1.1",
+            Uuid::new_v4()
+        );
+        let response = router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn authenticated_theme_install_accepts_a_zip_above_default_request_limit() {
+        use std::io::{Cursor, Write};
+        use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
+
+        let (_directory, state) = test_state();
+        let (cookie, csrf) = initialize_admin(&state).await;
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        writer.start_file("komari-theme.json", options).unwrap();
+        writer
+            .write_all(br#"{"name":"Test","short":"test","version":"1"}"#)
+            .unwrap();
+        writer.start_file("dist/index.html", options).unwrap();
+        writer.write_all(b"<html>Test</html>").unwrap();
+        writer.start_file("dist/assets/large.js", options).unwrap();
+        writer.write_all(&vec![b'x'; 70 * 1024]).unwrap();
+        let archive = writer.finish().unwrap().into_inner();
+        assert!(archive.len() > MAX_REQUEST_BYTES);
+        let response = router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/theme/install")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::ORIGIN, "http://127.0.0.1:8080")
+                    .header("X-CSRF-Token", csrf)
+                    .header(header::CONTENT_TYPE, "application/zip")
+                    .body(Body::from(archive))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(state.themes.list().themes.len(), 2);
+        state.themes.activate("test").unwrap();
+        let homepage = router(state.clone())
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(homepage.status(), StatusCode::OK);
+        let body = to_bytes(homepage.into_body(), 1024).await.unwrap();
+        assert_eq!(&body[..], b"<html>Test</html>");
+        let login_page = router(state)
+            .oneshot(
+                Request::builder()
+                    .uri("/login")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(login_page.status(), StatusCode::OK);
+        let body = to_bytes(login_page.into_body(), 8 * 1024).await.unwrap();
+        assert_ne!(&body[..], b"<html>Test</html>");
     }
 
     #[tokio::test]

@@ -122,6 +122,11 @@ async function execute(): Promise<void> {
           </legend>
           <label class="grid gap-2 text-sm">名称<Input v-model="draft.name" required maxlength="128" /></label>
           <label class="grid gap-2 text-sm">地区代码<Input v-model="draft.region" placeholder="例如 SG" maxlength="16" /></label>
+          <label class="grid gap-2 text-sm">公网 IPv4（可选）<Input v-model="draft.ipv4" maxlength="15" aria-describedby="node-ip-privacy" /></label>
+          <label class="grid gap-2 text-sm">公网 IPv6（可选）<Input v-model="draft.ipv6" maxlength="45" aria-describedby="node-ip-privacy" /></label>
+          <p id="node-ip-privacy" class="text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">
+            仅管理员可读取地址。启用站点的 IP 信息查询后用于 LuminaPlus；不接受内网、保留地址或域名，留空可移除。
+          </p>
           <label class="grid gap-2 text-sm">分组<Input v-model="draft.group" maxlength="128" /></label>
           <label class="grid gap-2 text-sm">排序权重<Input v-model="draft.weight" type="number" min="-2147483648" max="2147483647" step="1" required /></label>
           <label class="grid gap-2 text-sm">标签<Input v-model="draft.tags" placeholder="使用分号分隔" maxlength="512" /></label>

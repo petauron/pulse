@@ -278,6 +278,7 @@ fn slow_reporting_extends_the_offline_window_consistently() {
             site_name: "Pulse".into(),
             private_site: true,
             agent_interval_seconds: 300,
+            ip_info_enabled: false,
         })
         .unwrap();
     let db = storage.connection().unwrap();

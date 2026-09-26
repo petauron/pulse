@@ -147,6 +147,48 @@ export class PulseApi {
     return this.request<T>(path, false, body)
   }
 
+  async postThemeZip<T>(path: string, file: File): Promise<T> {
+    if (file.size === 0 || file.size > 16 * 1024 * 1024)
+      throw new ApiError('主题包必须是 16 MiB 以内的 ZIP 文件')
+    const generation = getSessionGeneration()
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), 30_000)
+    try {
+      const response = await fetch(new URL(path, this.baseUrl), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/zip', 'X-CSRF-Token': csrfToken },
+        credentials: 'same-origin',
+        body: file,
+        signal: controller.signal,
+      })
+      if (response.status === 401)
+        requireLogin(generation)
+      const text = await response.text()
+      if (text.length > MAX_RESPONSE_BYTES)
+        throw new ApiError('主题安装响应超过安全限制')
+      let result: ApiResponse<T> | { error?: { message?: string } }
+      try {
+        result = JSON.parse(text)
+      }
+      catch {
+        throw new ApiError('无法读取主题安装响应', response.status)
+      }
+      if (!response.ok || !('status' in result && result.status === 'success'))
+        throw new ApiError('error' in result ? result.error?.message || '主题安装失败' : '主题安装失败', response.status)
+      return result.data
+    }
+    catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError')
+        throw new ApiError('主题安装超时')
+      if (error instanceof ApiError)
+        throw error
+      throw new ApiError(error instanceof Error ? error.message : String(error))
+    }
+    finally {
+      window.clearTimeout(timer)
+    }
+  }
+
   getPublicSettings(): Promise<PublicSettings> {
     return this.request<PublicSettings>('public', true)
   }
