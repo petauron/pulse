@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Upgrade rustls to 0.23.45 to address TLS handshake encryption-level validation advisory RUSTSEC-2026-0285.
 - JavaScript-safe numeric probe identifiers and cross-node Ping history compatibility, settings-save CSRF support, and the LuminaPlus administration link.
 - Nullable optional hardware samples no longer discard valid load or traffic history in the adapted theme.
 - IP information APIs require administrator authentication even under the compatibility `/public/` path, validate node/address binding on every query, and never expose registered addresses to anonymous viewers.
