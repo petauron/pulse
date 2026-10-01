@@ -166,7 +166,15 @@ To rotate an Agent credential without exposing it in a command-line argument:
 
 Rotation invalidates the previous token immediately. If a node is lost or compromised, use `pulse-service node revoke NODE_ID`; this retains its historical rows but excludes it from active views. `pulse-service node delete NODE_ID` permanently deletes the node and its snapshots. Review up to 1,000 local lifecycle events with `pulse-service audit 1000`. These commands must be run with the Service database environment and account.
 
-If initial enrollment succeeds but the Agent cannot save its credential (or the response is lost), stop the Agent and fix the state directory's ownership, mode, or disk capacity. The single-use enrollment token cannot be reused. Find the node ID in the Agent error, dashboard, or Service `audit` enrollment event, then rotate that node's token as above. On a host with no credential file, import the rotated token from stdin instead of using `replace`:
+If initial enrollment succeeds but the Agent cannot save its credential (or the response is lost), stop the Agent and fix the state directory's ownership, mode, or disk capacity. The single-use enrollment token cannot be reused. When the original enrollment ID is retained, inspect its exact node association on the Service host:
+
+```bash
+pulse-service enrollment inspect ENROLLMENT_ID
+```
+
+This returns JSON with the enrollment ID, expiry, consumption time, associated `node_id` and `node_active`. It returns no token or token hash and does not enroll, rotate, reactivate or delete anything. Expiry does not remove the original association. An unused or deleted-node enrollment has no `node_id`; a revoked node has `node_active: false`. A missing enrollment returns an error. Do not infer the original node from matching names or addresses, and do not treat this read as authorization to reactivate a revoked node.
+
+Use the verified original active node ID to rotate its token as above. On a host with no credential file, import the rotated token from stdin instead of using `replace`:
 
 ```bash
 sudo -u pulse-agent env PULSE_SERVICE_URL=https://pulse.example.com \

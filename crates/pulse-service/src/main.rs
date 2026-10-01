@@ -110,6 +110,10 @@ fn run_admin(
             let secret = administration.create_enrollment(ttl.parse()?)?;
             println!("{}", serde_json::to_string_pretty(&secret)?);
         }
+        [area, action, id] if area == "enrollment" && action == "inspect" => {
+            let record = administration.inspect_enrollment(id)?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
         [area, action, id] if area == "enrollment" && action == "revoke" => {
             administration.revoke_enrollment(id)?;
             println!("enrollment token revoked: {id}");
@@ -147,7 +151,7 @@ fn run_admin(
 }
 
 fn usage() -> &'static str {
-    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment revoke ID | node rotate ID | node revoke ID | node delete ID | audit [LIMIT] | backup]"
+    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node revoke ID | node delete ID | audit [LIMIT] | backup]"
 }
 
 async fn shutdown_signal() {

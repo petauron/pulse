@@ -80,6 +80,15 @@ pub struct EnrollmentSecret {
 }
 
 #[derive(Debug, Serialize)]
+pub struct EnrollmentRecord {
+    pub id: String,
+    pub expires_at_unix_ms: u64,
+    pub consumed_at_unix_ms: Option<u64>,
+    pub node_id: Option<String>,
+    pub node_active: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct AuditEvent {
     pub happened_at_unix_ms: u64,
     pub action: String,
@@ -174,6 +183,30 @@ impl Storage {
             token,
             expires_at_unix_ms: expires_at,
         })
+    }
+
+    pub(crate) fn inspect_enrollment(&self, id: &str) -> Result<EnrollmentRecord, StorageError> {
+        // Read the original persisted association, including after expiry or
+        // revocation. Names and addresses are never used as recovery identity.
+        self.connection()?
+            .query_row(
+                "SELECT e.id, e.expires_at_ms, e.consumed_at_ms, e.node_id,
+                        n.id IS NOT NULL AND n.disabled_at_ms IS NULL
+                 FROM enrollment_tokens e LEFT JOIN nodes n ON n.id = e.node_id
+                 WHERE e.id = ?1",
+                [id],
+                |row| {
+                    Ok(EnrollmentRecord {
+                        id: row.get(0)?,
+                        expires_at_unix_ms: from_i64(row.get(1)?),
+                        consumed_at_unix_ms: row.get::<_, Option<i64>>(2)?.map(from_i64),
+                        node_id: row.get(3)?,
+                        node_active: row.get(4)?,
+                    })
+                },
+            )
+            .optional()?
+            .ok_or(StorageError::NotFound)
     }
 
     pub(crate) fn revoke_enrollment(&self, id: &str, now_ms: u64) -> Result<(), StorageError> {
@@ -1563,6 +1596,116 @@ mod tests {
             statement.get_status(rusqlite::StatementStatus::FullscanStep) < 10,
             "latest status must seek by node, not walk snapshot history"
         );
+    }
+
+    #[test]
+    fn enrollment_inspection_retains_exact_association_without_credentials() {
+        let directory = tempdir().unwrap();
+        let storage = Storage::open(&directory.path().join("pulse.db"), 64 * 1024 * 1024).unwrap();
+        let first = storage.create_enrollment(60, 1_000).unwrap();
+        let second = storage.create_enrollment(60, 1_000).unwrap();
+        let original = storage
+            .enroll(&request(), &hash_token(&first.token), 10, 2_000)
+            .unwrap();
+        // Identical display names must not confuse the persisted association.
+        let other = storage
+            .enroll(&request(), &hash_token(&second.token), 10, 2_000)
+            .unwrap();
+        storage
+            .ingest(
+                &hash_token(&original.agent_token),
+                &sample(Uuid::new_v4().to_string(), 3_000),
+                3_000,
+                7,
+            )
+            .unwrap();
+        let changes = storage.connection().unwrap().total_changes();
+        let record = storage.inspect_enrollment(&first.id).unwrap();
+        assert_eq!(record.node_id.as_deref(), Some(original.node_id.as_str()));
+        assert_eq!(record.consumed_at_unix_ms, Some(2_000));
+        assert_eq!(record.expires_at_unix_ms, 61_000);
+        assert!(record.node_active);
+        assert_eq!(storage.connection().unwrap().total_changes(), changes);
+        assert_eq!(
+            storage.inspect_enrollment(&second.id).unwrap().node_id,
+            Some(other.node_id)
+        );
+        let encoded = serde_json::to_string(&record).unwrap();
+        for secret in [
+            first.token.clone(),
+            original.agent_token.clone(),
+            hash_token(&first.token),
+            hash_token(&original.agent_token),
+        ] {
+            assert!(!encoded.contains(&secret));
+        }
+        assert!(!encoded.contains("token"));
+
+        let rotated = storage
+            .rotate_node_token(&original.node_id, 70_000)
+            .unwrap();
+        assert_eq!(
+            storage.inspect_enrollment(&first.id).unwrap().node_id,
+            Some(original.node_id.clone())
+        );
+        assert!(matches!(
+            storage.ingest(
+                &hash_token(&original.agent_token),
+                &sample(Uuid::new_v4().to_string(), 71_000),
+                71_000,
+                7
+            ),
+            Err(StorageError::Unauthorized)
+        ));
+        storage
+            .ingest(
+                &hash_token(&rotated),
+                &sample(Uuid::new_v4().to_string(), 71_000),
+                71_000,
+                7,
+            )
+            .unwrap();
+        assert_eq!(
+            storage
+                .history(&original.node_id, 1, 10, 72_000)
+                .unwrap()
+                .records
+                .len(),
+            2
+        );
+        storage.revoke_node(&original.node_id, 73_000).unwrap();
+        let revoked = storage.inspect_enrollment(&first.id).unwrap();
+        assert_eq!(revoked.node_id, Some(original.node_id.clone()));
+        assert!(!revoked.node_active);
+        storage.delete_node(&original.node_id, 74_000).unwrap();
+        let deleted = storage.inspect_enrollment(&first.id).unwrap();
+        assert!(deleted.node_id.is_none());
+        assert!(!deleted.node_active);
+        assert_eq!(deleted.consumed_at_unix_ms, Some(2_000));
+    }
+
+    #[test]
+    fn enrollment_inspection_does_not_authorize_unused_or_missing_records() {
+        let directory = tempdir().unwrap();
+        let storage = Storage::open(&directory.path().join("pulse.db"), 64 * 1024 * 1024).unwrap();
+        let unused = storage.create_enrollment(60, 1_000).unwrap();
+        let record = storage.inspect_enrollment(&unused.id).unwrap();
+        assert!(record.node_id.is_none());
+        assert!(record.consumed_at_unix_ms.is_none());
+        assert!(!record.node_active);
+        storage.revoke_enrollment(&unused.id, 2_000).unwrap();
+        let revoked = storage.inspect_enrollment(&unused.id).unwrap();
+        assert_eq!(revoked.expires_at_unix_ms, 2_000);
+        assert!(revoked.node_id.is_none());
+        assert!(!revoked.node_active);
+        assert!(matches!(
+            storage.inspect_enrollment("missing' OR 1=1 --"),
+            Err(StorageError::NotFound)
+        ));
+        assert!(matches!(
+            storage.enroll(&request(), &hash_token(&unused.token), 10, 3_000),
+            Err(StorageError::InvalidEnrollment)
+        ));
     }
 
     #[test]
