@@ -40,7 +40,7 @@ mod storage;
 mod themes;
 
 pub use auth::{AuthConfig, GithubOAuthConfig};
-pub use storage::{AuditEvent, EnrollmentSecret};
+pub use storage::{AuditEvent, EnrollmentRecord, EnrollmentSecret};
 use storage::{
     HistorySeries, RETENTION_PRUNE_BATCH_SIZE, Storage, StorageError, hash_token,
     signed_difference, unix_time_ms,
@@ -269,6 +269,18 @@ impl Administration {
         Ok(self
             .storage
             .create_enrollment(ttl_seconds, unix_time_ms()?)?)
+    }
+
+    /// Reads an enrollment's original node association without returning credentials.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the enrollment does not exist or cannot be read.
+    pub fn inspect_enrollment(
+        &self,
+        id: &str,
+    ) -> Result<EnrollmentRecord, Box<dyn Error + Send + Sync>> {
+        Ok(self.storage.inspect_enrollment(id)?)
     }
 
     /// Revokes an unused enrollment token.
