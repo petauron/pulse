@@ -198,8 +198,8 @@ impl Storage {
                 |row| {
                     Ok(EnrollmentRecord {
                         id: row.get(0)?,
-                        expires_at_unix_ms: row.get(1)?,
-                        consumed_at_unix_ms: row.get(2)?,
+                        expires_at_unix_ms: from_i64(row.get(1)?),
+                        consumed_at_unix_ms: row.get::<_, Option<i64>>(2)?.map(from_i64),
                         node_id: row.get(3)?,
                         node_active: row.get(4)?,
                     })
@@ -1641,7 +1641,9 @@ mod tests {
         }
         assert!(!encoded.contains("token"));
 
-        let rotated = storage.rotate_node_token(&original.node_id, 70_000).unwrap();
+        let rotated = storage
+            .rotate_node_token(&original.node_id, 70_000)
+            .unwrap();
         assert_eq!(
             storage.inspect_enrollment(&first.id).unwrap().node_id,
             Some(original.node_id.clone())
