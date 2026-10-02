@@ -1493,7 +1493,9 @@ mod tests {
                 7,
             )
             .unwrap();
-        let token = storage.rotate_node_token(&original.node_id, 14_000).unwrap();
+        let token = storage
+            .rotate_node_token(&original.node_id, 14_000)
+            .unwrap();
         assert!(matches!(
             storage.inspect_node_reporting(&original.node_id, &original.agent_token, 15_000),
             Err(StorageError::Unauthorized)
@@ -1523,7 +1525,9 @@ mod tests {
         let encoded = serde_json::to_string(&reporting).unwrap();
         assert!(!encoded.contains(&token));
         assert!(!encoded.contains(&hash_token(&token)));
-        let next = storage.rotate_node_token(&original.node_id, 18_000).unwrap();
+        let next = storage
+            .rotate_node_token(&original.node_id, 18_000)
+            .unwrap();
         assert!(matches!(
             storage.inspect_node_reporting(&original.node_id, &token, 19_000),
             Err(StorageError::Unauthorized)
