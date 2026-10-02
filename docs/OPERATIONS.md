@@ -184,6 +184,20 @@ sudo -u pulse-agent env PULSE_SERVICE_URL=https://pulse.example.com \
 
 Import refuses to overwrite an existing credential. Set the exact original Service URL, delete the temporary token copies, restart the Agent, and verify fresh samples arrive for the same node. The Service uses SQLite WAL with `synchronous=FULL` so confirmed credential changes are durable after a host crash, subject to the storage device honoring fsync.
 
+To inspect reporting evidence on the Service, supply the current rotated token on
+stdin, keeping it out of process arguments:
+
+```bash
+pulse-service node reporting NODE_ID < /path/to/mode-0600-rotated-token
+```
+
+The read authenticates the exact active node and returns only its ID and
+Service-local observation, latest rotation and last accepted snapshot timestamps.
+It rejects revoked nodes and superseded credentials. A retained snapshot older
+than or equal to the rotation timestamp does not prove recovery; require a fresh
+snapshot strictly after rotation. These timestamps do not verify application
+traffic or authorize release of another application's recovery fence.
+
 ## Backup and restore
 
 The Service uses two paired SQLite files:

@@ -40,7 +40,7 @@ mod storage;
 mod themes;
 
 pub use auth::{AuthConfig, GithubOAuthConfig};
-pub use storage::{AuditEvent, EnrollmentRecord, EnrollmentSecret};
+pub use storage::{AuditEvent, EnrollmentRecord, EnrollmentSecret, NodeReportingRecord};
 use storage::{
     HistorySeries, RETENTION_PRUNE_BATCH_SIZE, Storage, StorageError, hash_token,
     signed_difference, unix_time_ms,
@@ -299,6 +299,21 @@ impl Administration {
     /// Returns an error when the node does not exist or the database operation fails.
     pub fn rotate_node_token(&self, node_id: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
         Ok(self.storage.rotate_node_token(node_id, unix_time_ms()?)?)
+    }
+
+    /// Reads report timestamps for an active node using its current credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid credential or an unreadable database.
+    pub fn inspect_node_reporting(
+        &self,
+        node_id: &str,
+        token: &str,
+    ) -> Result<NodeReportingRecord, Box<dyn Error + Send + Sync>> {
+        Ok(self
+            .storage
+            .inspect_node_reporting(node_id, token, unix_time_ms()?)?)
     }
 
     /// Revokes an active node without deleting its stored history.

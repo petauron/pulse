@@ -26,6 +26,15 @@ const MIN_SNAPSHOT_SPACING_MS: i64 = 950;
 const INGEST_PRUNE_INTERVAL_MS: u64 = 60_000;
 pub(crate) const RETENTION_PRUNE_BATCH_SIZE: usize = 10_000;
 
+/// Service-local evidence for the currently authenticated monitoring credential.
+#[derive(Debug, Serialize)]
+pub struct NodeReportingRecord {
+    pub node_id: String,
+    pub observed_at_unix_ms: u64,
+    pub rotated_at_unix_ms: Option<u64>,
+    pub last_seen_at_unix_ms: Option<u64>,
+}
+
 #[derive(Debug)]
 pub(crate) enum StorageError {
     Unauthorized,
@@ -313,6 +322,43 @@ impl Storage {
         insert_audit_transaction(&transaction, now_ms, "node.token.rotate", node_id)?;
         transaction.commit()?;
         Ok(token)
+    }
+
+    pub(crate) fn inspect_node_reporting(
+        &self,
+        node_id: &str,
+        token: &str,
+        now_ms: u64,
+    ) -> Result<NodeReportingRecord, StorageError> {
+        let mut connection = self.connection()?;
+        let transaction = connection.transaction()?;
+        let active: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM nodes WHERE id=?1 AND token_hash=?2 AND disabled_at_ms IS NULL)",
+            params![node_id, hash_token(token)],
+            |row| row.get(0),
+        )?;
+        if !active {
+            return Err(StorageError::Unauthorized);
+        }
+        let rotated_at: Option<i64> = transaction.query_row(
+            "SELECT MAX(happened_at_ms) FROM audit_events WHERE action='node.token.rotate' AND subject=?1",
+            params![node_id],
+            |row| row.get(0),
+        )?;
+        let last_seen: Option<i64> = transaction
+            .query_row(
+                "SELECT last_seen_at_ms FROM node_state WHERE node_id=?1",
+                params![node_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        transaction.commit()?;
+        Ok(NodeReportingRecord {
+            node_id: node_id.to_owned(),
+            observed_at_unix_ms: now_ms,
+            rotated_at_unix_ms: rotated_at.map(from_i64),
+            last_seen_at_unix_ms: last_seen.map(from_i64),
+        })
     }
 
     pub(crate) fn revoke_node(&self, node_id: &str, now_ms: u64) -> Result<(), StorageError> {
@@ -1429,6 +1475,71 @@ mod tests {
             .enroll(&request(), &hash_token(&enrollment.token), 10, 11_000)
             .unwrap();
         (directory, storage, credentials)
+    }
+
+    #[test]
+    fn reporting_inspection_binds_current_credential_and_service_timestamps() {
+        let (_directory, storage, original) = enrolled_storage();
+        let before = storage
+            .inspect_node_reporting(&original.node_id, &original.agent_token, 12_000)
+            .unwrap();
+        assert_eq!(before.rotated_at_unix_ms, None);
+        assert_eq!(before.last_seen_at_unix_ms, None);
+        storage
+            .ingest(
+                &hash_token(&original.agent_token),
+                &sample(Uuid::new_v4().to_string(), 13_000),
+                13_000,
+                7,
+            )
+            .unwrap();
+        let token = storage.rotate_node_token(&original.node_id, 14_000).unwrap();
+        assert!(matches!(
+            storage.inspect_node_reporting(&original.node_id, &original.agent_token, 15_000),
+            Err(StorageError::Unauthorized)
+        ));
+        let retained = storage
+            .inspect_node_reporting(&original.node_id, &token, 15_000)
+            .unwrap();
+        assert_eq!(retained.rotated_at_unix_ms, Some(14_000));
+        assert_eq!(retained.last_seen_at_unix_ms, Some(13_000));
+        storage
+            .ingest(
+                &hash_token(&token),
+                &sample(Uuid::new_v4().to_string(), 16_000),
+                16_000,
+                7,
+            )
+            .unwrap();
+        let changes = storage.connection().unwrap().total_changes();
+        let reporting = storage
+            .inspect_node_reporting(&original.node_id, &token, 17_000)
+            .unwrap();
+        assert_eq!(reporting.node_id, original.node_id);
+        assert_eq!(reporting.observed_at_unix_ms, 17_000);
+        assert_eq!(reporting.rotated_at_unix_ms, Some(14_000));
+        assert_eq!(reporting.last_seen_at_unix_ms, Some(16_000));
+        assert_eq!(storage.connection().unwrap().total_changes(), changes);
+        let encoded = serde_json::to_string(&reporting).unwrap();
+        assert!(!encoded.contains(&token));
+        assert!(!encoded.contains(&hash_token(&token)));
+        let next = storage.rotate_node_token(&original.node_id, 18_000).unwrap();
+        assert!(matches!(
+            storage.inspect_node_reporting(&original.node_id, &token, 19_000),
+            Err(StorageError::Unauthorized)
+        ));
+        assert_eq!(
+            storage
+                .inspect_node_reporting(&original.node_id, &next, 19_000)
+                .unwrap()
+                .rotated_at_unix_ms,
+            Some(18_000)
+        );
+        storage.revoke_node(&original.node_id, 20_000).unwrap();
+        assert!(matches!(
+            storage.inspect_node_reporting(&original.node_id, &next, 21_000),
+            Err(StorageError::Unauthorized)
+        ));
     }
 
     #[test]
