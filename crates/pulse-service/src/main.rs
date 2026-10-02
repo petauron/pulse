@@ -1,4 +1,4 @@
-use std::{env, error::Error, net::SocketAddr, path::PathBuf, time::Duration};
+use std::{env, error::Error, io::Read, net::SocketAddr, path::PathBuf, time::Duration};
 
 use pulse_service::{Administration, AppState, ServiceConfig, router};
 use tokio::net::TcpListener;
@@ -122,6 +122,16 @@ fn run_admin(
             let token = administration.rotate_node_token(id)?;
             println!("{token}");
         }
+        [area, action, id] if area == "node" && action == "reporting" => {
+            let mut token = String::new();
+            std::io::stdin().take(514).read_to_string(&mut token)?;
+            let token = token.trim_end_matches(['\r', '\n']);
+            if !(32..=512).contains(&token.len()) || token.chars().any(char::is_whitespace) {
+                return Err("invalid monitoring credential input".into());
+            }
+            let record = administration.inspect_node_reporting(id, token)?;
+            println!("{}", serde_json::to_string_pretty(&record)?);
+        }
         [area, action, id] if area == "node" && action == "revoke" => {
             administration.revoke_node(id)?;
             println!("node revoked: {id}");
@@ -151,7 +161,7 @@ fn run_admin(
 }
 
 fn usage() -> &'static str {
-    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node revoke ID | node delete ID | audit [LIMIT] | backup]"
+    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node reporting ID (credential on stdin) | node revoke ID | node delete ID | audit [LIMIT] | backup]"
 }
 
 async fn shutdown_signal() {
