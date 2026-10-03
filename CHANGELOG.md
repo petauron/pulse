@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-10-03
+
+### Added
+
+- Read-only enrollment inspection to recover the original managed monitoring identity without creating a duplicate node.
+- Authenticated node reporting inspection using the current credential on stdin, with rotation and last accepted report timestamps for recovery verification.
+
+### Upgrade notes
+
+- Preserve the existing Service data and collector credentials. This release supplies recovery evidence APIs; upgrading alone does not perform node recovery or prove that a replacement collector is reporting.
+- Existing collectors remain separate upgrade targets. Country discovery settings and manual regions are unchanged.
+
 ## [0.1.0-alpha.5] - 2026-09-26
 
 ### Added
