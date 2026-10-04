@@ -859,12 +859,11 @@ pub(crate) fn update_traffic(
     let (used_up, used_down) = old.map_or(
         (0, 0),
         |(previous, raw_up, raw_down, total_up, total_down)| {
-            let delta_up = if up >= raw_up { up - raw_up } else { up };
-            let delta_down = if down >= raw_down {
-                down - raw_down
-            } else {
-                down
-            };
+            // A lower aggregate can mean an interface disappeared, not a reboot.
+            // Rebaseline that direction without counting its entire remaining
+            // lifetime total again. Bytes across the discontinuity are unknown.
+            let delta_up = (up - raw_up).max(0);
+            let delta_down = (down - raw_down).max(0);
             (
                 (if previous == cycle { total_up } else { 0_i64 }).saturating_add(delta_up),
                 (if previous == cycle { total_down } else { 0_i64 }).saturating_add(delta_down),
