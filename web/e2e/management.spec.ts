@@ -86,7 +86,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     await expect(preview).toContainText(name)
     await expect(preview).toContainText('ms')
     await page.goto(`/instance/${id}`)
-    await expect(page.getByRole('tab', { name: '1 小时', exact: true })).toHaveAttribute('data-state', 'active')
+    await expect(page.getByLabel('探测历史时间范围').getByRole('tab', { name: '1 小时', exact: true })).toHaveAttribute('data-state', 'active')
     await page.getByText('延迟与失败率汇总', { exact: true }).click()
     await expect(page.getByRole('table', { name: '所选时间范围的延迟与丢包汇总' })).toContainText(name)
     await expect(page.getByRole('table', { name: '所选时间范围的延迟与丢包汇总' })).toContainText('ms')

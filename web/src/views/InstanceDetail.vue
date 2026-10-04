@@ -250,7 +250,7 @@ const trafficProgressStyle = computed(() => ({
               v-for="item in storageInfo" :key="item.label"
               class="min-w-0 flex flex-col gap-1 rounded-sm bg-slate-500/5 p-2"
             >
-              <div class="flex gap-1 items-center text-muted-foreground">
+              <div class="flex gap-1 items-center text-foreground/75">
                 <Icon v-if="item.icon" :icon="item.icon" :width="14" :height="14" />
                 <span class="text-xs sm:text-sm">{{ item.label }}</span>
               </div>
