@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.11] - 2026-10-05
+
+### Changed
+
+- Align carrier latency panels and history charts with Emerald-Cazi spacing, colors, sample bars and tooltips while retaining explicit probe failure semantics.
+
 ## [0.1.0-alpha.10] - 2026-10-05
 
 ### Added

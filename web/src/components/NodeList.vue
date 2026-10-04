@@ -48,7 +48,7 @@ const columns: ColumnConfig[] = [
   { key: 'disk', label: '硬盘', width: '100px', sortable: true },
   { key: 'traffic', label: '流量', width: '100px', sortable: true },
   { key: 'rate', label: '速率', width: '80px', sortable: true },
-  { key: 'networks', label: '延迟 / 失败率', width: '220px', sortable: false },
+  { key: 'networks', label: '延迟 / 失败率', width: '300px', sortable: false },
 ]
 
 const sortKey = ref<string>('')

@@ -61,25 +61,54 @@ const latency = (value: number | null | undefined) => value == null ? '无成功
 
 const option = computed<EChartsOption>(() => {
   const style = getComputedStyle(document.documentElement)
-  const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347']
+  const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
   const foreground = style.getPropertyValue('--foreground').trim()
+  const secondary = app.isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)'
+  const border = app.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
+  const grid = app.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
   return {
     darkMode: app.isDark,
     animation: false,
     color: colors,
     aria: { enabled: true },
     textStyle: { color: foreground },
-    tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
-    legend: { type: 'plain', bottom: 0, textStyle: { color: foreground } },
-    grid: { left: 55, right: 20, top: 28, bottom: 65 },
-    xAxis: { type: 'time', axisLabel: { color: foreground } },
-    yAxis: { type: 'value', name: 'ms', min: 0, axisLabel: { color: foreground }, splitLine: { lineStyle: { color: style.getPropertyValue('--border').trim() } } },
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'richText',
+      confine: true,
+      backgroundColor: app.isDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.8)',
+      borderColor: 'transparent',
+      borderWidth: 0,
+      borderRadius: 6,
+      textStyle: { color: foreground, fontSize: 12, lineHeight: 20 },
+      axisPointer: { type: 'cross', crossStyle: { color: secondary }, lineStyle: { color: border, width: 1, type: 'dashed' } },
+    },
+    legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 8, itemGap: 14, textStyle: { fontSize: 10, color: secondary } },
+    grid: { left: 56, right: 56, top: 30, bottom: 52 },
+    xAxis: {
+      type: 'time',
+      axisLabel: { fontSize: 11, color: secondary, margin: 12 },
+      axisLine: { show: true, lineStyle: { color: border, width: 1 } },
+      axisTick: { show: false },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      name: '延迟 (ms)',
+      min: 0,
+      nameTextStyle: { color: secondary },
+      axisLabel: { fontSize: 11, color: secondary },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: grid, type: 'dashed' } },
+    },
     series: (data.value?.tasks ?? []).map(task => ({
       name: task.name,
       type: 'line',
-      showSymbol: true,
+      showSymbol: (data.value?.records ?? []).filter(record => record.task_id === task.id && record.success && record.latency_ms !== null).length === 1,
       symbolSize: 3,
-      lineStyle: { width: 1.5 },
+      smooth: 0.1,
+      lineStyle: { width: 1.8, cap: 'round' },
       connectNulls: false,
       data: (data.value?.records ?? []).filter(record => record.task_id === task.id).sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms).map(record => [record.received_at_unix_ms, record.success ? record.latency_ms : null]),
     })),
