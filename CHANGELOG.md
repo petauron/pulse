@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.8] - 2026-10-05
+
+### Changed
+
+- Administrator passwords now only require a non-empty value; setup and password changes no longer impose a separate password length policy. Authentication requests retain their existing size bound.
+- Remove password length restrictions and helper text from the setup, login, and account forms.
+
 ## [0.1.0-alpha.7] - 2026-10-04
 
 ### Changed

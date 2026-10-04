@@ -70,7 +70,7 @@ async function startOAuth(): Promise<void> {
   <div class="mx-auto max-w-md px-4 py-8">
     <CardX :title="heading" content-class="space-y-4">
       <p v-if="setup" class="text-sm text-muted-foreground">
-        创建首个管理员后，初始化入口将关闭。密码至少 12 个字符。
+        创建首个管理员后，初始化入口将关闭。
       </p>
       <p v-else-if="oauthTotp" class="text-sm text-muted-foreground">
         输入身份验证器中的六位验证码以完成 OAuth 登录。
@@ -89,7 +89,7 @@ async function startOAuth(): Promise<void> {
           </div>
           <div class="space-y-2">
             <label for="password" class="text-sm font-medium">密码</label>
-            <Input id="password" v-model="password" name="password" type="password" :autocomplete="setup ? 'new-password' : 'current-password'" :minlength="setup ? 12 : undefined" maxlength="1024" required :disabled="busy" />
+            <Input id="password" v-model="password" name="password" type="password" :autocomplete="setup ? 'new-password' : 'current-password'" required :disabled="busy" />
           </div>
         </template>
         <div v-if="!setup" class="space-y-2">

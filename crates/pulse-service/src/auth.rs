@@ -1226,10 +1226,8 @@ fn audit(transaction: &Transaction<'_>, action: &str) -> Result<(), AuthError> {
 }
 
 fn validate_password(password: &str) -> Result<(), AuthError> {
-    if !(12..=1_024).contains(&password.len()) {
-        return Err(AuthError::bad_request(
-            "password must contain 12 to 1024 bytes",
-        ));
+    if password.is_empty() {
+        return Err(AuthError::bad_request("password must not be empty"));
     }
     Ok(())
 }
@@ -1259,7 +1257,7 @@ fn read_secret_file(
 }
 
 fn verify_password(password: &str, encoded: &str) -> bool {
-    if password.len() > 1_024 {
+    if password.is_empty() {
         return false;
     }
     PasswordHash::new(encoded).is_ok_and(|parsed| {
@@ -1386,7 +1384,8 @@ mod tests {
     use tower::ServiceExt;
 
     const TEST_ORIGIN: &str = "http://127.0.0.1:8080";
-    const PASSWORD: &str = "a sufficiently long test password";
+    // Exercise setup, login, and account operations with a one-character password.
+    const PASSWORD: &str = "p";
 
     fn state() -> (tempfile::TempDir, AuthState) {
         let directory = tempfile::tempdir().unwrap();
@@ -1664,8 +1663,16 @@ mod tests {
         .await;
         assert_eq!(login.status(), StatusCode::OK);
         let second_cookie = response_cookie(&login, state.session_cookie_name());
-        let change = request(&state, "POST", "/api/auth/password", &first_cookie, Some(&first_csrf), Some(TEST_ORIGIN),
-            json!({ "current_password": PASSWORD, "new_password": "new sufficiently long password" })).await;
+        let change = request(
+            &state,
+            "POST",
+            "/api/auth/password",
+            &first_cookie,
+            Some(&first_csrf),
+            Some(TEST_ORIGIN),
+            json!({ "current_password": PASSWORD, "new_password": "q" }),
+        )
+        .await;
         assert_eq!(change.status(), StatusCode::OK);
         assert!(
             state
@@ -1692,6 +1699,17 @@ mod tests {
         )
         .await;
         assert_eq!(old_login.status(), StatusCode::UNAUTHORIZED);
+        let new_login = request(
+            &state,
+            "POST",
+            "/api/auth/login",
+            &anonymous_cookie,
+            Some(&csrf),
+            Some(TEST_ORIGIN),
+            json!({ "username": "admin", "password": "q" }),
+        )
+        .await;
+        assert_eq!(new_login.status(), StatusCode::OK);
     }
 
     #[tokio::test]

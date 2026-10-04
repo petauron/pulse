@@ -22,7 +22,8 @@ administrator account. Concurrent or later setup attempts return HTTP 409 and
 cannot replace it. Origin and CSRF checks still apply. Once initialized, the
 page offers login only; there is no ongoing public registration.
 
-Passwords must contain 12–1024 bytes. Usernames contain 1–64 ASCII letters,
+Passwords must not be empty; there is no separate password length policy.
+Authentication requests remain bounded to 8 KiB. Usernames contain 1–64 ASCII letters,
 digits, underscores, hyphens, or periods. Passwords use RustCrypto Argon2id PHC
 hashes with independently generated salts. Authentication errors do not include
 passwords or tokens.
