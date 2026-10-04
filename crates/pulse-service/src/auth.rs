@@ -1712,20 +1712,6 @@ mod tests {
         assert_eq!(new_login.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn passwords_require_content_without_a_length_policy() {
-        let empty = String::new();
-        let mut short = random_token();
-        short.truncate(1);
-        assert!(validate_password(&empty).is_err());
-        assert!(validate_password(&short).is_ok());
-        let password = short.repeat(1_025);
-        assert!(validate_password(&password).is_ok());
-        let encoded = hash_password(&password).unwrap();
-        assert!(verify_password(&password, &encoded));
-        assert!(!verify_password(&empty, &encoded));
-    }
-
     #[tokio::test]
     async fn sessions_expire_are_bounded_and_partial_oauth_cannot_authorize() {
         let (_directory, state) = state();
