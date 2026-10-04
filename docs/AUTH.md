@@ -13,16 +13,14 @@ Subpath deployments are not supported. Pulse uses this configured origin for
 Origin checks, OAuth callbacks, and cookie security; forwarded headers do not
 change these decisions.
 
-Create a private file containing at least 32 bytes of cryptographically random
-secret text and configure its path through `PULSE_SETUP_TOKEN_FILE`. Keep the file
-readable only by the Service administrator, and mount it read-only in a container.
-The token is not generated, printed, or placed in a URL by Pulse. Open the login
-page, supply that token, and choose the administrator username and password.
+Open `/login` and choose the first administrator username and password. No
+initialization token is required. Whoever completes setup first becomes the
+administrator, so complete setup before sharing an uninitialized public instance.
 
 The first setup runs in an immediate SQLite transaction and creates the only
-administrator account. Concurrent or later setup attempts cannot replace it.
-After setup, remove the token file and its environment configuration together.
-There is no public registration or automatic administrator account creation.
+administrator account. Concurrent or later setup attempts return HTTP 409 and
+cannot replace it. Origin and CSRF checks still apply. Once initialized, the
+page offers login only; there is no ongoing public registration.
 
 Passwords must contain 12–1024 bytes. Usernames contain 1–64 ASCII letters,
 digits, underscores, hyphens, or periods. Passwords use RustCrypto Argon2id PHC
@@ -158,11 +156,9 @@ existing migrated database and fails closed when its tables are absent.
 
 `deploy/service.env.example` documents systemd settings. The initial-setup Compose
 example is `deploy/docker-compose.yml`; it requires an explicitly selected image
-built from this revision, an HTTPS public origin, and a private setup-token source
-file. The older Alpha.2 release does not contain these authentication APIs. After
-initialization, remove the Compose setup-token environment entry and secret mount
-together before removing its source file. OAuth entries remain commented until
-explicitly configured.
+built from this revision and an HTTPS public origin. Older releases may still
+require an initialization token. OAuth entries remain commented until explicitly
+configured.
 
 Implementation references: [RustCrypto Argon2](https://docs.rs/argon2/0.5.3/argon2/),
 [totp-rs](https://github.com/constantoine/totp-rs), and

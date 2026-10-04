@@ -60,13 +60,11 @@ Create a short-lived, single-use enrollment token in the same database, then sta
 export PULSE_DATABASE_PATH=./pulse.db
 export PULSE_PUBLIC_URL=http://127.0.0.1:8080
 umask 077
-openssl rand -hex 32 > ./setup-token
-export PULSE_SETUP_TOKEN_FILE=./setup-token
 cargo run -p pulse-service -- enrollment create
 cargo run -p pulse-service -- serve
 ```
 
-Open `http://127.0.0.1:8080/login`, supply the private setup token and create the administrator. The dashboard is private by default. After setup, remove the token file and its environment setting together. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
+Open `http://127.0.0.1:8080/login` and choose the first administrator username and password. Setup closes after the first successful registration; the dashboard is private by default. Complete setup before sharing the public address. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
 
 ### Enroll and run an Agent
 

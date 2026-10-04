@@ -61,7 +61,6 @@ impl fmt::Debug for GithubOAuthConfig {
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
     pub public_url: String,
-    pub setup_token_file: Option<PathBuf>,
     pub github: Option<GithubOAuthConfig>,
 }
 
@@ -69,7 +68,6 @@ impl Default for AuthConfig {
     fn default() -> Self {
         Self {
             public_url: "http://127.0.0.1:8080".to_owned(),
-            setup_token_file: None,
             github: None,
         }
     }
@@ -86,9 +84,6 @@ impl AuthConfig {
             Err(std::env::VarError::NotPresent) => Self::default().public_url,
             Err(_) => return Err("PULSE_PUBLIC_URL must contain valid Unicode".into()),
         };
-        let setup_token_file = std::env::var_os("PULSE_SETUP_TOKEN_FILE")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from);
         let client_id =
             std::env::var_os("PULSE_GITHUB_CLIENT_ID").filter(|value| !value.is_empty());
         let secret_file =
@@ -109,7 +104,6 @@ impl AuthConfig {
         };
         Ok(Self {
             public_url,
-            setup_token_file,
             github,
         })
     }
@@ -127,7 +121,6 @@ struct AuthInner {
     attempts: Mutex<VecDeque<Instant>>,
     origin: String,
     secure: bool,
-    setup_token_hash: Option<String>,
     github: Option<GithubOAuthConfig>,
     http: reqwest::Client,
     dummy_password_hash: String,
@@ -277,10 +270,6 @@ impl AuthState {
                     .into(),
             );
         }
-        let setup_token_hash = config
-            .setup_token_file
-            .map(|path| read_secret_file(&path, 32).map(|token| hash(&token)))
-            .transpose()?;
         let connection =
             Connection::open_with_flags(database_path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         connection.busy_timeout(Duration::from_secs(5))?;
@@ -307,7 +296,6 @@ impl AuthState {
                 attempts: Mutex::new(VecDeque::with_capacity(MAX_ATTEMPTS)),
                 origin: url.origin().ascii_serialization(),
                 secure: url.scheme() == "https",
-                setup_token_hash,
                 github: config.github,
                 http: reqwest::Client::builder()
                     .timeout(Duration::from_secs(10))
@@ -641,7 +629,6 @@ async fn status(State(state): State<AuthState>, headers: HeaderMap) -> Result<Re
 
 #[derive(Deserialize)]
 struct SetupRequest {
-    token: String,
     username: String,
     password: String,
 }
@@ -653,13 +640,6 @@ async fn setup(
 ) -> Result<Response, AuthError> {
     state.verify_browser(&headers).await?;
     state.allow_attempt()?;
-    let configured = state.inner.setup_token_hash.as_ref().ok_or(AuthError {
-        status: StatusCode::FORBIDDEN,
-        message: "administrator must configure PULSE_SETUP_TOKEN_FILE before setup",
-    })?;
-    if !secure_equal(configured, &hash(&request.token)) {
-        return Err(AuthError::unauthorized());
-    }
     if request.username.is_empty()
         || request.username.len() > 64
         || !request
@@ -1409,20 +1389,16 @@ mod tests {
     use tower::ServiceExt;
 
     const TEST_ORIGIN: &str = "http://127.0.0.1:8080";
-    const BOOTSTRAP: &str = "pulse-test-bootstrap-token-of-at-least-32-characters";
     const PASSWORD: &str = "a sufficiently long test password";
 
     fn state() -> (tempfile::TempDir, AuthState) {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("pulse.db");
-        let token_file = directory.path().join("setup-token");
-        std::fs::write(&token_file, BOOTSTRAP).unwrap();
         let _storage = crate::storage::Storage::open(&database, 32 * 1024 * 1024).unwrap();
         let state = AuthState::new(
             &database,
             AuthConfig {
                 public_url: TEST_ORIGIN.to_owned(),
-                setup_token_file: Some(token_file),
                 github: None,
             },
             32 * 1024 * 1024,
@@ -1505,7 +1481,7 @@ mod tests {
             &cookie,
             Some(&csrf),
             Some(TEST_ORIGIN),
-            json!({ "token": BOOTSTRAP, "username": "admin", "password": PASSWORD }),
+            json!({ "username": "admin", "password": PASSWORD }),
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
@@ -1549,7 +1525,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn initialization_requires_bootstrap_origin_and_csrf_and_is_single_use() {
+    async fn initialization_requires_origin_and_csrf_and_is_single_use() {
         let (_directory, state) = state();
         assert!(
             state
@@ -1558,7 +1534,7 @@ mod tests {
                 .is_err()
         );
         let (cookie, csrf) = anonymous(&state).await;
-        let body = json!({ "token": BOOTSTRAP, "username": "admin", "password": PASSWORD });
+        let body = json!({ "username": "admin", "password": PASSWORD });
         let missing_origin = request(
             &state,
             "POST",
@@ -1581,17 +1557,6 @@ mod tests {
         )
         .await;
         assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
-        let wrong_token = request(
-            &state,
-            "POST",
-            "/api/auth/setup",
-            &cookie,
-            Some(&csrf),
-            Some(TEST_ORIGIN),
-            json!({ "token": "wrong", "username": "admin", "password": PASSWORD }),
-        )
-        .await;
-        assert_eq!(wrong_token.status(), StatusCode::UNAUTHORIZED);
         let (session_cookie, _) = initialize(&state).await;
         let repeated = request(
             &state,
@@ -1630,6 +1595,53 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_initialization_creates_exactly_one_administrator() {
+        let (directory, first) = state();
+        let second = AuthState::new(
+            &directory.path().join("pulse.db"),
+            AuthConfig::default(),
+            32 * 1024 * 1024,
+        )
+        .unwrap();
+        let (cookie, csrf) = anonymous(&first).await;
+        let body = json!({ "username": "admin", "password": PASSWORD });
+        let (left, right) = tokio::join!(
+            request(
+                &first,
+                "POST",
+                "/api/auth/setup",
+                &cookie,
+                Some(&csrf),
+                Some(TEST_ORIGIN),
+                body.clone(),
+            ),
+            request(
+                &second,
+                "POST",
+                "/api/auth/setup",
+                &cookie,
+                Some(&csrf),
+                Some(TEST_ORIGIN),
+                body,
+            ),
+        );
+        let statuses = [left.status(), right.status()];
+        assert_eq!(
+            statuses.iter().filter(|status| **status == StatusCode::OK).count(),
+            1
+        );
+        assert_eq!(
+            statuses.iter().filter(|status| **status == StatusCode::CONFLICT).count(),
+            1
+        );
+        let connection = Connection::open(directory.path().join("pulse.db")).unwrap();
+        let count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM auth_admin", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[tokio::test]

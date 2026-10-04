@@ -11,7 +11,6 @@ import { loginDestination } from '@/utils/session'
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
-const token = ref('')
 const username = ref('')
 const password = ref('')
 const code = ref('')
@@ -39,10 +38,9 @@ async function submit(): Promise<void> {
   try {
     const path = setup.value ? 'setup' : oauthTotp.value ? 'oauth/complete' : 'login'
     const body = setup.value
-      ? { token: token.value, username: username.value, password: password.value }
+      ? { username: username.value, password: password.value }
       : oauthTotp.value ? { code: code.value } : { username: username.value, password: password.value, code: code.value || undefined }
     await auth.authenticate(path, body)
-    token.value = ''
     password.value = ''
     code.value = ''
     await router.replace(loginDestination(route.query.redirect))
@@ -72,7 +70,7 @@ async function startOAuth(): Promise<void> {
   <div class="mx-auto max-w-md px-4 py-8">
     <CardX :title="heading" content-class="space-y-4">
       <p v-if="setup" class="text-sm text-muted-foreground">
-        使用部署时配置的初始化令牌创建管理员。密码至少 12 个字符。
+        创建首个管理员后，初始化入口将关闭。密码至少 12 个字符。
       </p>
       <p v-else-if="oauthTotp" class="text-sm text-muted-foreground">
         输入身份验证器中的六位验证码以完成 OAuth 登录。
@@ -81,10 +79,6 @@ async function startOAuth(): Promise<void> {
         {{ error }}
       </p>
       <form v-if="auth.status" class="space-y-4" :aria-busy="busy" :aria-describedby="error ? 'login-error' : undefined" @submit.prevent="submit">
-        <div v-if="setup" class="space-y-2">
-          <label for="setup-token" class="text-sm font-medium">初始化令牌</label>
-          <Input id="setup-token" v-model="token" type="password" autocomplete="off" required :disabled="busy" />
-        </div>
         <template v-if="!oauthTotp">
           <div class="space-y-2">
             <label for="username" class="text-sm font-medium">用户名</label>

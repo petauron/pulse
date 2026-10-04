@@ -1,5 +1,4 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
@@ -16,9 +15,6 @@ const stateDirectory = mkdtempSync(join(tmpdir(), 'pulse-e2e-'))
 const databasePath = join(stateDirectory, 'pulse.db')
 const tokenPath = join(stateDirectory, 'enrollment-token')
 const credentialsPath = join(stateDirectory, 'agent-credentials.json')
-const setupTokenPath = join(stateDirectory, 'setup-token')
-const setupToken = randomBytes(32).toString('hex')
-writeFileSync(setupTokenPath, `${setupToken}\n`, { mode: 0o600 })
 const serviceUrl = 'http://127.0.0.1:18080/'
 const baseEnvironment = {
   ...process.env,
@@ -46,7 +42,6 @@ const children = [
       ...baseEnvironment,
       PULSE_LISTEN: '127.0.0.1:18080',
       PULSE_PUBLIC_URL: 'http://127.0.0.1:18080',
-      PULSE_SETUP_TOKEN_FILE: setupTokenPath,
       PULSE_RETENTION_DAYS: '7',
       PULSE_OFFLINE_AFTER_SECONDS: '20',
       PULSE_MAX_NODES: '10',
@@ -89,7 +84,7 @@ async function initializeAdministrator() {
       const setup = await fetch(new URL('api/auth/setup', serviceUrl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Origin': 'http://127.0.0.1:18080', 'Cookie': cookie, 'X-CSRF-Token': status.csrf_token },
-        body: JSON.stringify({ token: setupToken, username: testUsername, password: testPassword }),
+        body: JSON.stringify({ username: testUsername, password: testPassword }),
       })
       if (!setup.ok)
         throw new Error(`E2E administrator setup failed with HTTP ${setup.status}`)
