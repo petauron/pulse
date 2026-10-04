@@ -116,10 +116,20 @@ jobs:
           retention-days: 7
 
   container:
-    name: Validate multi-architecture container
+    name: Validate ${{ matrix.arch }} container
     needs: binaries
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            archive_arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            archive_arch: aarch64
+            runner: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -127,19 +137,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Enable ARM64 container execution
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a # v4
-        with:
-          platforms: arm64
       - name: Set up Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Download verified native archive
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-linux-${{ matrix.archive_arch }}
+          path: release
+      - name: Prepare image contents
+        run: |
+          mkdir -p image/${{ matrix.arch }}
+          tar -xzf release/pulse-${{ github.ref_name }}-linux-${{ matrix.archive_arch }}.tar.gz --strip-components=1 -C image/${{ matrix.arch }}
       - name: Build image without publishing
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
+          context: image
+          file: Dockerfile.release
+          platforms: linux/${{ matrix.arch }}
           push: false
-          cache-to: type=gha,mode=max,scope=release-container
+          cache-from: type=gha,scope=release-container-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=release-container-${{ matrix.arch }}
           build-args: PULSE_BUILD_GIT_HASH=${{ github.sha }}
 
   publish:
@@ -164,6 +181,11 @@ jobs:
           pattern: release-linux-*
           path: release
           merge-multiple: true
+      - name: Prepare both native image contents
+        run: |
+          mkdir -p image/amd64 image/arm64
+          tar -xzf release/pulse-${{ github.ref_name }}-linux-x86_64.tar.gz --strip-components=1 -C image/amd64
+          tar -xzf release/pulse-${{ github.ref_name }}-linux-aarch64.tar.gz --strip-components=1 -C image/arm64
       - name: Stage adapted theme package and license
         run: |
           install -m 0644 compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip release/
@@ -205,12 +227,15 @@ jobs:
         id: image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
-          context: .
+          context: image
+          file: Dockerfile.release
           platforms: linux/amd64,linux/arm64
           push: true
           provenance: mode=max
           sbom: true
-          cache-from: type=gha,scope=release-container
+          cache-from: |
+            type=gha,scope=release-container-amd64
+            type=gha,scope=release-container-arm64
           tags: |
             ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ghcr.io/${{ github.repository }}:sha-${{ github.sha }}

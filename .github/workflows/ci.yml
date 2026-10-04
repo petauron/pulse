@@ -184,6 +184,15 @@ jobs:
           persist-credentials: false
       - name: Build image
         run: docker build --build-arg PULSE_BUILD_GIT_HASH=${{ github.sha }} --tag pulse-ci .
+      - name: Verify release image packaging
+        run: |
+          mkdir -p image/amd64/web
+          source_container=$(docker create pulse-ci)
+          trap 'docker rm "$source_container" >/dev/null' EXIT
+          docker cp "$source_container:/usr/local/bin/pulse-service" image/amd64/
+          docker cp "$source_container:/usr/local/bin/pulse-agent" image/amd64/
+          docker cp "$source_container:/usr/share/doc/pulse/." image/amd64/
+          docker build --file Dockerfile.release --build-arg PULSE_BUILD_GIT_HASH=${{ github.sha }} --tag pulse-ci image
       - name: Verify runtime identity and health
         run: |
           container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 pulse-ci)
