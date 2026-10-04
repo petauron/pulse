@@ -9,3 +9,5 @@
 - Prefer memory-safe Rust and mature crates. Any `unsafe` block requires a documented invariant and focused tests.
 - Build in small end-to-end slices and keep Service, Agent, protocol, storage, and Web concerns separate.
 - Never commit credentials, enrollment tokens, private keys, production data, or generated runtime state.
+
+- Do not run local builds. Generate Web assets and compile release artifacts in GitHub Actions; never commit `web/dist`.

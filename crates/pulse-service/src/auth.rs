@@ -1630,11 +1630,17 @@ mod tests {
         );
         let statuses = [left.status(), right.status()];
         assert_eq!(
-            statuses.iter().filter(|status| **status == StatusCode::OK).count(),
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::OK)
+                .count(),
             1
         );
         assert_eq!(
-            statuses.iter().filter(|status| **status == StatusCode::CONFLICT).count(),
+            statuses
+                .iter()
+                .filter(|status| **status == StatusCode::CONFLICT)
+                .count(),
             1
         );
         let connection = Connection::open(directory.path().join("pulse.db")).unwrap();

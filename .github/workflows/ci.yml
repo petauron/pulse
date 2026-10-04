@@ -45,12 +45,10 @@ jobs:
         run: npm run test:unit
       - name: Build embedded Web assets
         env:
-          # Release and container builds inject their actual source revision.
-          # Checked-in assets need a value reproducible before a commit exists.
-          PULSE_BUILD_GIT_HASH: dev
+          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
         run: npm run build
-      - name: Verify generated assets are current
-        run: git diff --exit-code -- dist src/generated/icons.ts
+      - name: Verify generated icon source is current
+        run: git diff --exit-code -- src/generated/icons.ts
 
   rust-checks:
     name: Rust checks and tests
@@ -65,6 +63,19 @@ jobs:
         run: rustup show
       - name: Check formatting
         run: cargo fmt --all --check
+      - name: Install Node.js for embedded Web assets
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build embedded Web assets before compiling Rust
+        working-directory: web
+        env:
+          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
+        run: |
+          npm ci
+          npm run build
       - name: Run Clippy
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests

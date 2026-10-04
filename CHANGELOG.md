@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.7] - 2026-10-04
+
+### Changed
+
+- First administrator setup now requires only a username and password. The first successful registration closes setup; concurrent or later attempts cannot replace the administrator. Origin, CSRF, password, and session protections remain in place.
+- Remove the setup-token configuration and deployment secret. Complete initial setup before sharing a new public instance. Existing administrator accounts are unchanged.
+
 ## [0.1.0-alpha.6] - 2026-10-03
 
 ### Added
