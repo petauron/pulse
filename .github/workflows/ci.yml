@@ -37,8 +37,6 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install Web dependencies
         run: npm ci
-      - name: Verify third-party notices
-        run: npm run verify:licenses
       - name: Lint Web source
         run: npm run lint
       - name: Test Web data handling
@@ -47,6 +45,8 @@ jobs:
         env:
           PULSE_BUILD_GIT_HASH: ${{ github.sha }}
         run: npm run build
+      - name: Verify third-party notices
+        run: npm run verify:licenses
       - name: Verify generated icon source is current
         run: git diff --exit-code -- src/generated/icons.ts
 

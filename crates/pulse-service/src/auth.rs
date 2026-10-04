@@ -102,10 +102,7 @@ impl AuthConfig {
             }
             _ => return Err("GitHub OAuth requires PULSE_GITHUB_CLIENT_ID, PULSE_GITHUB_CLIENT_SECRET_FILE, and PULSE_GITHUB_ALLOWED_USER_ID together".into()),
         };
-        Ok(Self {
-            public_url,
-            github,
-        })
+        Ok(Self { public_url, github })
     }
 }
 
