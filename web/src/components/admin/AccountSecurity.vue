@@ -69,8 +69,8 @@ async function execute(): Promise<void> {
       <form class="max-w-lg space-y-4" @submit.prevent="confirm = 'password'">
         <fieldset :disabled="busy" class="space-y-4">
           <input :value="auth.status?.username" type="text" name="username" autocomplete="username" class="sr-only" tabindex="-1" aria-label="用户名" readonly>
-          <label class="grid gap-2 text-sm">当前密码<Input v-model="currentPassword" type="password" autocomplete="current-password" required maxlength="1024" /></label>
-          <label class="grid gap-2 text-sm">新密码（至少 12 个字符）<Input v-model="newPassword" type="password" autocomplete="new-password" required minlength="12" maxlength="1024" /></label>
+          <label class="grid gap-2 text-sm">当前密码<Input v-model="currentPassword" type="password" autocomplete="current-password" required /></label>
+          <label class="grid gap-2 text-sm">新密码<Input v-model="newPassword" type="password" autocomplete="new-password" required /></label>
           <label v-if="auth.status?.totp_enabled" class="grid gap-2 text-sm">两步验证码<Input v-model="code" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required /></label>
         </fieldset>
         <Button type="submit" class="min-h-11" :disabled="busy">
