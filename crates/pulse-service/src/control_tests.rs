@@ -73,7 +73,7 @@ fn billing_deltas_reset_and_extended_history_survive_new_snapshots() {
         .unwrap();
     assert_eq!(
         storage.admin_state().unwrap()["nodes"][0]["traffic_used_up"],
-        70
+        50
     );
     let history = storage.history(&node.node_id, 1, 100, now + 7000).unwrap();
     assert_eq!(history.records[0]["connections"], 5);
@@ -83,6 +83,34 @@ fn billing_deltas_reset_and_extended_history_survive_new_snapshots() {
     assert_eq!(aggregate.records.len(), 1);
     assert_eq!(aggregate.records[0]["gpu"], 20.0);
     assert_eq!(aggregate.records[0]["temp"], 40.0);
+}
+
+#[test]
+fn traffic_counter_decreases_rebaseline_each_direction_without_recounting() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let token_hash = crate::storage::hash_token(&node.agent_token);
+    for (offset, up, down) in [
+        (0, 1000, 2000),
+        (1000, 1100, 2200),
+        (2000, 1090, 2250),
+        (3000, 1110, 2240),
+        (4000, 1130, 2270),
+        (5000, 5, 10),
+        (6000, 15, 30),
+    ] {
+        storage
+            .ingest(
+                &token_hash,
+                &sample(now + offset, up, down),
+                now + offset,
+                7,
+            )
+            .unwrap();
+    }
+    let current = storage.admin_state().unwrap();
+    assert_eq!(current["nodes"][0]["traffic_used_up"], 150);
+    assert_eq!(current["nodes"][0]["traffic_used_down"], 300);
 }
 use pulse_protocol::{EnrollmentRequest, PROTOCOL_VERSION, ProbeBatch, ProbeKind, ProbeResult};
 use serde_json::json;

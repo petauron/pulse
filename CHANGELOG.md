@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.9] - 2026-10-05
+
+### Fixed
+
+- Rebaseline decreasing traffic counters without adding their remaining lifetime totals to monthly usage; preserve unaffected upload/download increments.
+- Document provider-facing interface selection and explicit handling of previously inflated usage totals.
+
 ## [0.1.0-alpha.8] - 2026-10-05
 
 ### Changed
