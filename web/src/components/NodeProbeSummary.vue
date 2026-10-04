@@ -3,8 +3,8 @@ import type { NodeProbe } from '@/utils/rpc'
 import { computed } from 'vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 
-const metrics = ['latency', 'loss'] as const
 const props = defineProps<{ probes?: NodeProbe[] }>()
+const metrics = ['latency', 'loss'] as const
 const rows = computed(() => (props.probes ?? []).map((task) => {
   const last = task.points.at(-1)
   const stale = !last || Date.now() - last.time > Math.max(90000, task.interval_seconds * 3000)

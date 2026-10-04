@@ -93,7 +93,9 @@ const option = computed<EChartsOption>(() => {
       splitLine: { show: false },
     },
     yAxis: {
-      type: 'value', name: '延迟 (ms)', min: 0,
+      type: 'value',
+      name: '延迟 (ms)',
+      min: 0,
       nameTextStyle: { color: secondary },
       axisLabel: { fontSize: 11, color: secondary },
       axisLine: { show: false },
