@@ -560,6 +560,8 @@ impl Storage {
         let connection = self.connection()?;
         let clients = query_clients(&connection, 0, max_nodes)?;
         let statuses = query_latest_statuses(&connection, offline_after_seconds)?;
+        let probe_tasks = crate::control::dashboard_probe_tasks(&connection)?;
+        let now = unix_time_ms()?;
         let mut client_values = serde_json::Map::new();
         let mut status_values = serde_json::Map::new();
         for client in clients {
@@ -570,6 +572,12 @@ impl Storage {
             }
             let mut value = client.emerald_value();
             crate::control::decorate_client(&connection, &client.id, &mut value)?;
+            value["probes"] = json!(crate::control::dashboard_probes(
+                &connection,
+                &client.id,
+                &probe_tasks,
+                now
+            )?);
             client_values.insert(client.id.clone(), value);
         }
         Ok(json!({ "clients": client_values, "statuses": status_values }))

@@ -235,6 +235,8 @@ impl AppState {
     }
 }
 
+pub use control::TrafficCorrection;
+
 pub struct Administration {
     storage: Storage,
 }
@@ -314,6 +316,21 @@ impl Administration {
         Ok(self
             .storage
             .inspect_node_reporting(node_id, token, unix_time_ms()?)?)
+    }
+
+    /// Corrects current-cycle usage while retaining subsequent counter increments.
+    ///
+    /// # Errors
+    ///
+    /// Rejects stale evidence, a changed cycle, counter decreases or invalid totals.
+    pub fn correct_traffic(
+        &self,
+        node_id: &str,
+        value: &TrafficCorrection,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        Ok(self
+            .storage
+            .correct_traffic(node_id, value, unix_time_ms()?)?)
     }
 
     /// Revokes an active node without deleting its stored history.

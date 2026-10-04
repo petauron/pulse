@@ -1,4 +1,4 @@
-import type { Client, NodeStatus } from '@/utils/rpc'
+import type { Client, NodeProbe, NodeStatus } from '@/utils/rpc'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { parseNodeGroups } from '@/utils/groupHelper'
@@ -8,6 +8,7 @@ export type TrafficLimitType = 'up' | 'down' | 'min' | 'max' | 'sum'
 
 /** 节点完整信息（合并 Client 和 Status） */
 export interface NodeData {
+  probes?: NodeProbe[]
   uuid: string
   // Client 信息
   name: string
@@ -131,6 +132,7 @@ const useNodesStore = defineStore('nodes', () => {
   function createNodeFromClient(client: Client): NodeData {
     return {
       uuid: client.uuid,
+      probes: client.probes,
       name: client.name,
       cpu_name: client.cpu_name,
       virtualization: client.virtualization,

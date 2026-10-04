@@ -15,7 +15,15 @@ interface JsonRpcResponse<T> {
   id: number
 }
 
+export interface NodeProbe {
+  id: string
+  name: string
+  interval_seconds: number
+  points: { time: number, latency: number | null, success: boolean }[]
+}
+
 export interface Client {
+  probes?: NodeProbe[]
   uuid: string
   name: string
   cpu_name: string

@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.10] - 2026-10-05
+
+### Added
+
+- Bounded carrier latency previews on node cards and lists, with visible failure rates and stale-data states.
+- Audited CLI correction of current-cycle traffic, retaining subsequent increments and rejecting stale or mismatched counter baselines.
+
+### Changed
+
+- Network latency history now opens on a one-hour chart with time-range tabs, automatic refresh and collapsible detail tables.
+
 ## [0.1.0-alpha.9] - 2026-10-05
 
 ### Fixed

@@ -2,6 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed, ref } from 'vue'
+import NodeProbeSummary from '@/components/NodeProbeSummary.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
 import { Badge } from '@/components/ui/badge'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -47,7 +48,7 @@ const columns: ColumnConfig[] = [
   { key: 'disk', label: '硬盘', width: '100px', sortable: true },
   { key: 'traffic', label: '流量', width: '100px', sortable: true },
   { key: 'rate', label: '速率', width: '80px', sortable: true },
-  { key: 'networks', label: '探测', width: '136px', sortable: false },
+  { key: 'networks', label: '延迟 / 失败率', width: '220px', sortable: false },
 ]
 
 const sortKey = ref<string>('')
@@ -239,7 +240,7 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                 v-else-if="col.key === 'networks'"
                 class="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
               >
-                详情查看延迟与丢包
+                <NodeProbeSummary :probes="node.probes" />
               </div>
 
               <!-- 操作系统 -->

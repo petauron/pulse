@@ -17,6 +17,18 @@ const MAX_NODE_ASSIGNMENTS: usize = 10_000;
 const MAX_PROBE_HISTORY: usize = 1_000;
 const MAX_INCIDENTS: usize = 1_000;
 
+/// A current-cycle correction anchored to the provider-interface counters.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrafficCorrection {
+    pub cycle_start_ms: u64,
+    pub sampled_at_ms: u64,
+    pub raw_up: u64,
+    pub raw_down: u64,
+    pub used_up: u64,
+    pub used_down: u64,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct Settings {
@@ -344,6 +356,61 @@ impl Storage {
             [id],
         )?;
         configuration_audit(&tx, "node.traffic.reset", id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub(crate) fn correct_traffic(
+        &self,
+        id: &str,
+        value: &TrafficCorrection,
+        now: u64,
+    ) -> Result<(), StorageError> {
+        if value.sampled_at_ms > now
+            || now - value.sampled_at_ms > 120_000
+            || [value.raw_up, value.raw_down, value.used_up, value.used_down]
+                .iter()
+                .any(|v| *v > i64::MAX as u64)
+        {
+            return Err(StorageError::InvalidInput(
+                "invalid or stale traffic correction",
+            ));
+        }
+        let mut db = self.connection()?;
+        let tx = db.transaction()?;
+        verify_nodes(&tx, &[id.to_owned()])?;
+        let day = options_or_none(&tx, id)?.map_or(1, |o| o.traffic_reset_day);
+        if value.cycle_start_ms != period_start(now, day) {
+            return Err(StorageError::InvalidInput("traffic cycle has changed"));
+        }
+        let (cycle, up, down, old_up, old_down): (i64, i64, i64, i64, i64) = tx
+            .query_row(
+                "SELECT cycle_start_ms,raw_up,raw_down,used_up,used_down FROM traffic_periods WHERE node_id=?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .optional()?
+            .ok_or(StorageError::NotFound)?;
+        if cycle != integer(value.cycle_start_ms)
+            || up < integer(value.raw_up)
+            || down < integer(value.raw_down)
+        {
+            return Err(StorageError::InvalidInput("traffic baseline has changed"));
+        }
+        let used_up = integer(value.used_up)
+            .checked_add(up - integer(value.raw_up))
+            .ok_or(StorageError::InvalidInput("traffic correction overflow"))?;
+        let used_down = integer(value.used_down)
+            .checked_add(down - integer(value.raw_down))
+            .ok_or(StorageError::InvalidInput("traffic correction overflow"))?;
+        tx.execute(
+            "UPDATE traffic_periods SET used_up=?2,used_down=?3 WHERE node_id=?1",
+            params![id, used_up, used_down],
+        )?;
+        let evidence = json!({"node_id":id,"cycle_start_ms":cycle,
+            "previous_up":old_up,"previous_down":old_down,
+            "used_up":used_up,"used_down":used_down,"sampled_at_ms":value.sampled_at_ms});
+        configuration_audit(&tx, "node.traffic.correct", &evidence.to_string())?;
         tx.commit()?;
         Ok(())
     }
@@ -885,6 +952,49 @@ fn period_usage(db: &Connection, node: &str) -> Result<(u64, u64), StorageError>
         )
         .optional()?
         .unwrap_or_default())
+}
+
+/// Compact overview: at most three tasks and twenty recent points per task/node.
+/// Reuses the dashboard poll; never starts a separate history scan per card.
+pub(crate) fn dashboard_probes(
+    db: &Connection,
+    node: &str,
+    tasks: &[ProbeDefinition],
+    now: u64,
+) -> Result<Vec<Value>, StorageError> {
+    let mut result = Vec::new();
+    let mut statement = db.prepare_cached(
+        "SELECT received_at_ms,latency_ms,success FROM probe_results
+         WHERE node_id=?1 AND task_id=?2 AND received_at_ms>=?3
+         ORDER BY received_at_ms DESC LIMIT 20",
+    )?;
+    for task in tasks
+        .iter()
+        .filter(|t| t.enabled && (t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node)))
+        .take(3)
+    {
+        let mut points = statement
+            .query_map(
+                params![node, task.id, integer(now.saturating_sub(3_600_000))],
+                |row| {
+                    Ok(json!({
+                        "time": row.get::<_, i64>(0)?,
+                        "latency": row.get::<_, Option<f64>>(1)?,
+                        "success": row.get::<_, bool>(2)?
+                    }))
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        points.reverse();
+        result.push(json!({"id":task.id,"name":task.name,"interval_seconds":task.interval_seconds,"points":points}));
+    }
+    Ok(result)
+}
+
+pub(crate) fn dashboard_probe_tasks(db: &Connection) -> Result<Vec<ProbeDefinition>, StorageError> {
+    let mut tasks = list::<ProbeDefinition>(db, "probe_tasks", MAX_CONFIG_ROWS)?;
+    tasks.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
+    Ok(tasks)
 }
 
 pub(crate) fn decorate_client(
