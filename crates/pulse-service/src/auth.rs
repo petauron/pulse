@@ -1663,8 +1663,16 @@ mod tests {
         .await;
         assert_eq!(login.status(), StatusCode::OK);
         let second_cookie = response_cookie(&login, state.session_cookie_name());
-        let change = request(&state, "POST", "/api/auth/password", &first_cookie, Some(&first_csrf), Some(TEST_ORIGIN),
-            json!({ "current_password": PASSWORD, "new_password": "q" })).await;
+        let change = request(
+            &state,
+            "POST",
+            "/api/auth/password",
+            &first_cookie,
+            Some(&first_csrf),
+            Some(TEST_ORIGIN),
+            json!({ "current_password": PASSWORD, "new_password": "q" }),
+        )
+        .await;
         assert_eq!(change.status(), StatusCode::OK);
         assert!(
             state
