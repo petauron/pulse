@@ -328,7 +328,9 @@ impl Administration {
         node_id: &str,
         value: &TrafficCorrection,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        Ok(self.storage.correct_traffic(node_id, value, unix_time_ms()?)?)
+        Ok(self
+            .storage
+            .correct_traffic(node_id, value, unix_time_ms()?)?)
     }
 
     /// Revokes an active node without deleting its stored history.
