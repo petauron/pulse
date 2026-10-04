@@ -64,15 +64,11 @@ class Service:
         self.base = f"http://127.0.0.1:{port}"
         self.jar = http.cookiejar.CookieJar()
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(self.jar))
-        bootstrap = secrets.token_hex(32)
-        token_path = directory / "setup-token"
-        with os.fdopen(os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
-            stream.write(bootstrap)
         environment = {k: v for k, v in os.environ.items() if not k.startswith("PULSE_")}
         environment.update({
             "PULSE_DATABASE_PATH": str(directory / "pulse.db"),
             "PULSE_LISTEN": f"127.0.0.1:{port}", "PULSE_PUBLIC_URL": self.base,
-            "PULSE_SETUP_TOKEN_FILE": str(token_path), "PULSE_MAX_NODES": "10",
+            "PULSE_MAX_NODES": "10",
             "PULSE_MAX_DATABASE_BYTES": "67108864", "RUST_LOG": "error",
         })
         self.environment = environment
@@ -92,7 +88,7 @@ class Service:
                     time.sleep(0.1)
             else:
                 raise RuntimeError(f"{name}: startup timed out")
-            self.call("/api/auth/setup", {"token": bootstrap, "username": "bench", "password": "Test9" + secrets.token_hex(24)}, csrf=status["csrf_token"])
+            self.call("/api/auth/setup", {"username": "bench", "password": "Test9" + secrets.token_hex(24)}, csrf=status["csrf_token"])
             credentials = self.call("/api/v1/agents/enroll", {
                 "protocol_version": 2, "node_name": "storage-bench", "agent_version": "bench",
                 "region": "SG", "group": "test",

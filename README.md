@@ -60,13 +60,11 @@ Create a short-lived, single-use enrollment token in the same database, then sta
 export PULSE_DATABASE_PATH=./pulse.db
 export PULSE_PUBLIC_URL=http://127.0.0.1:8080
 umask 077
-openssl rand -hex 32 > ./setup-token
-export PULSE_SETUP_TOKEN_FILE=./setup-token
 cargo run -p pulse-service -- enrollment create
 cargo run -p pulse-service -- serve
 ```
 
-Open `http://127.0.0.1:8080/login`, supply the private setup token and create the administrator. The dashboard is private by default. After setup, remove the token file and its environment setting together. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
+Open `http://127.0.0.1:8080/login` and choose the first administrator username and password. Setup closes after the first successful registration; the dashboard is private by default. Complete setup before sharing the public address. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
 
 ### Enroll and run an Agent
 
@@ -95,15 +93,12 @@ priority and prevents GeoIP requests. Existing explicit `disabled` settings are 
 See [node location](docs/OPERATIONS.md#node-location-and-globe-placement) for refresh,
 failure behavior, privacy, and existing-node upgrades.
 
-### Build the embedded Web interface
+### Embedded Web interface
 
-The generated `web/dist` assets are checked in so Rust release builds do not require Node.js. After changing the Web source, regenerate them with:
-
-```bash
-cd web
-npm ci
-npm run build
-```
+Submit Web source changes only. `web/dist` is generated in GitHub Actions and is
+not tracked in Git. CI builds it before compiling the Rust Service; release jobs
+and the container's Web build stage generate and embed assets from the same
+source revision. Do not run local builds for this workflow.
 
 The visual implementation is derived from [Komari Theme Emerald](https://github.com/Tokinx/komari-theme-emerald) v1.0.11. See [web/UPSTREAM.md](web/UPSTREAM.md) and the bundled third-party license files.
 

@@ -1122,14 +1122,6 @@ mod tests {
         let directory = tempfile::tempdir().expect("temporary directory");
         let mut config = ServiceConfig::with_database(directory.path().join("pulse.db"));
         config.max_database_bytes = 64 * 1024 * 1024;
-        let setup_path = directory.path().join("setup-token");
-        std::fs::write(&setup_path, "test-bootstrap-token-with-32-characters").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&setup_path, std::fs::Permissions::from_mode(0o600)).unwrap();
-        }
-        config.auth.setup_token_file = Some(setup_path);
         let state = AppState::open(&config).expect("test state");
         (directory, state)
     }
@@ -1158,7 +1150,7 @@ mod tests {
         let response=router(state.clone()).oneshot(Request::builder().method("POST").uri("/api/auth/setup")
             .header(header::CONTENT_TYPE,"application/json").header(header::ORIGIN,"http://127.0.0.1:8080")
             .header(header::COOKIE,cookie).header("X-CSRF-Token",status["csrf_token"].as_str().unwrap())
-            .body(Body::from(json!({"token":"test-bootstrap-token-with-32-characters","username":"admin","password":"example-test-password-please-change"}).to_string())).unwrap()).await.unwrap();
+            .body(Body::from(json!({"username":"admin","password":"example-test-password-please-change"}).to_string())).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let cookie = response
             .headers()

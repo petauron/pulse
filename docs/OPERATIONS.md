@@ -135,18 +135,14 @@ The image runs as UID/GID 65532 and stores its mode-0600 SQLite databases in `/v
 
 ```bash
 sudo install -d -o 65532 -g 65532 -m 0700 /srv/pulse
-# Generate a private bootstrap file securely; make it readable only by UID 65532.
-sudo install -o 65532 -g 65532 -m 0600 /path/to/private-setup-token /srv/pulse-setup-token
 docker run --detach --name pulse --restart unless-stopped \
   --publish 127.0.0.1:8080:8080 \
   --volume /srv/pulse:/var/lib/pulse \
-  --volume /srv/pulse-setup-token:/run/secrets/setup-token:ro \
   --env PULSE_PUBLIC_URL=https://pulse.example.com \
-  --env PULSE_SETUP_TOKEN_FILE=/run/secrets/setup-token \
-  ghcr.io/petauron/pulse:v0.1.0-alpha.5
+  "${PULSE_SERVICE_IMAGE:?Set an image built from this revision}"
 ```
 
-Alpha.3 contains these authentication changes; Alpha.2 does not. Even though the process listens on all interfaces inside the container, publish it to loopback and terminate TLS at the reverse proxy. Open `/login` for initial setup; afterward remove both the setup-token mount and environment setting when recreating the container, then remove its source file. The [Compose example](../deploy/docker-compose.yml) provides the same explicit configuration. Run local administration with `docker exec`, using the same database path already present in the image environment.
+Use an image built from this revision for token-free setup; older releases may require a setup token. Publish to loopback and terminate TLS at the reverse proxy. Open `/login` and create the first administrator before sharing the public address. Later setup attempts are rejected. The [Compose example](../deploy/docker-compose.yml) provides the same configuration. Run local administration with `docker exec`, using the database path already present in the image environment.
 
 ## Credential lifecycle
 

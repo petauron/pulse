@@ -9,3 +9,5 @@ web/node_modules
 *.db-wal
 *.log
 .DS_Store
+
+web/dist
