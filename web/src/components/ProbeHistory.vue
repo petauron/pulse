@@ -5,13 +5,16 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string }>()
 const app = useAppStore()
-const hours = ref(24)
+const hours = ref(1)
+const ranges = [1, 6, 12, 24, 72, 168]
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const data = shallowRef<ProbeHistory | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -19,6 +22,7 @@ let controller: AbortController | null = null
 let generation = 0
 
 async function reload(): Promise<void> {
+  clearTimeout(refreshTimer)
   controller?.abort()
   const current = ++generation
   controller = new AbortController()
@@ -34,8 +38,10 @@ async function reload(): Promise<void> {
       error.value = cause instanceof Error ? cause.message : String(cause)
   }
   finally {
-    if (current === generation)
+    if (current === generation) {
       loading.value = false
+      refreshTimer = setTimeout(() => void reload(), 30000)
+    }
   }
 }
 
@@ -44,6 +50,7 @@ watch(() => [props.uuid, hours.value], () => {
   void reload()
 }, { immediate: true })
 onBeforeUnmount(() => {
+  clearTimeout(refreshTimer)
   ++generation
   controller?.abort()
 })
@@ -54,23 +61,25 @@ const latency = (value: number | null | undefined) => value == null ? '无成功
 
 const option = computed<EChartsOption>(() => {
   const style = getComputedStyle(document.documentElement)
-  const tokens = ['--chart-1', '--chart-2', '--chart-3', '--chart-4', '--chart-5']
+  const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347']
   const foreground = style.getPropertyValue('--foreground').trim()
   return {
     darkMode: app.isDark,
     animation: false,
-    color: tokens.map(token => style.getPropertyValue(token).trim()),
+    color: colors,
     aria: { enabled: true },
     textStyle: { color: foreground },
     tooltip: { trigger: 'axis', renderMode: 'richText', confine: true },
     legend: { type: 'plain', bottom: 0, textStyle: { color: foreground } },
-    grid: { left: 55, right: 20, top: 20, bottom: 65 },
+    grid: { left: 55, right: 20, top: 28, bottom: 65 },
     xAxis: { type: 'time', axisLabel: { color: foreground } },
     yAxis: { type: 'value', name: 'ms', min: 0, axisLabel: { color: foreground }, splitLine: { lineStyle: { color: style.getPropertyValue('--border').trim() } } },
     series: (data.value?.tasks ?? []).map(task => ({
       name: task.name,
       type: 'line',
-      showSymbol: false,
+      showSymbol: true,
+      symbolSize: 3,
+      lineStyle: { width: 1.5 },
       connectNulls: false,
       data: (data.value?.records ?? []).filter(record => record.task_id === task.id).sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms).map(record => [record.received_at_unix_ms, record.success ? record.latency_ms : null]),
     })),
@@ -79,21 +88,16 @@ const option = computed<EChartsOption>(() => {
 </script>
 
 <template>
-  <CardX title="连通性与延迟" content-class="space-y-4">
+  <CardX title="网络延迟" content-class="space-y-4" header-class="flex-wrap">
     <template #header-extra>
       <div class="flex flex-wrap gap-2">
-        <label class="sr-only" :for="`probe-hours-${uuid}`">探测历史时间范围</label>
-        <select :id="`probe-hours-${uuid}`" v-model.number="hours" class="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:ring-2 focus-visible:ring-ring">
-          <option :value="1">
-            最近 1 小时
-          </option><option :value="6">
-            最近 6 小时
-          </option><option :value="24">
-            最近 24 小时
-          </option><option :value="168">
-            最近 7 天
-          </option>
-        </select>
+        <Tabs :model-value="String(hours)" @update:model-value="hours = Number($event)">
+          <TabsList class="flex-wrap h-auto" aria-label="探测历史时间范围">
+            <TabsTrigger v-for="range in ranges" :key="range" :value="String(range)">
+              {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Button variant="outline" :disabled="loading" @click="reload">
           {{ loading ? '加载中…' : '刷新' }}
         </Button>
@@ -113,41 +117,46 @@ const option = computed<EChartsOption>(() => {
         <p v-if="data.records.length >= data.limit" class="text-sm text-muted-foreground">
           曲线仅展示最近 {{ data.limit }} 个样本；汇总按整个所选时间范围计算。
         </p>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <caption class="sr-only">
-              所选时间范围的延迟与丢包汇总
-            </caption><thead>
-              <tr class="border-b">
-                <th class="p-2">
-                  任务
-                </th><th class="p-2">
-                  样本
-                </th><th class="p-2">
-                  平均延迟
-                </th><th class="p-2">
-                  失败 / 丢包率
-                </th>
-              </tr>
-            </thead><tbody>
-              <tr v-for="task in data.tasks" :key="task.id" class="border-b">
-                <th class="p-2 font-medium">
-                  {{ task.name }}
-                </th><td class="p-2">
-                  {{ data.summary.find(s => s.task_id === task.id)?.samples ?? 0 }}
-                </td><td class="p-2">
-                  {{ latency(data.summary.find(s => s.task_id === task.id)?.avg_latency_ms) }}
-                </td><td class="p-2">
-                  {{ data.summary.find(s => s.task_id === task.id)?.samples ? `${data.summary.find(s => s.task_id === task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <div v-if="data.records.length" class="w-full" style="height: 280px">
+          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，失败样本显示为断点，数值可在下方表格查看" />
         </div>
-        <VChart v-if="data.records.length" :key="app.resolvedThemeMode" :option="option" autoresize class="h-72 w-full" aria-label="探测延迟曲线，失败样本显示为断点，数值可在下方表格查看" />
         <p v-else class="text-sm text-muted-foreground">
-          此时间范围暂无上报样本；请等待 Agent 执行任务后刷新。
+          此时间范围暂无上报样本。
         </p>
+        <details class="rounded-md border p-3">
+          <summary class="cursor-pointer text-sm font-medium">延迟与失败率汇总</summary>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+              <caption class="sr-only">
+                所选时间范围的延迟与丢包汇总
+              </caption><thead>
+                <tr class="border-b">
+                  <th class="p-2">
+                    任务
+                  </th><th class="p-2">
+                    样本
+                  </th><th class="p-2">
+                    平均延迟
+                  </th><th class="p-2">
+                    失败 / 丢包率
+                  </th>
+                </tr>
+              </thead><tbody>
+                <tr v-for="task in data.tasks" :key="task.id" class="border-b">
+                  <th class="p-2 font-medium">
+                    {{ task.name }}
+                  </th><td class="p-2">
+                    {{ data.summary.find(s => s.task_id === task.id)?.samples ?? 0 }}
+                  </td><td class="p-2">
+                    {{ latency(data.summary.find(s => s.task_id === task.id)?.avg_latency_ms) }}
+                  </td><td class="p-2">
+                    {{ data.summary.find(s => s.task_id === task.id)?.samples ? `${data.summary.find(s => s.task_id === task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
         <details v-if="recent.length" class="rounded-md border p-3">
           <summary class="cursor-pointer text-sm font-medium">
             查看最近 {{ recent.length }} 条记录

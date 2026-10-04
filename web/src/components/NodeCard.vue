@@ -2,6 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
+import NodeProbeSummary from '@/components/NodeProbeSummary.vue'
 import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -205,15 +206,7 @@ const customTags = computed(() => getCustomTags(props.node))
                 <span class="truncate">{{ lastReportTime }}</span>
               </DataTooltip>
             </div>
-            <div class="flex items-center justify-between">
-              <span class="truncate">
-                探测
-              </span>
-              <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
-              <div class="truncate">
-                详情查看延迟与丢包
-              </div>
-            </div>
+            <NodeProbeSummary :probes="props.node.probes" />
           </div>
         </div>
         <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">

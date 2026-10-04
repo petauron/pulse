@@ -132,6 +132,16 @@ fn run_admin(
             let record = administration.inspect_node_reporting(id, token)?;
             println!("{}", serde_json::to_string_pretty(&record)?);
         }
+        [area, action, id] if area == "node" && action == "correct-traffic" => {
+            let mut input = String::new();
+            std::io::stdin().take(4097).read_to_string(&mut input)?;
+            if input.len() > 4096 {
+                return Err("traffic correction input too large".into());
+            }
+            let value = serde_json::from_str(&input)?;
+            administration.correct_traffic(id, &value)?;
+            println!("current-cycle traffic corrected: {id}");
+        }
         [area, action, id] if area == "node" && action == "revoke" => {
             administration.revoke_node(id)?;
             println!("node revoked: {id}");
@@ -161,7 +171,7 @@ fn run_admin(
 }
 
 fn usage() -> &'static str {
-    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node reporting ID (credential on stdin) | node revoke ID | node delete ID | audit [LIMIT] | backup]"
+    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node reporting ID (credential on stdin) | node correct-traffic ID (JSON on stdin) | node revoke ID | node delete ID | audit [LIMIT] | backup]"
 }
 
 async fn shutdown_signal() {

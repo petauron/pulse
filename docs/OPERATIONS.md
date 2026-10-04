@@ -261,3 +261,25 @@ For server traffic quotas, explicitly select the provider-facing interfaces with
 ## Diagnostics
 
 Use `systemctl status`, `journalctl -u pulse-service`, and `journalctl -u pulse-agent`. Logs intentionally omit enrollment and Agent tokens. The health endpoint reports only process health and version. History responses include requested/actual coverage, source count, returned count, bucket width, and whether the window was downsampled. Agent collection timestamps and clock skew remain diagnostic fields; server receipt time controls online state and retention.
+
+
+### Correcting current-cycle traffic after migration
+
+`pulse-service node correct-traffic NODE_ID` accepts one JSON object on stdin
+(maximum 4096 bytes): `cycle_start_ms`, `sampled_at_ms`, `raw_up`, `raw_down`,
+`used_up`, and `used_down`. All counters are bytes. The supplied usage is an
+absolute total for the current UTC billing cycle at the supplied raw-counter
+baseline, not an amount to add. Use the same provider-facing interfaces and
+measurement boundary for the source and baseline. Do not import lifetime
+counters as monthly usage. Incomplete source history must remain identified as
+incomplete; this command cannot reconstruct missing usage.
+
+Evidence must be no older than two minutes. The current cycle must match and
+current counters must not be below the supplied baseline. Subsequent increments
+are retained, so replaying the same evidence does not add it again. A reset,
+interface change or reboot between collection and application invalidates the
+evidence; collect again instead of guessing. Each correction records previous
+and corrected totals in the administrative audit log. Node identity, metadata,
+raw counters and monitoring history are retained. This is an explicit operator
+correction; monthly rollover continues automatically using the configured UTC
+reset day.

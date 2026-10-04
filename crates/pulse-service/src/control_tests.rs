@@ -86,6 +86,72 @@ fn billing_deltas_reset_and_extended_history_survive_new_snapshots() {
 }
 
 #[test]
+fn traffic_correction_preserves_deltas_and_rejects_stale_baselines() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let hash = crate::storage::hash_token(&node.agent_token);
+    storage
+        .ingest(&hash, &sample(now, 1000, 2000), now, 7)
+        .unwrap();
+    let mut correction = crate::control::TrafficCorrection {
+        cycle_start_ms: crate::control::period_start(now, 1),
+        sampled_at_ms: now,
+        raw_up: 1000,
+        raw_down: 2000,
+        used_up: 500,
+        used_down: 800,
+    };
+    storage
+        .ingest(&hash, &sample(now + 1000, 1100, 2200), now + 1000, 7)
+        .unwrap();
+    storage
+        .correct_traffic(&node.node_id, &correction, now + 1000)
+        .unwrap();
+    storage
+        .correct_traffic(&node.node_id, &correction, now + 1000)
+        .unwrap();
+    let state = storage.admin_state().unwrap();
+    assert_eq!(state["nodes"][0]["traffic_used_up"], 600);
+    assert_eq!(state["nodes"][0]["traffic_used_down"], 1000);
+    storage
+        .ingest(&hash, &sample(now + 2000, 1150, 2300), now + 2000, 7)
+        .unwrap();
+    assert_eq!(
+        storage.admin_state().unwrap()["nodes"][0]["traffic_used_up"],
+        650
+    );
+    assert!(
+        storage
+            .correct_traffic(&node.node_id, &correction, now + 120_001)
+            .is_err()
+    );
+    correction.cycle_start_ms = 0;
+    assert!(
+        storage
+            .correct_traffic(&node.node_id, &correction, now + 2000)
+            .is_err()
+    );
+    correction.cycle_start_ms = crate::control::period_start(now, 1);
+    correction.raw_up = 2000;
+    assert!(
+        storage
+            .correct_traffic(&node.node_id, &correction, now + 2000)
+            .is_err()
+    );
+    assert_eq!(
+        storage.admin_state().unwrap()["nodes"][0]["traffic_used_up"],
+        650
+    );
+    assert!(
+        storage
+            .audit_events(10)
+            .unwrap()
+            .iter()
+            .any(|event| event.action == "node.traffic.correct")
+    );
+}
+
+#[test]
 fn traffic_counter_decreases_rebaseline_each_direction_without_recounting() {
     let (_dir, storage, node) = fixture();
     let now = unix_time_ms().unwrap();
@@ -242,6 +308,52 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         storage.ingest_probes(&node.agent_token, &batch, now + 10000, 7),
         Err(StorageError::Unauthorized)
     ));
+}
+
+#[test]
+fn dashboard_probe_preview_is_bounded_assigned_and_private() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "carrier".into(),
+        kind: ProbeKind::Tcp,
+        target: "private-probe.example:80".into(),
+        interval_seconds: 30,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let db = storage.connection().unwrap();
+    for i in 0..25_i64 {
+        db.execute(
+            "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success)
+             VALUES(?1,?2,?3,?4,?4,?5,?6)",
+            rusqlite::params![node.node_id, task.id, format!("point-{i}"), i64::try_from(now).unwrap() - 25000 + i * 1000, if i == 24 { None } else { Some(20.0) }, i != 24],
+        ).unwrap();
+    }
+    let tasks = vec![task.clone(); 5];
+    let preview = crate::control::dashboard_probes(&db, &node.node_id, &tasks, now).unwrap();
+    assert_eq!(preview.len(), 3);
+    assert_eq!(preview[0]["points"].as_array().unwrap().len(), 20);
+    assert_eq!(preview[0]["points"][19]["success"], false);
+    assert!(preview[0]["points"][19]["latency"].is_null());
+    assert!(preview[0].get("target").is_none());
+    assert!(preview[0].get("node_ids").is_none());
+    task.enabled = false;
+    assert!(
+        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now)
+            .unwrap()
+            .is_empty()
+    );
+    task.enabled = true;
+    task.node_ids = vec!["another-node".into()];
+    assert!(
+        crate::control::dashboard_probes(&db, &node.node_id, &[task], now)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
