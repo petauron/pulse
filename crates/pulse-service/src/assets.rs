@@ -167,7 +167,7 @@ pub(crate) async fn static_asset(State(state): State<AppState>, uri: Uri) -> Res
         .header("x-frame-options", "DENY")
         .header(
             "content-security-policy",
-            format!("default-src 'self'; connect-src 'self'{}; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'", rates_origin),
+            format!("default-src 'self'; connect-src 'self'{rates_origin}; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"),
         )
         .body(Body::from(asset.data.into_owned()))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
