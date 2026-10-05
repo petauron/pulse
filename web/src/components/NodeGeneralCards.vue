@@ -10,8 +10,8 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
-import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, REFERENCE_EXCHANGE_RATES, summarizeNodeValue } from '@/utils/financeHelper'
+import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
 
 const props = defineProps<{
