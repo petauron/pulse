@@ -61,7 +61,9 @@ const customTags = computed(() => getCustomTags(props.node))
           />
         </div>
         <div class="flex-1 min-w-0">
-          <div class="text-md font-bold truncate" :title="props.node.name">{{ props.node.name }}</div>
+          <div class="text-md font-bold truncate" :title="props.node.name">
+            {{ props.node.name }}
+          </div>
           <div class="mt-0.5 min-h-[14px] truncate text-[11px] font-normal leading-tight text-muted-foreground/75" :class="!props.node.public_remark && 'invisible'" :title="props.node.public_remark || ''">
             {{ props.node.public_remark || '无公开备注' }}
           </div>

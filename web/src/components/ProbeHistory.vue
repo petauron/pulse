@@ -67,12 +67,14 @@ const option = computed<EChartsOption>(() => {
   const start = Date.now() - hours.value * 3600000
   const width = hours.value * 3600000 / 60
   const lossSeries = (id: string) => {
-    const buckets = Array.from({ length: 60 }, () => ({ total: 0, failed: 0 }))
+    const buckets = Array.from({ length: 60 }).fill({ total: 0, failed: 0 })
     for (const record of data.value?.records ?? []) {
       const bucket = Math.floor((record.received_at_unix_ms - start) / width)
-      if (record.task_id !== id || bucket < 0 || bucket >= 60) continue
+      if (record.task_id !== id || bucket < 0 || bucket >= 60)
+        continue
       buckets[bucket]!.total++
-      if (!record.success) buckets[bucket]!.failed++
+      if (!record.success)
+        buckets[bucket]!.failed++
     }
     return buckets.map((bucket, i) => [start + (i + 0.5) * width, bucket.total ? bucket.failed / bucket.total * 100 : null])
   }
@@ -140,8 +142,12 @@ const option = computed<EChartsOption>(() => {
       <div class="flex flex-wrap gap-2">
         <Tabs :model-value="metric" @update:model-value="metric = $event === 'loss' ? 'loss' : 'latency'">
           <TabsList aria-label="探测指标">
-            <TabsTrigger value="latency">延迟</TabsTrigger>
-            <TabsTrigger value="loss">失败率</TabsTrigger>
+            <TabsTrigger value="latency">
+              延迟
+            </TabsTrigger>
+            <TabsTrigger value="loss">
+              失败率
+            </TabsTrigger>
           </TabsList>
         </Tabs>
         <Tabs :model-value="String(hours)" @update:model-value="hours = Number($event)">
@@ -176,9 +182,13 @@ const option = computed<EChartsOption>(() => {
         <p v-else class="text-sm text-muted-foreground">
           此时间范围暂无上报样本。
         </p>
-        <p v-if="metric === 'loss'" class="text-xs text-muted-foreground">曲线按 60 个时间段聚合失败比例；整个时间范围的失败率见下方汇总。TCP、HTTP 失败不等同于 ICMP 丢包。</p>
+        <p v-if="metric === 'loss'" class="text-xs text-muted-foreground">
+          曲线按 60 个时间段聚合失败比例；整个时间范围的失败率见下方汇总。TCP、HTTP 失败不等同于 ICMP 丢包。
+        </p>
         <details class="rounded-md border p-3">
-          <summary class="cursor-pointer text-sm font-medium">延迟与失败率汇总</summary>
+          <summary class="cursor-pointer text-sm font-medium">
+            延迟与失败率汇总
+          </summary>
           <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <caption class="sr-only">

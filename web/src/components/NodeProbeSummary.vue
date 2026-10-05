@@ -5,12 +5,15 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 
 const props = defineProps<{ probes?: NodeProbe[], compact?: boolean }>()
 const metrics = ['latency', 'loss'] as const
+const telecomPattern = /电信|telecom/i
+const unicomPattern = /联通|unicom/i
+const mobilePattern = /移动|mobile/i
 function carrierOrder(name: string): number {
-  if (/电信|telecom/i.test(name))
+  if (telecomPattern.test(name))
     return 0
-  if (/联通|unicom/i.test(name))
+  if (unicomPattern.test(name))
     return 1
-  if (/移动|mobile/i.test(name))
+  if (mobilePattern.test(name))
     return 2
   return 3
 }

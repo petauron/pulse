@@ -981,7 +981,12 @@ pub(crate) fn dashboard_probes(
     {
         let mut points = statement
             .query_map(
-                params![node, task.id, integer(now.saturating_sub(3_600_000)), integer(now)],
+                params![
+                    node,
+                    task.id,
+                    integer(now.saturating_sub(3_600_000)),
+                    integer(now)
+                ],
                 |row| {
                     Ok(json!({
                         "time": row.get::<_, i64>(0)?,

@@ -883,13 +883,28 @@ async fn me(
     // Never trust arbitrary forwarding headers. Behind a proxy the public IP
     // is unavailable unless the transport supplies a public peer address.
     let ip = peer.and_then(|peer| {
-        if headers.contains_key("forwarded") || headers.contains_key("x-forwarded-for") || headers.contains_key("cf-connecting-ip") {
+        if headers.contains_key("forwarded")
+            || headers.contains_key("x-forwarded-for")
+            || headers.contains_key("cf-connecting-ip")
+        {
             return None;
         }
         let ip = peer.0.0.ip();
         let public = match ip {
-            std::net::IpAddr::V4(v) => !v.is_private() && !v.is_loopback() && !v.is_link_local() && !v.is_unspecified() && !v.is_multicast(),
-            std::net::IpAddr::V6(v) => !v.is_loopback() && !v.is_unspecified() && !v.is_unique_local() && !v.is_unicast_link_local() && !v.is_multicast(),
+            std::net::IpAddr::V4(v) => {
+                !v.is_private()
+                    && !v.is_loopback()
+                    && !v.is_link_local()
+                    && !v.is_unspecified()
+                    && !v.is_multicast()
+            }
+            std::net::IpAddr::V6(v) => {
+                !v.is_loopback()
+                    && !v.is_unspecified()
+                    && !v.is_unique_local()
+                    && !v.is_unicast_link_local()
+                    && !v.is_multicast()
+            }
         };
         public.then(|| ip.to_string())
     });

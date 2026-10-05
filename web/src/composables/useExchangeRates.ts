@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { CURRENCY_SYMBOLS, REFERENCE_EXCHANGE_RATES } from '@/utils/financeHelper'
 
+const datePattern = /^\d{4}-\d{2}-\d{2}$/
 const cacheKey = 'pulse:frankfurter-cny:v1'
 type Rates = Partial<Record<CurrencyCode, number>>
 function parseRates(raw: unknown): Rates | null {
@@ -54,11 +55,13 @@ export function useExchangeRates() {
         return
       const payload = await response.json()
       const parsed = parseRates(payload.rates)
-      if (request.signal.aborted || !parsed || payload.base !== 'CNY' || !/^\d{4}-\d{2}-\d{2}$/.test(payload.date))
+      if (request.signal.aborted || !parsed || payload.base !== 'CNY' || !datePattern.test(payload.date))
         return
       rates.value = parsed
       date.value = payload.date
-      try { localStorage.setItem(cacheKey, JSON.stringify({ fetched: today, date: payload.date, rates: parsed })) }
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ fetched: today, date: payload.date, rates: parsed }))
+      }
       catch { /* Private browsing may disable storage. */ }
     }
     catch { /* Keep the explicitly labelled reference estimate on failure. */ }

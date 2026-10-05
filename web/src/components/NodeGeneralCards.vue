@@ -7,8 +7,8 @@ import { computed, nextTick, ref, useId, watch } from 'vue'
 import NodeEarthGlobe from '@/components/NodeEarthGlobe.vue'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
-import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
+import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, summarizeNodeValue } from '@/utils/financeHelper'
@@ -96,7 +96,10 @@ const formattedDiskTotal = computed(() => formatBytesSplit(totalDisk.value.total
 
 const financeCurrency = ref<CurrencyCode>('CNY')
 const { rates, date: rateDate, live: dailyRates } = useExchangeRates()
-watch(rates, value => { if (!value[financeCurrency.value]) financeCurrency.value = 'CNY' })
+watch(rates, (value) => {
+  if (!value[financeCurrency.value])
+    financeCurrency.value = 'CNY'
+})
 const now = useNow({ interval: 60000 })
 const finance = computed(() => summarizeNodeValue(summaryNodes.value, now.value.getTime(), rates.value))
 const formatValue = (value: number) => (value * (rates.value[financeCurrency.value] ?? 1)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
