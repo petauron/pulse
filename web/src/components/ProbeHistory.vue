@@ -139,7 +139,7 @@ const option = computed<EChartsOption>(() => {
 </script>
 
 <template>
-  <CardX title="网络质量" content-class="space-y-4" header-class="flex-wrap">
+  <CardX title="网络质量" content-class="space-y-4" header-class="flex-wrap [&>div:last-child]:max-w-full [&>div:last-child]:min-w-0">
     <template #header-extra>
       <div class="flex flex-wrap gap-2">
         <Tabs :model-value="metric" @update:model-value="metric = $event === 'loss' ? 'loss' : 'latency'">
@@ -152,7 +152,7 @@ const option = computed<EChartsOption>(() => {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Tabs :model-value="String(hours)" @update:model-value="hours = Number($event)">
+        <Tabs class="min-w-0 max-w-full" :model-value="String(hours)" @update:model-value="hours = Number($event)">
           <TabsList class="flex-wrap h-auto" aria-label="探测历史时间范围">
             <TabsTrigger v-for="range in ranges" :key="range" :value="String(range)">
               {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
@@ -178,7 +178,7 @@ const option = computed<EChartsOption>(() => {
         <p v-if="data.records.length >= data.limit" class="text-sm text-muted-foreground">
           曲线仅展示最近 {{ data.limit }} 个样本；汇总按整个所选时间范围计算。
         </p>
-        <div v-if="data.records.length" class="w-full" style="height: 280px">
+        <div v-if="data.records.length" class="relative isolate w-full overflow-hidden" style="height: 280px">
           <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" :aria-label="metric === 'latency' ? '探测延迟曲线，失败样本显示为断点' : '按时间分桶的探测失败率，缺失样本留空'" />
         </div>
         <p v-else class="text-sm text-muted-foreground">
@@ -187,7 +187,7 @@ const option = computed<EChartsOption>(() => {
         <p v-if="metric === 'loss'" class="text-xs text-muted-foreground">
           曲线按 60 个时间段聚合失败比例；整个时间范围的失败率见下方汇总。TCP、HTTP 失败不等同于 ICMP 丢包。
         </p>
-        <details class="rounded-md border p-3">
+        <details class="relative rounded-md border p-3">
           <summary class="cursor-pointer text-sm font-medium">
             延迟与失败率汇总
           </summary>
@@ -223,7 +223,7 @@ const option = computed<EChartsOption>(() => {
             </table>
           </div>
         </details>
-        <details v-if="recent.length" class="rounded-md border p-3">
+        <details v-if="recent.length" class="relative rounded-md border p-3">
           <summary class="cursor-pointer text-sm font-medium">
             查看最近 {{ recent.length }} 条记录
           </summary>
