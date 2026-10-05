@@ -39,3 +39,16 @@ its repository-drift check if that inventory is not current.
 - Source: <https://github.com/tabler/tabler-icons>
 - License: MIT.
 - Full MIT terms: [`LICENSE.tabler`](LICENSE.tabler).
+
+## Simple Icons 16.29.0
+
+- Except Ubuntu and Debian, local operating-system SVG glyphs in `public/assets/logo/` are extracted from
+  the existing `@iconify/json` Simple Icons collection, with brand colors applied.
+- Source: <https://github.com/simple-icons/simple-icons>.
+- License: CC0-1.0, <https://creativecommons.org/publicdomain/zero/1.0/>.
+- Logos remain subject to their respective owners' trademark rights.
+
+Ubuntu and Debian SVG assets are the exact assets served by the reference
+Emerald-Cazi theme. VisitorInfoCard is adapted from that MIT-licensed theme
+(Copyright 2026 Tokinx); see `LICENSE.emerald-cazi`. Brand rights remain with
+the respective trademark owners.

@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let alerts = tokio::spawn(alert_maintenance(state.clone()));
 
     tracing::info!(address = %listen_address, "Pulse Service listening");
-    let serve_result = axum::serve(listener, router(state))
+    let serve_result = axum::serve(listener, router(state).into_make_service_with_connect_info::<SocketAddr>())
         .with_graceful_shutdown(shutdown_signal())
         .await;
     maintenance.abort();

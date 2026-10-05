@@ -5,6 +5,9 @@ import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireTe
 export interface PriceTagItem {
   text: string
   highlight?: boolean
+  prefix?: string
+  value?: string
+  suffix?: string
 }
 
 export function hasRegion(region: string | null | undefined): boolean {
@@ -38,23 +41,24 @@ export function getTrafficUsedPercentage(node: NodeData): number {
   return Math.min((used / node.traffic_limit) * 100, 100)
 }
 
-export function getPriceTags(node: NodeData, lang: 'zh-CN' | 'en-US'): PriceTagItem[] {
+export function getPriceTags(node: NodeData, lang: 'zh-CN' | 'en-US', view: 'card' | 'list' = 'card'): PriceTagItem[] {
   const tags: PriceTagItem[] = []
   const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
-  if (node.price !== 0)
-    tags.push({ text: priceText })
+  tags.push({ text: priceText })
   if (!node.expired_at || !Number.isFinite(Date.parse(node.expired_at)))
     return tags
   const days = getDaysUntilExpired(node.expired_at)
   const status = getExpireStatus(node.expired_at)
-  if (status === 'expired')
+  if (view === 'list' && status !== 'long_term')
+    tags.push({ text: `${days >= 0 ? '+' : ''}${days}${lang === 'zh-CN' ? '天' : ' days'}`, highlight: true })
+  else if (status === 'expired')
     tags.push({ text: lang === 'zh-CN' ? '已过期' : 'Expired', highlight: true })
   else if (status === 'long_term')
     tags.push({ text: lang === 'zh-CN' ? '长期' : 'Long-term' })
   else if (lang === 'zh-CN')
-    tags.push({ text: `余 ${days} 天`, highlight: true })
+    tags.push({ text: `余 ${days} 天`, prefix: '余 ', value: String(days), suffix: ' 天' })
   else
-    tags.push({ text: `${days} days left`, highlight: true })
+    tags.push({ text: `${days} days left`, value: String(days), suffix: ' days left' })
   return tags
 }
 

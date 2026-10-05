@@ -1032,7 +1032,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-agent"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "pulse-protocol",
  "reqwest",
@@ -1048,7 +1048,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-protocol"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "serde",
  "serde_json",
@@ -1056,7 +1056,7 @@ dependencies = [
 
 [[package]]
 name = "pulse-service"
-version = "0.1.0-alpha.13"
+version = "0.1.0-alpha.14"
 dependencies = [
  "argon2",
  "axum",

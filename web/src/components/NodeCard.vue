@@ -2,7 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
-import NodeProbeSummary from '@/components/NodeProbeSummary.vue'
+import NodeProbePanel from '@/components/NodeProbePanel.vue'
 import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -49,19 +49,22 @@ const customTags = computed(() => getCustomTags(props.node))
     class="node-card h-full w-full cursor-pointer border-none shadow-[0_0_0_1px] shadow-transparent transition-all duration-200 rounded-md bg-background/60 hover:bg-background hover:shadow-emerald-600/10 hover:shadow-[0_0_20px,0_0_0_1px] hover:-translate-y-0.5 hover:z-1"
     :class="[pickSurfaceClass('', 'backdrop-blur-sm'), !props.node.online && 'shadow-[0_0_0_1px] !shadow-red-600/20']"
     @click="emit('click')"
-    @keydown.enter.prevent="emit('click')"
-    @keydown.space.prevent="emit('click')"
+    @keydown.enter.self.prevent="emit('click')"
+    @keydown.space.self.prevent="emit('click')"
   >
     <template #header>
-      <div class="flex gap-2 min-w-0 items-center">
-        <div class="size-2 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
+      <div class="flex gap-2 min-w-0 items-start">
+        <div class="mt-1.5 size-2 shrink-0 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
           <div
             class="animate-ping absolute inset-0 rounded-full opacity-50"
             :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']"
           />
         </div>
-        <div class="text-md font-bold flex-1 min-w-0 truncate">
-          {{ props.node.name }}
+        <div class="flex-1 min-w-0">
+          <div class="text-md font-bold truncate" :title="props.node.name">{{ props.node.name }}</div>
+          <div class="mt-0.5 min-h-[14px] truncate text-[11px] font-normal leading-tight text-muted-foreground/75" :class="!props.node.public_remark && 'invisible'" :title="props.node.public_remark || ''">
+            {{ props.node.public_remark || '无公开备注' }}
+          </div>
         </div>
       </div>
     </template>
@@ -207,12 +210,13 @@ const customTags = computed(() => getCustomTags(props.node))
                 <span class="flex flex-row gap-1 truncate">
                   <template v-for="(tag, index) in priceTags" :key="index">
                     <span v-if="index > 0">·</span>
-                    <span :class="tag.highlight ? getRemainingTimeTagClass(props.node) : ''">{{ tag.text }}</span>
+                    <span v-if="tag.value !== undefined"><span>{{ tag.prefix }}</span><span :class="getRemainingTimeTagClass(props.node)">{{ tag.value }}</span><span>{{ tag.suffix }}</span></span>
+                    <span v-else :class="tag.highlight ? getRemainingTimeTagClass(props.node) : ''">{{ tag.text }}</span>
                   </template>
                 </span>
               </DataTooltip>
             </div>
-            <NodeProbeSummary :probes="props.node.probes" />
+            <NodeProbePanel :node="props.node" />
           </div>
         </div>
         <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">

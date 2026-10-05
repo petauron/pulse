@@ -36,6 +36,7 @@ pub(crate) struct Settings {
     pub private_site: bool,
     pub agent_interval_seconds: u64,
     pub ip_info_enabled: bool,
+    pub daily_exchange_rates: bool,
 }
 
 impl Default for Settings {
@@ -45,6 +46,7 @@ impl Default for Settings {
             private_site: true,
             agent_interval_seconds: 3,
             ip_info_enabled: false,
+            daily_exchange_rates: false,
         }
     }
 }
@@ -954,8 +956,8 @@ fn period_usage(db: &Connection, node: &str) -> Result<(u64, u64), StorageError>
         .unwrap_or_default())
 }
 
-/// Compact overview: at most three tasks and twenty recent points per task/node.
-/// Reuses the dashboard poll; never starts a separate history scan per card.
+/// One-hour overview: at most three tasks and ten six-minute buckets per node.
+/// Reuses the dashboard poll with a bounded one-hour indexed range and ten output rows.
 pub(crate) fn dashboard_probes(
     db: &Connection,
     node: &str,
@@ -964,9 +966,13 @@ pub(crate) fn dashboard_probes(
 ) -> Result<Vec<Value>, StorageError> {
     let mut result = Vec::new();
     let mut statement = db.prepare_cached(
-        "SELECT received_at_ms,latency_ms,success FROM probe_results
-         WHERE node_id=?1 AND task_id=?2 AND received_at_ms>=?3
-         ORDER BY received_at_ms DESC LIMIT 20",
+        "SELECT max(received_at_ms),avg(CASE WHEN success=1 THEN latency_ms END),
+                sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),count(*),
+                sum(CASE WHEN success=1 AND latency_ms IS NOT NULL THEN 1 ELSE 0 END),
+                (received_at_ms-?3-1)/360000
+         FROM probe_results
+         WHERE node_id=?1 AND task_id=?2 AND received_at_ms>?3 AND received_at_ms<=?4
+         GROUP BY (received_at_ms-?3-1)/360000 ORDER BY max(received_at_ms) DESC LIMIT 10",
     )?;
     for task in tasks
         .iter()
@@ -975,18 +981,21 @@ pub(crate) fn dashboard_probes(
     {
         let mut points = statement
             .query_map(
-                params![node, task.id, integer(now.saturating_sub(3_600_000))],
+                params![node, task.id, integer(now.saturating_sub(3_600_000)), integer(now)],
                 |row| {
                     Ok(json!({
                         "time": row.get::<_, i64>(0)?,
                         "latency": row.get::<_, Option<f64>>(1)?,
-                        "success": row.get::<_, bool>(2)?
+                        "loss": row.get::<_, f64>(2)?,
+                        "samples": row.get::<_, i64>(3)?,
+                        "successful_samples": row.get::<_, i64>(4)?,
+                        "bucket": row.get::<_, i64>(5)?
                     }))
                 },
             )?
             .collect::<Result<Vec<_>, _>>()?;
         points.reverse();
-        result.push(json!({"id":task.id,"name":task.name,"interval_seconds":task.interval_seconds,"points":points}));
+        result.push(json!({"id":task.id,"name":task.name,"kind":task.kind,"interval_seconds":task.interval_seconds,"points":points}));
     }
     Ok(result)
 }

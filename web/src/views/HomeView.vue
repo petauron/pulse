@@ -3,6 +3,7 @@ import { Icon } from '@iconify/vue'
 import { useDebounceFn } from '@vueuse/core'
 import { computed, defineAsyncComponent, nextTick, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import VisitorInfoCard from '@/components/VisitorInfoCard.vue'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -122,6 +123,7 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
 </script>
 
 <template>
+  <VisitorInfoCard v-if="appStore.visitorInfoCardEnabled" />
   <div class="home-view">
     <div v-if="appStore.connectionError" class="alert px-4">
       <Alert

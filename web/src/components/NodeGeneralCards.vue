@@ -3,14 +3,15 @@ import type { NodeData } from '@/stores/nodes'
 import type { CurrencyCode } from '@/utils/financeHelper'
 import { Icon } from '@iconify/vue'
 import { useNow } from '@vueuse/core'
-import { computed, nextTick, ref, useId } from 'vue'
+import { computed, nextTick, ref, useId, watch } from 'vue'
 import NodeEarthGlobe from '@/components/NodeEarthGlobe.vue'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
+import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
-import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, REFERENCE_EXCHANGE_RATES, summarizeNodeValue } from '@/utils/financeHelper'
+import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, summarizeNodeValue } from '@/utils/financeHelper'
 import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
 
@@ -94,11 +95,13 @@ const formattedDiskUsed = computed(() => formatBytesSplit(totalDisk.value.used, 
 const formattedDiskTotal = computed(() => formatBytesSplit(totalDisk.value.total, appStore.byteDecimals))
 
 const financeCurrency = ref<CurrencyCode>('CNY')
+const { rates, date: rateDate, live: dailyRates } = useExchangeRates()
+watch(rates, value => { if (!value[financeCurrency.value]) financeCurrency.value = 'CNY' })
 const now = useNow({ interval: 60000 })
-const finance = computed(() => summarizeNodeValue(summaryNodes.value, now.value.getTime()))
-const formatValue = (value: number) => (value * REFERENCE_EXCHANGE_RATES[financeCurrency.value]).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const finance = computed(() => summarizeNodeValue(summaryNodes.value, now.value.getTime(), rates.value))
+const formatValue = (value: number) => (value * (rates.value[financeCurrency.value] ?? 1)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const formattedRemainingValue = computed(() => ({
-  value: `≈${CURRENCY_SYMBOLS[financeCurrency.value]}${formatValue(finance.value.remaining)}`,
+  value: `${dailyRates.value ? '' : '≈'}${CURRENCY_SYMBOLS[financeCurrency.value]}${formatValue(finance.value.remaining)}`,
   unit: financeCurrency.value,
 }))
 const financeSummaryItems = computed(() => [
@@ -106,9 +109,9 @@ const financeSummaryItems = computed(() => [
   { label: '月均支出', value: formatValue(finance.value.monthly), symbol: CURRENCY_SYMBOLS[financeCurrency.value] },
   { label: '剩余价值', value: formatValue(finance.value.remaining), symbol: CURRENCY_SYMBOLS[financeCurrency.value] },
 ])
-const exchangeRateRows = computed(() => FINANCE_CURRENCIES.map(currency => ({
+const exchangeRateRows = computed(() => FINANCE_CURRENCIES.filter(currency => rates.value[currency]).map(currency => ({
   currency,
-  rate: (REFERENCE_EXCHANGE_RATES[currency] / REFERENCE_EXCHANGE_RATES[financeCurrency.value]).toFixed(6),
+  rate: ((rates.value[currency] ?? 0) / (rates.value[financeCurrency.value] ?? 1)).toFixed(6),
   symbol: CURRENCY_SYMBOLS[currency],
 })))
 const showEarth = computed(() => appStore.earthViewMode === 'earth' || appStore.earthViewMode === 'earth-stop')
@@ -281,10 +284,10 @@ const cardGridClass = computed(() => showVisualPanel.value
             <div class="shrink-0 flex flex-col flex-1">
               <div class="flex mb-1 items-center justify-between gap-2">
                 <div class="flex items-center gap-1 text-xs font-medium tracking-wider text-muted-foreground">
-                  参考汇率估算
+                  {{ dailyRates ? `汇率 · ${rateDate}` : '参考汇率估算' }}
                 </div>
                 <select v-model="financeCurrency" aria-label="切换汇率基准币种" class="bg-background text-xs rounded border border-border p-1">
-                  <option v-for="currency in FINANCE_CURRENCIES" :key="currency" :value="currency">
+                  <option v-for="currency in FINANCE_CURRENCIES.filter(code => rates[code])" :key="currency" :value="currency">
                     {{ currency }}
                   </option>
                 </select>
@@ -296,7 +299,7 @@ const cardGridClass = computed(() => showVisualPanel.value
                 </div>
               </div>
               <p class="text-[10px] text-muted-foreground mt-1">
-                主题内置汇率，非实时。月均按 30 天折算；剩余按未到期时长折算。
+                {{ dailyRates ? 'Frankfurter 每日汇率；休市时显示最近交易日。' : '当前使用主题内置参考汇率，非实时。可在站点设置启用每日汇率。' }} 月均按 30 天折算；剩余按未到期时长折算。
               </p>
               <p v-if="finance.excluded" class="text-[10px] text-muted-foreground">
                 {{ finance.excluded }} 个节点因资料不完整，未计入部分估算。

@@ -48,17 +48,17 @@ const showFiling = computed(() => showIcp.value || showPolice.value)
         </DataTooltip>
       </div>
       <div class="flex flex-wrap gap-1 items-center">
-        Interface by
+        Theme by
         <DataTooltip
           as="span"
           placement="top"
           :content="`v${buildVersion}\n${buildGitHash}`"
         >
           <a
-            href="https://github.com/Tokinx/komari-theme-emerald" target="_blank" rel="noopener noreferrer"
+            href="https://github.com/cazi-cc/komari-theme-emerald" target="_blank" rel="noopener noreferrer"
             class="transition-opacity hover:opacity-80"
           >
-            <span class="font-medium text-foreground">Komari Emerald</span>
+            <span class="font-medium text-foreground">Emerald Cazi</span>
           </a>
         </DataTooltip>
       </div>

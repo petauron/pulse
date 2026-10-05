@@ -20,12 +20,12 @@ const osConfigs: OSConfig[] = [
   },
   {
     name: 'Alpine Linux',
-    image: '/assets/logo/os-alpine.webp',
+    image: '/assets/logo/os-alpine.svg',
     keywords: ['alpine', 'alpine linux'],
   },
   {
     name: 'Armbian',
-    image: '/assets/logo/os-armbian.svg',
+    image: '/assets/logo/linux.svg',
     keywords: ['armbian'],
   },
   {
@@ -60,12 +60,12 @@ const osConfigs: OSConfig[] = [
   },
   {
     name: 'Kali Linux',
-    image: '/assets/logo/os-kail.svg',
+    image: '/assets/logo/os-kali.svg',
     keywords: ['kail', 'kali', 'kali linux'],
   },
   {
     name: 'iStoreOS',
-    image: '/assets/logo/os-istore.png',
+    image: '/assets/logo/linux.svg',
     keywords: ['istore', 'istoreos', 'istore os'],
   },
   {
@@ -115,22 +115,22 @@ const osConfigs: OSConfig[] = [
   },
   {
     name: 'Manjaro',
-    image: '/assets/logo/os-manjaro-.svg',
+    image: '/assets/logo/os-manjaro.svg',
     keywords: ['manjaro'],
   },
   {
     name: 'Synology DSM',
-    image: '/assets/logo/os-synology.ico',
+    image: '/assets/logo/os-synology.svg',
     keywords: ['synology', 'dsm', 'synology dsm'],
   },
   {
     name: 'fnOS',
-    image: '/assets/logo/os-fnos.ico',
+    image: '/assets/logo/linux.svg',
     keywords: ['fnos', 'fnnas'],
   },
   {
     name: 'Proxmox VE',
-    image: '/assets/logo/os-proxmox.ico',
+    image: '/assets/logo/os-proxmox.svg',
     keywords: ['proxmox', 'proxmox ve'],
   },
   {
@@ -145,17 +145,17 @@ const osConfigs: OSConfig[] = [
   },
   {
     name: 'Astra Linux',
-    image: '/assets/logo/os-astar.png',
+    image: '/assets/logo/linux.svg',
     keywords: ['astra', 'astra linux'],
   },
   {
     name: 'Orange Pi',
-    image: '/assets/logo/os-orange-pi.svg',
+    image: '/assets/logo/linux.svg',
     keywords: ['orange pi', 'orangepi'],
   },
   {
     name: 'Huawei',
-    image: '/assets/logo/os-huawei.svg',
+    image: '/assets/logo/linux.svg',
     keywords: ['huawei', 'euleros', 'euler os'],
   },
   {
@@ -165,7 +165,7 @@ const osConfigs: OSConfig[] = [
   },
   {
     name: 'OpenCloudOS',
-    image: '/assets/logo/os-OpenCloudOS.png',
+    image: '/assets/logo/linux.svg',
     keywords: ['opencloud'],
   },
   {
@@ -209,11 +209,11 @@ function findOSConfig(osString: string): OSConfig {
 
 /**
  * 根据输入字符串匹配返回操作系统图像路径
- * @param _osString - 操作系统相关的字符串
+ * @param osString - 操作系统相关的字符串
  * @returns 匹配的操作系统图像路径，如果没有匹配则返回默认图像
  */
-export function getOSImage(_osString: string): string {
-  return '/assets/logo/pulse-node.svg'
+export function getOSImage(osString: string): string {
+  return findOSConfig(osString).image
 }
 
 /**
