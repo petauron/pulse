@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { NodeData } from '@/stores/nodes'
+import type { CurrencyCode } from '@/utils/financeHelper'
 import { Icon } from '@iconify/vue'
+import { useNow } from '@vueuse/core'
 import { computed, nextTick, ref, useId } from 'vue'
 import NodeEarthGlobe from '@/components/NodeEarthGlobe.vue'
 import { CardX } from '@/components/ui/card-x'
@@ -9,6 +11,7 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
+import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, REFERENCE_EXCHANGE_RATES, summarizeNodeValue } from '@/utils/financeHelper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
 
 const props = defineProps<{
@@ -28,29 +31,29 @@ const metricSwitchTransitionProps = computed(() => ({
     : { name: 'metric-switch', mode: 'out-in' as const }),
 }))
 
-const openStatusCard = ref(false)
-const statusId = useId()
-const closeStatusButton = ref<HTMLButtonElement | null>(null)
+const openFinanceCard = ref(false)
+const financeId = useId()
+const closeFinanceButton = ref<HTMLButtonElement | null>(null)
 
-async function toggleStatusCard(): Promise<void> {
-  if (openStatusCard.value) {
-    closeStatusCard()
+async function toggleFinanceCard(): Promise<void> {
+  if (openFinanceCard.value) {
+    closeFinanceCard()
     return
   }
-  openStatusCard.value = true
+  openFinanceCard.value = true
   await nextTick()
-  closeStatusButton.value?.focus()
+  closeFinanceButton.value?.focus()
 }
 
-function closeStatusCard(): void {
-  openStatusCard.value = false
-  document.getElementById(`${statusId}-trigger`)?.focus()
+function closeFinanceCard(): void {
+  openFinanceCard.value = false
+  document.getElementById(`${financeId}-trigger`)?.focus()
 }
 
-function onStatusFocusOut(event: FocusEvent): void {
+function onFinanceFocusOut(event: FocusEvent): void {
   if (event.currentTarget instanceof HTMLElement
     && !event.currentTarget.contains(event.relatedTarget as Node | null)) {
-    openStatusCard.value = false
+    openFinanceCard.value = false
   }
 }
 
@@ -90,38 +93,23 @@ const formattedMemoryTotal = computed(() => formatBytesSplit(totalMemory.value.t
 const formattedDiskUsed = computed(() => formatBytesSplit(totalDisk.value.used, appStore.byteDecimals))
 const formattedDiskTotal = computed(() => formatBytesSplit(totalDisk.value.total, appStore.byteDecimals))
 
-const onlineCount = computed(() => summaryNodes.value.filter(node => node.online).length)
-const offlineCount = computed(() => summaryNodes.value.length - onlineCount.value)
-const averageCpu = computed(() => {
-  const onlineNodes = summaryNodes.value.filter(node => node.online)
-  if (!onlineNodes.length)
-    return 0
-  return onlineNodes.reduce((sum, node) => sum + node.cpu, 0) / onlineNodes.length
-})
-const formattedOnlineNodes = computed(() => ({
-  value: onlineCount.value,
-  unit: `/ ${summaryNodes.value.length}`,
+const financeCurrency = ref<CurrencyCode>('CNY')
+const now = useNow({ interval: 60000 })
+const finance = computed(() => summarizeNodeValue(summaryNodes.value, now.value.getTime()))
+const formatValue = (value: number) => (value * REFERENCE_EXCHANGE_RATES[financeCurrency.value]).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const formattedRemainingValue = computed(() => ({
+  value: `≈${CURRENCY_SYMBOLS[financeCurrency.value]}${formatValue(finance.value.remaining)}`,
+  unit: financeCurrency.value,
 }))
-const statusSummaryItems = computed(() => [
-  {
-    label: '在线',
-    value: String(onlineCount.value),
-    symbol: '',
-  },
-  {
-    label: '离线',
-    value: String(offlineCount.value),
-    symbol: '',
-  },
-  {
-    label: '平均 CPU',
-    value: `${averageCpu.value.toFixed(1)}%`,
-    symbol: '',
-  },
+const financeSummaryItems = computed(() => [
+  { label: '总价值', value: formatValue(finance.value.total), symbol: CURRENCY_SYMBOLS[financeCurrency.value] },
+  { label: '月均支出', value: formatValue(finance.value.monthly), symbol: CURRENCY_SYMBOLS[financeCurrency.value] },
+  { label: '剩余价值', value: formatValue(finance.value.remaining), symbol: CURRENCY_SYMBOLS[financeCurrency.value] },
 ])
-const nodeStatusRows = computed(() => summaryNodes.value.slice(0, 8).map(node => ({
-  name: node.name,
-  status: node.online ? '在线' : '离线',
+const exchangeRateRows = computed(() => FINANCE_CURRENCIES.map(currency => ({
+  currency,
+  rate: (REFERENCE_EXCHANGE_RATES[currency] / REFERENCE_EXCHANGE_RATES[financeCurrency.value]).toFixed(6),
+  symbol: CURRENCY_SYMBOLS[currency],
 })))
 const showEarth = computed(() => appStore.earthViewMode === 'earth' || appStore.earthViewMode === 'earth-stop')
 const showVisualPanel = computed(() => showEarth.value)
@@ -204,27 +192,27 @@ const cardGridClass = computed(() => showVisualPanel.value
       <div
         class="relative w-full h-full"
         :class="showVisualPanel ? 'col-span-4 row-span-1 col-start-5 row-start-1' : 'col-span-1 row-start-1 col-start-2 min-h-18 md:min-h-24 md:row-start-1 md:col-start-3'"
-        @focusout="onStatusFocusOut"
-        @keydown.esc.stop.prevent="closeStatusCard"
+        @focusout="onFinanceFocusOut"
+        @keydown.esc.stop.prevent="closeFinanceCard"
       >
         <CardX
-          :id="`${statusId}-trigger`"
+          :id="`${financeId}-trigger`"
           role="button"
           tabindex="0"
-          aria-label="查看节点状态汇总"
-          :aria-controls="`${statusId}-panel`"
-          :aria-expanded="openStatusCard"
+          aria-label="查看剩余价值详情"
+          :aria-controls="`${financeId}-panel`"
+          :aria-expanded="openFinanceCard"
           hoverable
           class="group h-full border-none rounded-md transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-ring"
           :class="pickSurfaceClass('bg-background/60 hover:bg-background', 'bg-background/50 hover:bg-background backdrop-blur-xs')"
           content-class="h-full !p-3"
-          @click="toggleStatusCard"
-          @keydown.enter.prevent="toggleStatusCard"
-          @keydown.space.prevent="toggleStatusCard"
+          @click="toggleFinanceCard"
+          @keydown.enter.prevent="toggleFinanceCard"
+          @keydown.space.prevent="toggleFinanceCard"
         >
           <div class="flex h-full flex-col justify-between gap-1">
             <div class="flex items-start justify-between">
-              <span class="text-xs font-medium tracking-wider text-muted-foreground">在线节点</span>
+              <span class="text-xs font-medium tracking-wider text-muted-foreground">剩余价值</span>
               <Icon
                 icon="tabler:server-2" :width="20" :height="20"
                 class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
@@ -236,46 +224,47 @@ const cardGridClass = computed(() => showVisualPanel.value
                 :style="getMetricSwitchStyle(2)"
               >
                 <span class="text-md md:text-2xl font-bold leading-none tracking-tight">
-                  {{ formattedOnlineNodes.value }}
+                  {{ formattedRemainingValue.value }}
                 </span>
                 <span class="block truncate text-[11px] md:text-xs font-medium text-muted-foreground">
-                  {{ formattedOnlineNodes.unit }}
+                  {{ formattedRemainingValue.unit }}
                 </span>
               </div>
             </Transition>
           </div>
         </CardX>
         <CardX
-          :id="`${statusId}-panel`"
+          :id="`${financeId}-panel`"
           role="region"
-          aria-label="节点状态汇总"
-          :aria-hidden="!openStatusCard"
-          :inert="!openStatusCard"
+          aria-label="剩余价值详情"
+          :aria-hidden="!openFinanceCard"
+          :inert="!openFinanceCard"
           hoverable
-          class="absolute top-0 left-1/2 z-20 h-42 w-[260%] max-w-88 -translate-x-[50%] -translate-y-[25%] rounded-md border-none shadow-[0_0_20px,0_0_0_1px] shadow-emerald-600/10 transition-all"
+          class="absolute top-0 left-1/2 z-20 min-h-42 w-[260%] max-w-88 -translate-x-[50%] -translate-y-[25%] rounded-md border-none shadow-[0_0_20px,0_0_0_1px] shadow-emerald-600/10 transition-all"
           :class="[
             pickSurfaceClass('bg-background', 'bg-background/50 backdrop-blur-lg'),
-            openStatusCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50',
+            openFinanceCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50',
           ]"
-          content-class="h-full !p-4" @click="closeStatusCard"
+          content-class="h-full !p-4"
         >
           <button
-            ref="closeStatusButton"
+            ref="closeFinanceButton"
             type="button"
-            class="sr-only focus:not-sr-only focus:absolute focus:right-2 focus:top-2 focus:z-30 focus:rounded focus:bg-background focus:p-2 focus:outline-2 focus:outline-ring"
-            @click.stop="closeStatusCard"
+            class="absolute right-1 top-1 rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            aria-label="关闭价值详情"
+            @click.stop="closeFinanceCard"
           >
-            关闭节点状态
+            <Icon icon="lucide:x" :width="14" :height="14" />
           </button>
           <div class="flex h-full min-w-0 flex-col overflow-hidden">
             <div class="shrink-0 grid grid-cols-3 gap-1.5">
-              <div v-for="(item, index) in statusSummaryItems" :key="item.label" class="min-w-0">
+              <div v-for="(item, index) in financeSummaryItems" :key="item.label" class="min-w-0">
                 <div class="flex mb-1.5 items-center text-xs font-medium text-muted-foreground">
                   {{ item.label }}
                 </div>
                 <Transition v-bind="metricSwitchTransitionProps">
                   <div
-                    :key="`node-status-${summaryTransitionKey}-${item.label}`" class="flex min-w-0 items-baseline truncate"
+                    :key="`finance-${summaryTransitionKey}-${item.label}`" class="flex min-w-0 items-baseline truncate"
                     :style="getMetricSwitchStyle(index)"
                   >
                     <span class="shrink-0 text-xs mr-0.5 font-semibold leading-none text-muted-foreground">
@@ -292,26 +281,26 @@ const cardGridClass = computed(() => showVisualPanel.value
             <div class="shrink-0 flex flex-col flex-1">
               <div class="flex mb-1 items-center justify-between gap-2">
                 <div class="flex items-center gap-1 text-xs font-medium tracking-wider text-muted-foreground">
-                  节点状态
+                  参考汇率估算
                 </div>
+                <select v-model="financeCurrency" aria-label="切换汇率基准币种" class="bg-background text-xs rounded border border-border p-1">
+                  <option v-for="currency in FINANCE_CURRENCIES" :key="currency" :value="currency">
+                    {{ currency }}
+                  </option>
+                </select>
               </div>
               <div class="h-15 grid grid-cols-2 gap-y-1 gap-x-4 overflow-auto">
-                <div
-                  v-for="(row, index) in nodeStatusRows" :key="row.name"
-                  class="text-[11px] flex items-center "
-                >
-                  <Transition v-bind="metricSwitchTransitionProps">
-                    <div :key="`node-status-${summaryTransitionKey}-${row.name}`" class="flex-1 flex justify-between" :style="getMetricSwitchStyle(index)">
-                      <span class="text-muted-foreground">
-                        {{ row.name }}
-                      </span>
-                      <span>
-                        {{ row.status }}
-                      </span>
-                    </div>
-                  </Transition>
+                <div v-for="row in exchangeRateRows" :key="row.currency" class="text-[11px] flex justify-between gap-2">
+                  <span class="text-muted-foreground">{{ row.currency }}</span>
+                  <span>{{ row.symbol }}{{ row.rate }}</span>
                 </div>
               </div>
+              <p class="text-[10px] text-muted-foreground mt-1">
+                主题内置汇率，非实时。月均按 30 天折算；剩余按未到期时长折算。
+              </p>
+              <p v-if="finance.excluded" class="text-[10px] text-muted-foreground">
+                {{ finance.excluded }} 个节点因资料不完整，未计入部分估算。
+              </p>
             </div>
           </div>
         </CardX>
