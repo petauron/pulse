@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.13] - 2026-10-05
+
+### Fixed
+
+- Restore remaining-value dashboard summary with total value, monthly cost and currency details. Estimates explicitly use bundled reference exchange rates; no external requests are made.
+
 ## [0.1.0-alpha.12] - 2026-10-05
 
 ### Fixed
