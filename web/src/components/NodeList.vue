@@ -2,7 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed, ref } from 'vue'
-import NodeProbeSummary from '@/components/NodeProbeSummary.vue'
+import NodeProbePanel from '@/components/NodeProbePanel.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
 import { Badge } from '@/components/ui/badge'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -48,7 +48,7 @@ const columns: ColumnConfig[] = [
   { key: 'disk', label: '硬盘', width: '100px', sortable: true },
   { key: 'traffic', label: '流量', width: '100px', sortable: true },
   { key: 'rate', label: '速率', width: '80px', sortable: true },
-  { key: 'networks', label: '延迟 / 失败率', width: '300px', sortable: false },
+  { key: 'networks', label: '三网', width: '120px', sortable: false },
 ]
 
 const sortKey = ref<string>('')
@@ -187,8 +187,8 @@ function getRowTransitionStyle(index: number): Record<string, string> {
           :class="[pickSurfaceClass('', 'backdrop-blur-sm'), !node.online && '!shadow-red-600/10']"
           :style="getRowTransitionStyle(index)"
           @click="handleClick(node)"
-          @keydown.enter.prevent="handleClick(node)"
-          @keydown.space.prevent="handleClick(node)"
+          @keydown.enter.self.prevent="handleClick(node)"
+          @keydown.space.self.prevent="handleClick(node)"
         >
           <div class="grid gap-2 items-center" :style="gridStyle">
             <template v-for="col in columns" :key="col.key">
@@ -221,13 +221,13 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                     </span>
                   </DataTooltip>
                   <DataTooltip
-                    v-if="getPriceTags(node, appStore.lang).length" placement="left"
+                    v-if="getPriceTags(node, appStore.lang, 'list').length" placement="left"
                     :content="node.expired_at && Number.isFinite(Date.parse(node.expired_at)) ? formatDateTime(node.expired_at, 'YYYY-MM-DD') : ''"
                     content-class="whitespace-nowrap right-0 mr-0"
                     class="min-w-0"
                   >
                     <div class="truncate">
-                      <template v-for="(tag, tagIndex) in getPriceTags(node, appStore.lang)" :key="tagIndex">
+                      <template v-for="(tag, tagIndex) in getPriceTags(node, appStore.lang, 'list')" :key="tagIndex">
                         <span v-if="node.online || tagIndex > 0" class="mx-1">·</span>
                         <span :class="tag.highlight ? getRemainingTimeTagClass(node) : ''">{{ tag.text }}</span>
                       </template>
@@ -253,7 +253,7 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                 v-else-if="col.key === 'networks'"
                 class="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
               >
-                <NodeProbeSummary :probes="node.probes" />
+                <NodeProbePanel :node="node" compact />
               </div>
 
               <!-- 操作系统 -->

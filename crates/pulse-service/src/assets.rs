@@ -150,6 +150,14 @@ pub(crate) async fn static_asset(State(state): State<AppState>, uri: Uri) -> Res
         "public, max-age=31536000, immutable"
     };
 
+    let rates_origin = if served_path == "index.html" {
+        match state.database(crate::storage::Storage::settings).await {
+            Ok(settings) if settings.daily_exchange_rates => " https://api.frankfurter.dev",
+            _ => "",
+        }
+    } else {
+        ""
+    };
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, mime.as_ref())
@@ -159,7 +167,7 @@ pub(crate) async fn static_asset(State(state): State<AppState>, uri: Uri) -> Res
         .header("x-frame-options", "DENY")
         .header(
             "content-security-policy",
-            "default-src 'self'; connect-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+            format!("default-src 'self'; connect-src 'self'{rates_origin}; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"),
         )
         .body(Body::from(asset.data.into_owned()))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())

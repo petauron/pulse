@@ -17,6 +17,11 @@ const siteFavicon = ref('/favicon.ico')
 const actionButtons = computed(() => {
   const buttons = [
     {
+      title: '网络质量',
+      icon: 'tabler:gauge',
+      action: 'networkQuality',
+    },
+    {
       title: appStore.themeMode === 'auto' ? '自动主题' : appStore.themeMode === 'light' ? '浅色主题' : '深色主题',
       icon: appStore.themeMode === 'auto' ? 'icon-park-outline:dark-mode' : appStore.themeMode === 'light' ? 'icon-park-outline:sun-one' : 'icon-park-outline:moon',
       action: 'toggleTheme',
@@ -35,6 +40,9 @@ const actionButtons = computed(() => {
 
 function handleButtonClick(action: string) {
   switch (action) {
+    case 'networkQuality':
+      void router.push('/network-quality')
+      break
     case 'toggleTheme':
       appStore.updateThemeMode()
       break

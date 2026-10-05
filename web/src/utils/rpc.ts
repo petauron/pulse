@@ -19,7 +19,8 @@ export interface NodeProbe {
   id: string
   name: string
   interval_seconds: number
-  points: { time: number, latency: number | null, success: boolean }[]
+  kind: 'icmp' | 'tcp' | 'http'
+  points: { bucket: number, time: number, latency: number | null, loss: number, samples: number, successful_samples: number }[]
 }
 
 export interface Client {

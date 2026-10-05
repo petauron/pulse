@@ -5,6 +5,7 @@ export interface SiteSettings {
   private_site: boolean
   agent_interval_seconds: number
   ip_info_enabled?: boolean
+  daily_exchange_rates?: boolean
 }
 
 export interface ManagedNode {

@@ -100,11 +100,46 @@ export const REFERENCE_EXCHANGE_RATES: Record<CurrencyCode, number> = {
   ZAR: 2.3995,
 }
 
-export const FINANCE_CURRENCIES = ['CNY', ...Object.keys(CURRENCY_SYMBOLS).filter(code => code !== 'CNY')] as CurrencyCode[]
+export const FINANCE_CURRENCIES: readonly CurrencyCode[] = [
+  'CNY',
+  'USD',
+  'EUR',
+  'GBP',
+  'JPY',
+  'HKD',
+  'KRW',
+  'RUB',
+  'BRL',
+  'INR',
+  'AUD',
+  'CAD',
+  'SGD',
+  'THB',
+  'VND',
+  'MYR',
+  'PHP',
+  'IDR',
+  'NZD',
+  'SEK',
+  'NOK',
+  'DKK',
+  'PLN',
+  'CZK',
+  'HUF',
+  'TRY',
+  'ZAR',
+  'KZT',
+  'UAH',
+  'CHF',
+  'ILS',
+  'ISK',
+  'MXN',
+  'RON',
+]
 
 type PricedNode = Pick<NodeData, 'price' | 'billing_cycle' | 'currency' | 'expired_at' | 'tags'>
 
-export function summarizeNodeValue(nodes: PricedNode[], now = Date.now()) {
+export function summarizeNodeValue(nodes: PricedNode[], now = Date.now(), rates: Partial<Record<CurrencyCode, number>> = REFERENCE_EXCHANGE_RATES) {
   let total = 0
   let monthly = 0
   let remaining = 0
@@ -117,7 +152,12 @@ export function summarizeNodeValue(nodes: PricedNode[], now = Date.now()) {
       excluded++
       continue
     }
-    const price = node.price / REFERENCE_EXCHANGE_RATES[normalizeCurrency(node.currency)]
+    const rate = rates[normalizeCurrency(node.currency)]
+    if (!rate || !Number.isFinite(rate) || rate <= 0) {
+      excluded++
+      continue
+    }
+    const price = node.price / rate
     total += price
     const cycle = Number(node.billing_cycle)
     if (Number.isFinite(cycle) && cycle > 0)

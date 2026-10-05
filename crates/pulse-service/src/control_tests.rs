@@ -333,12 +333,23 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
             rusqlite::params![node.node_id, task.id, format!("point-{i}"), i64::try_from(now).unwrap() - 25000 + i * 1000, if i == 24 { None } else { Some(20.0) }, i != 24],
         ).unwrap();
     }
+    // Exclude samples at the left boundary and in the future from the hour.
+    for (id, time) in [("outside-hour", now - 3_600_000), ("future", now + 1)] {
+        db.execute(
+            "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success) VALUES(?1,?2,?3,?4,?4,NULL,0)",
+            rusqlite::params![node.node_id, task.id, id, i64::try_from(time).unwrap()],
+        ).unwrap();
+    }
     let tasks = vec![task.clone(); 5];
     let preview = crate::control::dashboard_probes(&db, &node.node_id, &tasks, now).unwrap();
     assert_eq!(preview.len(), 3);
-    assert_eq!(preview[0]["points"].as_array().unwrap().len(), 20);
-    assert_eq!(preview[0]["points"][19]["success"], false);
-    assert!(preview[0]["points"][19]["latency"].is_null());
+    assert_eq!(preview[0]["points"].as_array().unwrap().len(), 1);
+    assert_eq!(preview[0]["kind"], "tcp");
+    assert_eq!(preview[0]["points"][0]["samples"], 25);
+    assert_eq!(preview[0]["points"][0]["successful_samples"], 24);
+    assert_eq!(preview[0]["points"][0]["loss"], 4.0);
+    assert_eq!(preview[0]["points"][0]["latency"], 20.0);
+    assert_eq!(preview[0]["points"][0]["bucket"], 9);
     assert!(preview[0].get("target").is_none());
     assert!(preview[0].get("node_ids").is_none());
     task.enabled = false;
@@ -419,6 +430,7 @@ fn slow_reporting_extends_the_offline_window_consistently() {
             private_site: true,
             agent_interval_seconds: 300,
             ip_info_enabled: false,
+            daily_exchange_rates: false,
         })
         .unwrap();
     let db = storage.connection().unwrap();

@@ -847,7 +847,8 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
             "rpcTransportMode": "http",
             "defaultViewMode": "card",
             "earthViewMode": "earth",
-            "visitorInfoCardEnabled": false,
+            "visitorInfoCardEnabled": true,
+            "dailyExchangeRates": settings.daily_exchange_rates,
             "hideAdminEntryWhenLoggedOut": false,
             "offlineNodesLast": true,
             "backgroundEnabled": false,
@@ -874,9 +875,41 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
     }))
 }
 
-async fn me(State(state): State<AppState>, headers: HeaderMap) -> Response {
+async fn me(
+    State(state): State<AppState>,
+    peer: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
+    headers: HeaderMap,
+) -> Response {
+    // Never trust arbitrary forwarding headers. Behind a proxy the public IP
+    // is unavailable unless the transport supplies a public peer address.
+    let ip = peer.and_then(|peer| {
+        if headers.contains_key("forwarded")
+            || headers.contains_key("x-forwarded-for")
+            || headers.contains_key("cf-connecting-ip")
+        {
+            return None;
+        }
+        let ip = peer.0.0.ip();
+        let public = match ip {
+            std::net::IpAddr::V4(v) => {
+                !v.is_private()
+                    && !v.is_loopback()
+                    && !v.is_link_local()
+                    && !v.is_unspecified()
+                    && !v.is_multicast()
+            }
+            std::net::IpAddr::V6(v) => {
+                !v.is_loopback()
+                    && !v.is_unspecified()
+                    && !v.is_unique_local()
+                    && !v.is_unicast_link_local()
+                    && !v.is_multicast()
+            }
+        };
+        public.then(|| ip.to_string())
+    });
     match state.auth.session(&headers).await {
-        Ok(session)=>Json(json!({ "logged_in":session.is_some(), "username":session.map(|s|s.username).unwrap_or_default() })).into_response(),
+        Ok(session)=>Json(json!({ "ip":ip, "logged_in":session.is_some(), "username":session.map(|s|s.username).unwrap_or_default() })).into_response(),
         Err(error)=>error.into_response(),
     }
 }
