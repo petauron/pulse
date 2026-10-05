@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0-alpha.12] - 2026-10-05
+
+### Fixed
+
+- Restore pricing and expiry information on dashboard cards and lists, replacing the redundant online last-report row. Missing expiry dates are no longer labeled expired.
+
 ## [0.1.0-alpha.11] - 2026-10-05
 
 ### Changed
