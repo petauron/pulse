@@ -40,22 +40,26 @@ export function getTrafficUsedPercentage(node: NodeData): number {
 
 export function getPriceTags(node: NodeData, lang: 'zh-CN' | 'en-US'): PriceTagItem[] {
   const tags: PriceTagItem[] = []
-  const days = getDaysUntilExpired(node.expired_at)
-  const status = getExpireStatus(node.expired_at)
   const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
   if (node.price !== 0)
     tags.push({ text: priceText })
-  if (status === 'long_term')
+  if (!node.expired_at || !Number.isFinite(Date.parse(node.expired_at)))
+    return tags
+  const days = getDaysUntilExpired(node.expired_at)
+  const status = getExpireStatus(node.expired_at)
+  if (status === 'expired')
+    tags.push({ text: lang === 'zh-CN' ? '已过期' : 'Expired', highlight: true })
+  else if (status === 'long_term')
     tags.push({ text: lang === 'zh-CN' ? '长期' : 'Long-term' })
   else if (lang === 'zh-CN')
-    tags.push({ text: `${days >= 0 ? '+' : ''}${days}天`, highlight: true })
+    tags.push({ text: `余 ${days} 天`, highlight: true })
   else
-    tags.push({ text: `${days >= 0 ? '+' : ''}${days}d`, highlight: true })
+    tags.push({ text: `${days} days left`, highlight: true })
   return tags
 }
 
 export function getRemainingTimeTagClass(node: NodeData): string {
-  if (node.price === 0)
+  if (!node.expired_at || !Number.isFinite(Date.parse(node.expired_at)))
     return ''
   return getExpireTextClass(node.expired_at)
 }

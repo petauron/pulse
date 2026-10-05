@@ -9,8 +9,9 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
+import { useAppStore } from '@/stores/app'
 import { formatDateTime, getStatus } from '@/utils/helper'
-import { getCustomTags, getDiskPercentage, getMemPercentage, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
+import { getCustomTags, getDiskPercentage, getMemPercentage, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
 
@@ -24,7 +25,9 @@ const { pickSurfaceClass } = useBackgroundSurface()
 const { formatBytes, formatBytesPerSecond, formatUptime } = useNodeFormatters()
 
 const offlineTime = computed(() => formatDateTime(props.node.time))
-const lastReportTime = computed(() => formatDateTime(props.node.time, 'HH:mm:ss'))
+const appStore = useAppStore()
+const priceTags = computed(() => getPriceTags(props.node, appStore.lang))
+const expiredDate = computed(() => props.node.expired_at && Number.isFinite(Date.parse(props.node.expired_at)) ? formatDateTime(props.node.expired_at, 'YYYY-MM-DD') : '')
 
 const cpuStatus = computed(() => getStatus(props.node.cpu ?? 0))
 const memPercentage = computed(() => getMemPercentage(props.node))
@@ -197,13 +200,16 @@ const customTags = computed(() => getCustomTags(props.node))
                 {{ props.node.uptime > 0 ? formatUptime(props.node.uptime) : '' }}
               </span>
             </div>
-            <div class="flex items-center justify-between">
-              <span class="truncate">
-                上报
-              </span>
+            <div v-if="priceTags.length" class="flex items-center justify-between">
+              <span class="truncate">费用</span>
               <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
-              <DataTooltip placement="left" :content="offlineTime" content-class="whitespace-nowrap right-0 mr-0">
-                <span class="truncate">{{ lastReportTime }}</span>
+              <DataTooltip placement="left" :content="expiredDate" content-class="whitespace-nowrap right-0 mr-0">
+                <span class="flex flex-row gap-1 truncate">
+                  <template v-for="(tag, index) in priceTags" :key="index">
+                    <span v-if="index > 0">·</span>
+                    <span :class="tag.highlight ? getRemainingTimeTagClass(props.node) : ''">{{ tag.text }}</span>
+                  </template>
+                </span>
               </DataTooltip>
             </div>
             <NodeProbeSummary :probes="props.node.probes" />

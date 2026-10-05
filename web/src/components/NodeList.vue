@@ -10,8 +10,8 @@ import { ProgressThin } from '@/components/ui/progress-thin'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useAppStore } from '@/stores/app'
-import { getStatus } from '@/utils/helper'
-import { formatOfflineTime, getCustomTags, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
+import { formatDateTime, getStatus } from '@/utils/helper'
+import { formatOfflineTime, getCustomTags, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
 
@@ -219,6 +219,19 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                     <span>
                       {{ formatUptime(node.uptime ?? 0, 'day') }}
                     </span>
+                  </DataTooltip>
+                  <DataTooltip
+                    v-if="getPriceTags(node, appStore.lang).length" placement="left"
+                    :content="node.expired_at && Number.isFinite(Date.parse(node.expired_at)) ? formatDateTime(node.expired_at, 'YYYY-MM-DD') : ''"
+                    content-class="whitespace-nowrap right-0 mr-0"
+                    class="min-w-0"
+                  >
+                    <div class="truncate">
+                      <template v-for="(tag, tagIndex) in getPriceTags(node, appStore.lang)" :key="tagIndex">
+                        <span v-if="node.online || tagIndex > 0" class="mx-1">·</span>
+                        <span :class="tag.highlight ? getRemainingTimeTagClass(node) : ''">{{ tag.text }}</span>
+                      </template>
+                    </div>
                   </DataTooltip>
                 </div>
               </div>
