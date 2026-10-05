@@ -67,7 +67,9 @@ const option = computed<EChartsOption>(() => {
   const start = Date.now() - hours.value * 3600000
   const width = hours.value * 3600000 / 60
   const lossSeries = (id: string) => {
-    const buckets = Array.from({ length: 60 }).fill({ total: 0, failed: 0 })
+    const buckets: { total: number, failed: number }[] = []
+    for (let i = 0; i < 60; i++)
+      buckets.push({ total: 0, failed: 0 })
     for (const record of data.value?.records ?? []) {
       const bucket = Math.floor((record.received_at_unix_ms - start) / width)
       if (record.task_id !== id || bucket < 0 || bucket >= 60)
