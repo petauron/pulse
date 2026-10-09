@@ -393,3 +393,4 @@ jobs:
         run: |
           branch=$(printf '%s' "$RELEASE_PR" | jq -er '.headBranchName')
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+          gh workflow run dependency-review.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
