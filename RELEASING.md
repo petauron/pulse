@@ -30,5 +30,7 @@ Ordinary CI keeps no downloadable artifacts. Release archives and SBOMs are
 staged directly in the GitHub draft release, which downstream jobs read using
 GITHUB_TOKEN; there is no duplicate Actions artifact copy. Docker build record
 upload is disabled. Dependency/build caches remain available for CI speed.
-The manually invoked source-refresh utility retains its explicitly requested
-patch for three days; it is not part of ordinary CI or release publication.
+Manual maintenance workflows follow the same no-artifact policy. The redundant
+source-patch download workflow has been removed; ordinary CI retains its format,
+generated-icon and frontend checks. Coverage reports are the only permitted
+downloadable CI artifact, and require explicit approval and short retention.
