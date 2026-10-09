@@ -25,3 +25,10 @@ or overwrite published releases. A stale run skips preparation when main moved.
 Local workflow edits alone do not activate releases. Push/review the changes,
 then verify the first version PR CI and release run before calling the migration
 complete. No local builds or tests are implied by this configuration change.
+
+Ordinary CI keeps no downloadable artifacts. Release archives and SBOMs are
+staged directly in the GitHub draft release, which downstream jobs read using
+GITHUB_TOKEN; there is no duplicate Actions artifact copy. Docker build record
+upload is disabled. Dependency/build caches remain available for CI speed.
+The manually invoked source-refresh utility retains its explicitly requested
+patch for three days; it is not part of ordinary CI or release publication.

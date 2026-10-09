@@ -14,6 +14,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   prepare:
@@ -106,6 +107,8 @@ jobs:
           test "$gate" -ge 1
 
   binaries:
+    permissions:
+      contents: write
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.release_tag }}
       RELEASE_SHA: ${{ needs.prepare.outputs.release_sha }}
@@ -173,15 +176,15 @@ jobs:
           output-file: release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}.spdx.json
           upload-artifact: false
           upload-release-assets: false
-      - name: Upload staged release
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: release-linux-${{ matrix.arch }}
-          path: |
-            release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}.tar.gz
-            release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}.spdx.json
-          if-no-files-found: error
-          retention-days: 7
+      - name: Stage native assets in the release draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release upload "$RELEASE_TAG" \
+            "release/pulse-$RELEASE_TAG-linux-$ARCH.tar.gz" \
+            "release/pulse-$RELEASE_TAG-linux-$ARCH.spdx.json" --clobber
 
   container:
     env:
@@ -212,10 +215,14 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Download verified native archive
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-linux-${{ matrix.archive_arch }}
-          path: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ matrix.archive_arch }}
+        run: |
+          mkdir -p release
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --dir release \
+            --pattern "pulse-$RELEASE_TAG-linux-$ARCH.tar.gz"
       - name: Prepare image contents
         run: |
           mkdir -p image/${{ matrix.arch }}
@@ -252,11 +259,14 @@ jobs:
           ref: ${{ needs.prepare.outputs.release_sha }}
           persist-credentials: false
       - name: Download release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: release-linux-*
-          path: release
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --dir release \
+            --pattern "pulse-$RELEASE_TAG-linux-*.tar.gz" \
+            --pattern "pulse-$RELEASE_TAG-linux-*.spdx.json"
       - name: Prepare both native image contents
         run: |
           mkdir -p image/amd64 image/arm64
