@@ -42,11 +42,6 @@
     "vue-router": "^5.0.2",
     "vue-sonner": "^2.0.9"
   },
-  "overrides": {
-    "oxfmt": {
-      "tinypool": "2.1.2"
-    }
-  },
   "devDependencies": {
     "@antfu/eslint-config": "^7.4.3",
     "@axe-core/playwright": "^4.13.0",
@@ -71,5 +66,10 @@
     "vite-plugin-static-copy": "^3.2.0",
     "vitest": "^4.0.18",
     "vue-tsc": "^3.2.4"
+  },
+  "overrides": {
+    "oxfmt": {
+      "tinypool": "2.1.2"
+    }
   }
 }
