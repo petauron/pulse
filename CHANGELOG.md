@@ -4,6 +4,20 @@ All notable changes to Pulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) after its first stable release.
 
+## [0.1.0-alpha.15](https://github.com/petauron/pulse/compare/v0.1.0-alpha.14...v0.1.0-alpha.15) (2026-10-11)
+
+
+### Features
+
+* rebrand Pulse as Senulun with backed-up title migration ([#44](https://github.com/petauron/pulse/issues/44)) ([1c6bd20](https://github.com/petauron/pulse/commit/1c6bd20e958ec020df54f14937ce9f79b301872f))
+
+
+### Bug Fixes
+
+* **deps:** use patched tinypool in the formatter toolchain ([#48](https://github.com/petauron/pulse/issues/48)) ([7b85b23](https://github.com/petauron/pulse/commit/7b85b236ec485eee35aa7aeffb508355d2ee2731))
+* **release:** keep workspace license notices version independent ([#47](https://github.com/petauron/pulse/issues/47)) ([363f452](https://github.com/petauron/pulse/commit/363f452dd959f3ad6176b37da69ccd8008aecb06))
+* **release:** support inherited Rust workspace versions ([#45](https://github.com/petauron/pulse/issues/45)) ([76a20c6](https://github.com/petauron/pulse/commit/76a20c6bbcb2f7efabd40c9aeebab81d80783628))
+
 ## [Unreleased]
 
 ## [0.1.0-alpha.13] - 2026-10-05
