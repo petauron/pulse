@@ -23,6 +23,11 @@ When updating the action SHA, review its bundled release-please version and
 update the regression engine pin together. The candidate version's ordinary
 CI still checks the actual generated files with Cargo's `--locked` checks.
 
+The Rust license template keeps workspace package attributions without the
+product version; registry/git dependency versions and all license texts remain
+included. A version-only PR must not stale the third-party notice bundle. CI
+still regenerates and compares the complete bundle with pinned cargo-about.
+
 After a push to main, the release workflow waits (at most 30 minutes) for the
 exact commit's normal CI to succeed. It then creates the release, finishes
 publication, and maintains the next version PR. Review and merge that PR rather

@@ -43,6 +43,13 @@ assert.equal(lock.package.filter((pkg) => names.has(pkg.name)).length, names.siz
 for (const pkg of lock.package.filter((pkg) => names.has(pkg.name))) {
   assert.equal(pkg.version, version);
 }
+// License texts do not change when our own release number advances. Keep the
+// workspace attributions, but do not bake its version into the license bundle.
+const licenses = read('RUST_THIRD_PARTY_LICENSES.html');
+for (const name of names) {
+  assert.ok(licenses.includes(`>${name}</a>`), `Keep a version-independent attribution for ${name}`);
+  assert.ok(!licenses.includes(`>${name} `), `Do not embed the product version for ${name}`);
+}
 
 const options = Object.fromEntries(Object.entries(config).map(([key, value]) => [
   key.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()), value,
