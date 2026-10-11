@@ -109,6 +109,13 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Generate patched tinypool lock entry for review
+        working-directory: web
+        run: |
+          npm view 'oxfmt@~0.35.0' version dependencies --json
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          git diff -- package-lock.json
+          git diff --exit-code -- package-lock.json
       - name: Audit production Web dependencies
         working-directory: web
         run: |
