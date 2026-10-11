@@ -1,4 +1,4 @@
-//! Default-on, opt-out country discovery. Never shares Pulse credentials or metrics.
+//! Default-on, opt-out country discovery. Never shares Senulun credentials or metrics.
 
 use std::time::Duration;
 
@@ -53,7 +53,7 @@ impl RegionResolver {
             .map(|endpoint| {
                 tracing::info!(
                     provider = ?provider,
-                    "automatic country discovery enabled; provider sees public egress IP and Agent version, not Pulse credentials or metrics; set PULSE_GEOIP_PROVIDER=disabled to opt out"
+                    "automatic country discovery enabled; provider sees public egress IP and Agent version, not Senulun credentials or metrics; set PULSE_GEOIP_PROVIDER=disabled to opt out"
                 );
                 tokio::spawn(async move {
                     loop {

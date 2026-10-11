@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let allow_public = env::var("PULSE_ALLOW_PUBLIC_LISTEN").as_deref() == Ok("true");
     if !listen_address.ip().is_loopback() && !allow_public {
         return Err(
-            "non-loopback PULSE_LISTEN requires PULSE_ALLOW_PUBLIC_LISTEN=true; put TLS and access control in front of Pulse"
+            "non-loopback PULSE_LISTEN requires PULSE_ALLOW_PUBLIC_LISTEN=true; put TLS and access control in front of Senulun"
                 .into(),
         );
     }
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let maintenance = tokio::spawn(retention_maintenance(state.clone()));
     let alerts = tokio::spawn(alert_maintenance(state.clone()));
 
-    tracing::info!(address = %listen_address, "Pulse Service listening");
+    tracing::info!(address = %listen_address, "Senulun Service listening");
     let serve_result = axum::serve(
         listener,
         router(state).into_make_service_with_connect_info::<SocketAddr>(),
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = maintenance.await;
     let _ = alerts.await;
     serve_result?;
-    tracing::info!("Pulse Service stopped cleanly");
+    tracing::info!("Senulun Service stopped cleanly");
     Ok(())
 }
 

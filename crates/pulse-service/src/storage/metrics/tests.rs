@@ -222,7 +222,8 @@ fn mismatched_pair_is_rejected() {
 
 #[test]
 fn newer_version_of_either_file_fails_closed() {
-    for (schema, version) in [("main", 5), ("metrics", 2)] {
+    let future_control = super::super::SCHEMA_VERSION + 1;
+    for (schema, version) in [("main", future_control), ("metrics", 2)] {
         let (_directory, control, mut db) = legacy_store();
         split(&mut db).unwrap();
         db.pragma_update(Some(schema), "user_version", version)
@@ -233,7 +234,7 @@ fn newer_version_of_either_file_fails_closed() {
         assert_eq!(
             main.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
                 .unwrap(),
-            if schema == "main" { 5 } else { 4 }
+            if schema == "main" { future_control } else { 4 }
         );
         let metrics = Connection::open(path(&control).unwrap()).unwrap();
         assert_eq!(

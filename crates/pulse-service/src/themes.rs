@@ -149,7 +149,7 @@ impl ThemeStore {
             name: Value::String("Emerald".to_owned()),
             short: "emerald".to_owned(),
             version: env!("CARGO_PKG_VERSION").to_owned(),
-            description: Value::String("Pulse built-in theme".to_owned()),
+            description: Value::String("Senulun built-in theme".to_owned()),
             author: Value::String("Petauron".to_owned()),
             preview: String::new(),
             configuration: Value::Null,

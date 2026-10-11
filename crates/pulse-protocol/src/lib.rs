@@ -1,4 +1,4 @@
-//! Versioned wire types shared by Pulse Service and Pulse Agent.
+//! Versioned wire types shared by Senulun Service and Senulun Agent.
 
 use serde::{Deserialize, Serialize};
 

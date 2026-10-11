@@ -23,7 +23,7 @@ for (const [prefix, heading, license] of requiredCollections) {
 }
 
 if (packageJson.license !== 'Apache-2.0' || packageJson.private !== true)
-  throw new Error('Pulse Web package metadata must identify private Apache-2.0 work')
+  throw new Error('Senulun Web package metadata must identify private Apache-2.0 work')
 
 if (!lucideLicense.includes('ISC License') || !lucideLicense.includes('Cole Bemis'))
   throw new Error('Lucide and Feather license terms are incomplete')

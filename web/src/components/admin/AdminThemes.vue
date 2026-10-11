@@ -110,7 +110,7 @@ onMounted(() => void refresh().catch((cause) => {
         主题管理
       </h2>
       <p class="text-sm text-muted-foreground">
-        Emerald 是内置默认主题。安装的 Komari 主题在 Pulse 域名下运行；仅安装你信任的主题代码。
+        Emerald 是内置默认主题。安装的 Komari 主题在 Senulun 域名下运行；仅安装你信任的主题代码。
       </p>
     </div>
 

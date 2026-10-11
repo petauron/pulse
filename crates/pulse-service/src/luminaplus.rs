@@ -13,7 +13,7 @@ use crate::{
     storage::{Storage, format_timestamp},
 };
 
-/// A stable, JavaScript-safe numeric view of a Pulse probe UUID.
+/// A stable, JavaScript-safe numeric view of a Senulun probe UUID.
 fn numeric_task_id(raw: &str) -> Option<u64> {
     let uuid = Uuid::parse_str(raw).ok()?;
     let bytes = uuid.as_bytes();

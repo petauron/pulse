@@ -2,7 +2,7 @@
 
 ## Our pledge
 
-We pledge to make participation in Pulse a harassment-free experience for everyone, regardless of background, identity, experience, appearance, or ability.
+We pledge to make participation in Senulun a harassment-free experience for everyone, regardless of background, identity, experience, appearance, or ability.
 
 ## Expected behavior
 
@@ -10,7 +10,7 @@ We pledge to make participation in Pulse a harassment-free experience for everyo
 - Critique ideas and evidence, not people.
 - Respect privacy and avoid publishing another person's sensitive information.
 - Accept responsibility, apologize when appropriate, and learn from mistakes.
-- Prioritize the health of the community and the safety of Pulse users.
+- Prioritize the health of the community and the safety of Senulun users.
 
 ## Unacceptable behavior
 

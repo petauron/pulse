@@ -33,7 +33,7 @@ pub(crate) async fn recent(
     let series = state
         .database(move |storage| storage.history(&uuid, 1, MAX_HISTORY_POINTS, now))
         .await?;
-    // Komari's recent endpoint uses nested live snapshots. Pulse's flat metric
+    // Komari's recent endpoint uses nested live snapshots. Senulun's flat metric
     // records are returned here only as a documented best-effort fallback.
     Ok(Json(
         json!({"status":"success","message":"","data":series.records}),

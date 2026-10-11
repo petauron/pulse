@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 mod metrics;
 
-pub(crate) const SCHEMA_VERSION: i64 = 4;
+pub(crate) const SCHEMA_VERSION: i64 = 5;
 const MIN_SNAPSHOT_SPACING_MS: i64 = 950;
 const INGEST_PRUNE_INTERVAL_MS: u64 = 60_000;
 pub(crate) const RETENTION_PRUNE_BATCH_SIZE: usize = 10_000;
@@ -141,7 +141,7 @@ impl Storage {
         }
 
         if version < SCHEMA_VERSION {
-            if existed_with_data {
+            if existed_with_data && version < 4 {
                 let backup_path = backup_path(path)?;
                 online_backup(&connection, &backup_path)?;
                 tracing::info!(path = %backup_path.display(), "database backup created before migration");
@@ -152,6 +152,22 @@ impl Storage {
         }
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         metrics::attach(&mut connection, path, max_database_bytes)?;
+        if version < SCHEMA_VERSION {
+            // Released split stores must be backed up as a matched pair. Older
+            // schemas already have their complete pre-split backup above.
+            if existed_with_data && version >= 4 {
+                let backup_path = metrics::backup(&mut connection, path)?;
+                tracing::info!(path = %backup_path.display(), "database pair backed up before brand migration");
+            }
+            let transaction = connection.transaction()?;
+            transaction.execute(
+                "UPDATE monitoring_settings SET data=json_set(data,'$.site_name','Senulun')
+                 WHERE id=1 AND json_extract(data,'$.site_name')='Pulse'",
+                [],
+            )?;
+            transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+            transaction.commit()?;
+        }
         Ok(Self {
             connection: Mutex::new(connection),
             path: path.to_path_buf(),
@@ -1144,7 +1160,7 @@ fn prepare_database_path(path: &Path) -> Result<(), Box<dyn Error + Send + Sync>
         options.mode(0o600);
     }
     #[cfg(not(unix))]
-    return Err("Pulse Service database storage is supported only on Unix platforms".into());
+    return Err("Senulun Service database storage is supported only on Unix platforms".into());
     #[cfg(unix)]
     {
         options.open(path)?;
@@ -1162,7 +1178,7 @@ fn set_private_directory_permissions(path: &Path) -> Result<(), Box<dyn Error + 
 
 #[cfg(not(unix))]
 fn set_private_directory_permissions(_path: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Service database storage is supported only on Unix platforms".into())
+    Err("Senulun Service database storage is supported only on Unix platforms".into())
 }
 
 #[cfg(unix)]
@@ -1170,7 +1186,7 @@ fn ensure_private_file(path: &Path, description: &str) -> Result<(), Box<dyn Err
     use std::os::unix::fs::PermissionsExt;
     if fs::metadata(path)?.permissions().mode() & 0o077 != 0 {
         return Err(format!(
-            "{description} {} must have mode 0600 or stricter; fix permissions before starting Pulse",
+            "{description} {} must have mode 0600 or stricter; fix permissions before starting Senulun",
             path.display()
         )
         .into());
@@ -1183,7 +1199,7 @@ fn ensure_private_file(
     _path: &Path,
     _description: &str,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Service database storage is supported only on Unix platforms".into())
+    Err("Senulun Service database storage is supported only on Unix platforms".into())
 }
 
 #[cfg(unix)]
@@ -1236,7 +1252,7 @@ fn online_backup(source: &Connection, target: &Path) -> Result<(), Box<dyn Error
 
 #[cfg(not(unix))]
 fn online_backup(_source: &Connection, _target: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Service database backups are supported only on Unix platforms".into())
+    Err("Senulun Service database backups are supported only on Unix platforms".into())
 }
 
 fn containing_directory(path: &Path) -> &Path {

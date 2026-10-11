@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Pulse defect
+description: Report a reproducible Senulun defect
 title: "bug: "
 labels: ["bug"]
 body:
@@ -9,7 +9,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Pulse version or commit
+      label: Senulun version or commit
       placeholder: 0.1.0-alpha.1 or commit SHA
     validations:
       required: true

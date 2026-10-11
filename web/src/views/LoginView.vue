@@ -18,7 +18,7 @@ const busy = ref(false)
 const error = ref('')
 const setup = computed(() => auth.status?.initialized === false)
 const oauthTotp = computed(() => route.query.oauth_totp === 'required' || auth.status?.oauth_totp_required === true)
-const heading = computed(() => setup.value ? '初始化 Pulse' : oauthTotp.value ? '完成两步验证' : '登录 Pulse')
+const heading = computed(() => setup.value ? '初始化 Senulun' : oauthTotp.value ? '完成两步验证' : '登录 Senulun')
 
 async function refresh(): Promise<void> {
   busy.value = true

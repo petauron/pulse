@@ -43,7 +43,7 @@ const showFiling = computed(() => showIcp.value || showPolice.value)
             href="https://github.com/petauron/pulse" target="_blank" rel="noopener noreferrer"
             class="transition-opacity hover:opacity-80"
           >
-            <span class="font-medium text-foreground">Pulse</span>
+            <span class="font-medium text-foreground">Senulun</span>
           </a>
         </DataTooltip>
       </div>

@@ -27,6 +27,8 @@ use uuid::Uuid;
 
 mod assets;
 mod auth;
+#[cfg(test)]
+mod brand_migration_tests;
 mod control;
 #[cfg(test)]
 mod control_tests;
@@ -861,7 +863,7 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
         "allow_cors": false,
         "custom_body": "",
         "custom_head": "",
-        "description": "Pulse 节点运行状态",
+        "description": "Senulun 节点运行状态",
         "disable_password_login": false,
         "oauth_enable": oauth_enabled,
         "oauth_provider": oauth_enabled.then_some("github"),
@@ -1416,7 +1418,7 @@ mod tests {
         }
         let (cookie, csrf) = initialize_admin(&state).await;
         let body =
-            json!({"site_name":"Pulse Test","private_site":false,"agent_interval_seconds":1})
+            json!({"site_name":"Senulun Test","private_site":false,"agent_interval_seconds":1})
                 .to_string();
         let missing = router(state.clone())
             .oneshot(
