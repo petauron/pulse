@@ -18,7 +18,7 @@ data. Both actions require confirmation in the UI.
 Enrollment tokens are single-use, valid for 60–86400 seconds, and shown once.
 Existing Agents retain a distinct long-lived credential. Rotation immediately
 invalidates the old credential and displays the replacement once: securely update
-the Agent credential file and restart that Agent yourself. Pulse does not silently
+the Agent credential file and restart that Agent yourself. Senulun does not silently
 deliver the replacement over the invalidated connection.
 
 ## Traffic and assets
@@ -35,7 +35,7 @@ The current dashboard totals show the current billing period. Historical network
 totals remain raw Agent counters. Resetting traffic clears only current-period
 usage and keeps the raw baseline, so the next sample does not re-add old traffic.
 Limits can count upload, download, sum, minimum or maximum. A zero limit is unlimited.
-Asset billing-cycle and auto-renewal fields are descriptive; Pulse does not perform
+Asset billing-cycle and auto-renewal fields are descriptive; Senulun does not perform
 payments, renew servers, or modify provider subscriptions.
 
 ## Probes
@@ -50,7 +50,7 @@ definition; it never silently widens that definition to all nodes. Deleting a
 notification channel removes it from rules without granting any new destination.
 
 Targets are explicit destinations selected by the administrator. Probes never
-carry Pulse credentials, execute shell text, follow HTTP redirects, or use system
+carry Senulun credentials, execute shell text, follow HTTP redirects, or use system
 HTTP proxy environment settings. Private/local destinations are allowed because
 monitoring internal services is a legitimate administrator action. ICMP requires
 a supported system ping executable and OS permission for the service account.
@@ -72,7 +72,7 @@ alerts cover an absent Agent separately.
 Rules monitor offline state, CPU/memory/disk utilization, traffic-limit percentage
 or days until expiry. A rule has a duration and a notification cooldown. Missing
 or stale utilization cannot prove recovery; pending duration is reset until fresh
-data arrives. Empty channel selection keeps the incident inside Pulse.
+data arrives. Empty channel selection keeps the incident inside Senulun.
 The offline timeout is the larger of `PULSE_OFFLINE_AFTER_SECONDS` and three
 centrally configured report intervals, so a 300-second interval does not falsely
 toggle offline every 90 seconds. Dashboard status and alert evaluation use the

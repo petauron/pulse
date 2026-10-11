@@ -1,6 +1,6 @@
 ## Summary
 
-Describe the user-visible change and why it belongs in Pulse.
+Describe the user-visible change and why it belongs in Senulun.
 
 ## Security and resource impact
 

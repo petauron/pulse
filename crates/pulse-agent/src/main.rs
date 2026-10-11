@@ -264,7 +264,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         credentials.agent_token.clone(),
         config.interval,
     )?;
-    tracing::info!(node_id = %credentials.node_id, "Pulse Agent started");
+    tracing::info!(node_id = %credentials.node_id, "Senulun Agent started");
 
     let mut collector = Collector::new().await;
     let mut ticker = interval(config.interval);
@@ -320,7 +320,7 @@ async fn load_or_enroll(
             return Err("stored credentials use an unsupported protocol version".into());
         }
         if credentials.service_url != config.service_url.as_str() {
-            return Err("stored credentials belong to a different Pulse Service URL".into());
+            return Err("stored credentials belong to a different Senulun Service URL".into());
         }
         return Ok(credentials);
     }
@@ -403,7 +403,7 @@ fn read_secret_file(
 
 #[cfg(not(unix))]
 fn ensure_credentials_are_private(_path: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Agent credential storage is supported only on Unix platforms".into())
+    Err("Senulun Agent credential storage is supported only on Unix platforms".into())
 }
 
 enum SnapshotSendError {
@@ -459,12 +459,12 @@ where
         .content_length()
         .is_some_and(|length| length > limit as u64)
     {
-        return Err("Pulse Service response exceeded its size limit".into());
+        return Err("Senulun Service response exceeded its size limit".into());
     }
     let mut body = Vec::new();
     while let Some(chunk) = response.chunk().await? {
         if body.len().saturating_add(chunk.len()) > limit {
-            return Err("Pulse Service response exceeded its size limit".into());
+            return Err("Senulun Service response exceeded its size limit".into());
         }
         body.extend_from_slice(&chunk);
     }
@@ -612,7 +612,7 @@ fn sync_directory(path: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
 
 #[cfg(not(unix))]
 fn sync_directory(_path: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Agent credential storage is supported only on Unix platforms".into())
+    Err("Senulun Agent credential storage is supported only on Unix platforms".into())
 }
 
 #[cfg(unix)]
@@ -631,7 +631,7 @@ fn ensure_private_directory(path: &Path) -> Result<(), Box<dyn Error + Send + Sy
 
 #[cfg(not(unix))]
 fn ensure_private_directory(_path: &Path) -> Result<(), Box<dyn Error + Send + Sync>> {
-    Err("Pulse Agent credential storage is supported only on Unix platforms".into())
+    Err("Senulun Agent credential storage is supported only on Unix platforms".into())
 }
 
 fn parse_allowlist(name: &str) -> Result<Option<HashSet<String>>, Box<dyn Error + Send + Sync>> {

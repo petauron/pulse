@@ -111,7 +111,7 @@ pub(super) fn configure_limit(db: &Connection, schema: &str, max_bytes: u64) -> 
 pub(super) fn attach(db: &mut Connection, control: &Path, max_bytes: u64) -> Result<()> {
     let metrics = path(control)?;
     let version: i64 = db.query_row("PRAGMA main.user_version", [], |r| r.get(0))?;
-    if version == super::SCHEMA_VERSION && !metrics.is_file() {
+    if version >= 4 && !metrics.is_file() {
         return Err(
             "metrics database is missing; restore the matching database pair, not an empty file"
                 .into(),
@@ -228,7 +228,9 @@ fn split(db: &mut Connection) -> Result<()> {
 
 fn validate_pair(db: &Connection) -> Result<()> {
     let control_version: i64 = db.query_row("PRAGMA main.user_version", [], |r| r.get(0))?;
-    if control_version != super::SCHEMA_VERSION {
+    // Version 4 may only reach here while opening/backing up a store for the
+    // forward-only branding migration. No version-4 runtime is exposed.
+    if !(4..=super::SCHEMA_VERSION).contains(&control_version) {
         return Err("unsupported control schema for paired storage".into());
     }
     let version: i64 = db.query_row("PRAGMA metrics.user_version", [], |r| r.get(0))?;
@@ -324,11 +326,13 @@ pub(super) fn backup(db: &mut Connection, control: &Path) -> Result<PathBuf> {
         [],
         |r| r.get(0),
     )?;
+    let control_version: i64 =
+        reservation.query_row("PRAGMA main.user_version", [], |r| r.get(0))?;
     reservation.rollback()?;
     let manifest = serde_json::json!({
         "format_version": 1, "store_id": identity,
         "control": "pulse.db", "metrics": "pulse.metrics.db",
-        "control_schema": super::SCHEMA_VERSION, "metrics_schema": VERSION,
+        "control_schema": control_version, "metrics_schema": VERSION,
         "created_at_unix_ms": super::unix_time_ms()?
     });
     let manifest_path = temporary.join("manifest.json");

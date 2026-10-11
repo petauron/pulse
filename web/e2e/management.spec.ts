@@ -13,7 +13,7 @@ test('private monitoring, setup lockout, administrator CSRF, and logout enforce 
   await expect(page).toHaveURL(/\/login\?redirect=/)
 
   await login(page, '/admin')
-  await expect(page.getByRole('heading', { name: '管理 Pulse' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '管理 Senulun' })).toBeVisible()
   const screenshot = testInfo.outputPath('authenticated-admin.png')
   await page.screenshot({ path: screenshot, fullPage: true })
   await testInfo.attach('authenticated-admin', { path: screenshot, contentType: 'image/png' })

@@ -426,7 +426,7 @@ fn slow_reporting_extends_the_offline_window_consistently() {
     let (_dir, storage, _node) = fixture();
     storage
         .save_settings(&crate::control::Settings {
-            site_name: "Pulse".into(),
+            site_name: "Senulun".into(),
             private_site: true,
             agent_interval_seconds: 300,
             ip_info_enabled: false,

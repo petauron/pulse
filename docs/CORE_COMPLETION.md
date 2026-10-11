@@ -44,8 +44,8 @@ administrator access during delayed OAuth identity lookup, and rejecting a stale
 OAuth flow after credential revocation.
 
 Vastora changes remain isolated in [PR #405](https://github.com/petauron/vastora/pull/405);
-its unrelated working-tree changes are not part of Pulse's release. The new
+its unrelated working-tree changes are not part of Senulun's release. The new
 initialization/configuration semantics require updated compiled Vastora executor
 contracts and a compatible program release, followed by the independently signed
-catalog with verified Pulse artifact pins. A catalog refresh only advertises
+catalog with verified Senulun artifact pins. A catalog refresh only advertises
 versions; it never upgrades an installed application automatically.

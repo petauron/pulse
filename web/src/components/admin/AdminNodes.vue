@@ -143,7 +143,7 @@ async function execute(): Promise<void> {
           <label class="grid gap-2 text-sm">到期时间（本地时间）<Input v-model="expires" type="datetime-local" /></label>
           <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="draft.auto_renewal" type="checkbox" class="size-4 accent-primary">自动续费标记</label>
           <p class="text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">
-            这些信息用于资产记录和提醒，Pulse 不会执行支付或扣款。
+            这些信息用于资产记录和提醒，Senulun 不会执行支付或扣款。
           </p>
         </fieldset>
         <fieldset :disabled="busy" class="grid gap-4 sm:grid-cols-3">

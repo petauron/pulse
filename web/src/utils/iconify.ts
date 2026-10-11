@@ -1,7 +1,7 @@
 import { addCollection, setCustomIconLoader } from '@iconify/vue'
 import localIconCollections from '@/generated/icons'
 
-/** Register only the icons referenced by Emerald so Pulse works fully offline. */
+/** Register only the icons referenced by Emerald so Senulun works fully offline. */
 export async function setupIconify(): Promise<void> {
   for (const collection of localIconCollections) {
     addCollection(collection as unknown as Parameters<typeof addCollection>[0])

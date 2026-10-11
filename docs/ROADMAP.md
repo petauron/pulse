@@ -1,6 +1,6 @@
 # Roadmap
 
-Pulse is developed as small end-to-end slices. Scope may change before the first stable release.
+Senulun is developed as small end-to-end slices. Scope may change before the first stable release.
 
 ## 1. Secure ingestion
 

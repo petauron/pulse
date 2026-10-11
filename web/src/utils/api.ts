@@ -55,7 +55,7 @@ export class PulseApi {
   constructor(baseUrl = import.meta.env.VITE_API_BASE || DEFAULT_API_BASE) {
     this.baseUrl = new URL(baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`, window.location.origin)
     if (this.baseUrl.origin !== window.location.origin)
-      throw new ApiError('Pulse Web API must be served from the same origin')
+      throw new ApiError('Senulun Web API must be served from the same origin')
   }
 
   private async request<T>(path: string, wrapped: boolean, body?: unknown, signal?: AbortSignal): Promise<T> {

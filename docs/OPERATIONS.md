@@ -1,15 +1,15 @@
 # Production operations
 
-Pulse has two deployment roles: run `pulse-service` on the monitoring host, and run one outbound-only `pulse-agent` on every monitored Linux host. The Agent never accepts inbound commands. Run both under dedicated unprivileged accounts.
+Senulun has two deployment roles: run `pulse-service` on the monitoring host, and run one outbound-only `pulse-agent` on every monitored Linux host. The Agent never accepts inbound commands. Run both under dedicated unprivileged accounts.
 
 ## Trust boundary
 
 Alpha.3 includes administrator authentication and defaults to a private dashboard. Until the first administrator is created, all monitoring read APIs fail closed; afterward, only an administrator can deliberately enable public reads. Administrative mutations always require an authenticated session, exact Origin and CSRF protection. Configure the HTTPS browser origin and private bootstrap token before upgrading; see [AUTH.md](AUTH.md). Older Alpha.2 artifacts require external dashboard authentication. Keep the default loopback bind and an HTTPS reverse proxy; do not expose port 8080 directly to the Internet.
 
-Remote Agents accept only HTTPS Service URLs. Pulse has no analytics, telemetry, runtime CDN, or mandatory third-party account. Metrics go only to the configured Service.
+Remote Agents accept only HTTPS Service URLs. Senulun has no analytics, telemetry, runtime CDN, or mandatory third-party account. Metrics go only to the configured Service.
 
 **Default outbound request:** Agents with no manual region use GeoJS to discover
-their country. GeoJS sees the public egress IP and Agent version, not Pulse tokens
+their country. GeoJS sees the public egress IP and Agent version, not Senulun tokens
 or metrics. To prevent this, set `PULSE_GEOIP_PROVIDER=disabled` in the Agent
 environment **before starting or upgrading**. See [node location](#node-location-and-globe-placement).
 
@@ -85,7 +85,7 @@ outbound HTTPS requests from that Agent to
 There is no automatic fallback to a different third party. The provider sees the
 Agent's public egress IP and Agent user-agent/version, but receives no host name,
 node ID, enrollment token, Agent credential, or metrics. Only the country code is
-retained and sent to Pulse; the IP, city, and other response fields are discarded.
+retained and sent to Senulun; the IP, city, and other response fields are discarded.
 
 Upgrades preserve existing configuration files: a previous explicit `disabled`
 setting stays disabled, and a manual region continues to prevent lookups. An old
@@ -210,7 +210,7 @@ sudo -u pulse env PULSE_DATABASE_PATH=/var/lib/pulse/pulse.db \
   /usr/local/bin/pulse-service backup
 ```
 
-Pulse briefly reserves both database writers, then uses SQLite's online backup API to copy and integrity-check both files. Backup copies are finalized in DELETE journal mode so they can be read independently without WAL sidecars; the running databases remain in WAL mode. The command prints a mode-0700 **directory**, containing mode-0600 `pulse.db`, `pulse.metrics.db` and `manifest.json`. The complete directory is published only after both copies and the manifest are fsynced. Copy that entire directory to encrypted storage and test restoration periodically. Writers can wait or time out during a large backup; schedule it outside peak ingestion periods. Failed backups may leave an unpublished `.partial` directory, which is not a usable backup.
+Senulun briefly reserves both database writers, then uses SQLite's online backup API to copy and integrity-check both files. Backup copies are finalized in DELETE journal mode so they can be read independently without WAL sidecars; the running databases remain in WAL mode. The command prints a mode-0700 **directory**, containing mode-0600 `pulse.db`, `pulse.metrics.db` and `manifest.json`. The complete directory is published only after both copies and the manifest are fsynced. Copy that entire directory to encrypted storage and test restoration periodically. Writers can wait or time out during a large backup; schedule it outside peak ingestion periods. Failed backups may leave an unpublished `.partial` directory, which is not a usable backup.
 
 The schema-3 to schema-4 split first creates and verifies a **single-file pre-upgrade backup** beside the original control database. Stop the old Service before upgrading. Migration uses a rollback-journal transaction across both files, verifies all copied snapshot/probe/traffic fields, and only then removes the old metric tables. Insufficient space, newer schemas, a mismatched pair or an occupied destination fail closed. An interrupted migration is recovered by SQLite's journals; do not delete journal files manually. Allow extra disk space for the pre-upgrade backup, new metrics file, rollback journals and temporary verification work. Dropping old tables frees reusable pages inside the control file but does not automatically shrink it.
 
@@ -221,7 +221,7 @@ Restore only while the Service is stopped:
 3. Set ownership to `pulse:pulse`, directory mode to 0700, and both database modes to 0600.
 4. Start the Service and verify `/healthz`, the dashboard, Agent ingestion, and recent history.
 
-Pulse performs forward-only schema migrations and does not automatically downgrade a database. To roll back across the split, restore the single-file pre-upgrade backup with the previous binary, retaining the split pair separately rather than mixing it with the old file. Never replace a missing metrics database with an empty file.
+Senulun performs forward-only schema migrations and does not automatically downgrade a database. To roll back across the split, restore the single-file pre-upgrade backup with the previous binary, retaining the split pair separately rather than mixing it with the old file. Never replace a missing metrics database with an empty file.
 
 ## Upgrade, rollback, and uninstall
 

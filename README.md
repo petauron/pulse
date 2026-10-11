@@ -1,6 +1,9 @@
-# Pulse
+# Senulun
 
-Pulse is a focused, self-hosted server health monitor built for low and predictable memory usage.
+Formerly Pulse. See [the in-place brand migration](BRANDING.md) before upgrading
+an existing installation. Names change; node identity and history stay intact.
+
+Senulun is a focused, self-hosted server health monitor built for low and predictable memory usage.
 
 The project consists of a Rust Service, a Rust Agent, a shared versioned protocol, and a static Web interface derived directly from Komari Theme Emerald. Its scope intentionally excludes general server administration.
 
@@ -35,7 +38,7 @@ docs/                  Architecture and roadmap
 
 ## Current basic monitoring slice
 
-Pulse now provides an end-to-end monitoring path:
+Senulun now provides an end-to-end monitoring path:
 
 - one-time Agent enrollment and per-node credentials;
 - outbound-only periodic host collection;
@@ -86,7 +89,7 @@ Remote Service URLs must use HTTPS. Plain HTTP is accepted only for loopback dev
 
 Automatic globe placement is enabled by default through GeoJS when
 `PULSE_NODE_REGION` is empty. The provider sees the Agent's public egress IP and
-Agent version, but receives no metrics or Pulse credentials. Set
+Agent version, but receives no metrics or Senulun credentials. Set
 `PULSE_GEOIP_PROVIDER=disabled` to opt out before starting/upgrading the Agent, or
 `ipinfo` to select IPinfo. A manual country code (for example `US`) always takes
 priority and prevents GeoIP requests. Existing explicit `disabled` settings are preserved.

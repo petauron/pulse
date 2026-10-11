@@ -1,17 +1,17 @@
-# Contributing to Pulse
+# Contributing to Senulun
 
-Thank you for helping improve Pulse.
+Thank you for helping improve Senulun.
 
 ## Before opening a change
 
 1. Search existing Issues and Pull Requests.
 2. Use an Issue for behavior changes or architecture proposals before writing a large patch.
-3. Keep changes within Pulse's monitoring-only scope and document their memory impact.
+3. Keep changes within Senulun's monitoring-only scope and document their memory impact.
 4. Report vulnerabilities privately through GitHub Security Advisories rather than a public Issue.
 
 ## Development
 
-Pulse uses the Rust version pinned in `rust-toolchain.toml`.
+Senulun uses the Rust version pinned in `rust-toolchain.toml`.
 
 ```bash
 cargo fmt --all --check

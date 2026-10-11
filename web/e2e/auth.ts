@@ -12,7 +12,7 @@ export async function login(page: Page, destination = '/'): Promise<void> {
   await page.getByLabel('密码', { exact: true }).fill(testPassword)
   await page.getByRole('button', { name: '登录', exact: true }).click()
   await expect(page).toHaveURL(destination)
-  await expect(page).toHaveTitle('Pulse')
+  await expect(page).toHaveTitle('Senulun')
   await expect(page.locator('vite-error-overlay')).toHaveCount(0)
 }
 

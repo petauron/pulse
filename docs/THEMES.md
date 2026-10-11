@@ -1,8 +1,8 @@
 # Theme packages and Komari read compatibility
 
-Pulse keeps Emerald embedded as the default. Administrators can install a trusted
+Senulun keeps Emerald embedded as the default. Administrators can install a trusted
 Komari-style ZIP from Admin → Themes. The ZIP must have the manifest file
-komari-theme.json and dist/index.html at its root. Pulse accepts up to
+komari-theme.json and dist/index.html at its root. Senulun accepts up to
 16 MiB compressed, 32 MiB expanded, 512 entries and 4 MiB per file. Paths,
 links, duplicate names and special files are rejected. A package is not
 activated on installation; activation is a separate administrator action.
@@ -12,7 +12,7 @@ The administrator UI and login page always use the built-in Emerald bundle.
 Installed theme assets serve the public dashboard on the same origin. Theme
 JavaScript is trusted code, not a sandbox: it can make credentialed requests
 as the signed-in browser. Install only audited packages from trusted publishers.
-Pulse does not automatically fetch a theme market or arbitrary remote URLs.
+Senulun does not automatically fetch a theme market or arbitrary remote URLs.
 LuminaPlus is explicitly permitted to use its default HTTPS Frankfurter
 exchange-rate API from the visitor's browser. Other custom HTTPS rate/image/video
 origins are added narrowly to the theme's Content Security Policy after an
@@ -23,9 +23,9 @@ Packages, the active-theme selector and per-theme JSON settings live in
 the persistent directory beside PULSE_DATABASE_PATH, under themes/.
 Back up this directory in addition to the two SQLite files. Restoring only
 the database pair does not restore installed themes. If an active theme is
-missing on startup, Pulse displays the embedded Emerald theme.
+missing on startup, Senulun displays the embedded Emerald theme.
 
-The following administrator routes require a Pulse session, exact Origin and
+The following administrator routes require a Senulun session, exact Origin and
 CSRF token for mutations:
 
 - GET /api/admin/theme/list
@@ -39,7 +39,7 @@ and theme_settings, merging manifest defaults with saved settings.
 
 ## Monitoring API compatibility
 
-Pulse implements a bounded, read-only subset commonly used by Komari themes:
+Senulun implements a bounded, read-only subset commonly used by Komari themes:
 
 - GET /api/public, /api/version, /api/me, /api/nodes
 - GET /api/records/load?uuid=...&hours=...
@@ -52,15 +52,15 @@ Pulse implements a bounded, read-only subset commonly used by Komari themes:
   public:getNodesInformation, public:getPublicSettings,
   public:getVersion, public:getPublicPingTasks
 
-The existing Pulse common:getDashboard remains available for Emerald.
-Pulse enforces its private-site policy on all monitoring reads. Unknown RPC
+The existing Senulun common:getDashboard remains available for Emerald.
+Senulun enforces its private-site policy on all monitoring reads. Unknown RPC
 methods return method-not-found. This is not full Komari API compatibility:
-Pulse intentionally does not implement Komari Agent, remote execution, terminal,
-file management or market APIs. Internal probe IDs remain Pulse UUIDs; the
+Senulun intentionally does not implement Komari Agent, remote execution, terminal,
+file management or market APIs. Internal probe IDs remain Senulun UUIDs; the
 Komari-facing task/history APIs expose stable JavaScript-safe numeric IDs.
 GET /api/admin/ping and /api/admin/client/list supply settings selectors.
-GET /api/admin/plugin/list returns an empty list because Pulse has no Komari
-plugins. /api/recent/:uuid provides bounded flat Pulse
+GET /api/admin/plugin/list returns an empty list because Senulun has no Komari
+plugins. /api/recent/:uuid provides bounded flat Senulun
 records as a fallback, not Komari's nested live snapshot shape. Theme-specific
 features that require the omitted interfaces will need adaptation.
 
@@ -68,25 +68,25 @@ features that require the omitted interfaces will need adaptation.
 
 Install compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip through Admin → Themes,
 then activate it. Installation alone never activates a package. The theme's
-settings page is /?view=theme-manage after signing in. Pulse administration
-remains at /admin, and LuminaPlus's /admin/ping link redirects to Pulse probes.
+settings page is /?view=theme-manage after signing in. Senulun administration
+remains at /admin, and LuminaPlus's /admin/ping link redirects to Senulun probes.
 
-This package preserves the upstream visual implementation. It obtains a Pulse
+This package preserves the upstream visual implementation. It obtains a Senulun
 CSRF token for settings saves and IP information refreshes, and uses the supported HTTP RPC transport instead
 of repeatedly attempting a WebSocket handshake. The adapted source patch,
 build instructions and upstream MIT license are beside the ZIP. The ZIP also
 contains the license. Unmodified upstream packages can display monitoring
-data, but do not include the Pulse settings-save adaptation.
+data, but do not include the Senulun settings-save adaptation.
 The adapter also accepts null optional hardware metrics so valid load and
 traffic samples are retained. Missing optional metrics use LuminaPlus's own
-zero fallback; the native Pulse APIs continue to preserve null values.
+zero fallback; the native Senulun APIs continue to preserve null values.
 
 Dashboard, node details/history, Ping binding, asset calculation, responsive
-views and appearance/settings use Pulse's actual monitoring data. The optional
+views and appearance/settings use Senulun's actual monitoring data. The optional
 built-in IP information adapter described below supports LuminaPlus without a
-Komari plugin runtime. Pulse does not fabricate this information. Newer public metric RPC methods
+Komari plugin runtime. Senulun does not fabricate this information. Newer public metric RPC methods
 are not implemented: LuminaPlus uses its upstream records fallback, subject
-to Pulse's retention and history limits. This is theme compatibility, not
+to Senulun's retention and history limits. This is theme compatibility, not
 general Komari administrative API compatibility.
 
 ## Optional built-in IP information
@@ -110,7 +110,7 @@ The built-in adapter implements:
 - `POST /api/admin/ip-info/v1/refresh` with `uuid`, `ip`, and `include_latency`
 
 Despite the compatibility `/public/` path, **all endpoints require an administrator**.
-Refresh additionally requires same-origin and Pulse CSRF protection. Anonymous
+Refresh additionally requires same-origin and Senulun CSRF protection. Anonymous
 requests are rejected before provider access, including on public sites.
 Only literal, registered public IPs of non-revoked nodes can be queried; local,
 private, multicast, reserved, documentation, mapped IPv4 and transition IPv6
@@ -121,10 +121,10 @@ HK, MO and TW are not excluded. Node/address binding is checked even on cache hi
 **Privacy:** enabling this feature permits the Service to send the selected
 registered IP to `https://ip.net.coffee` for location, ASN/network ownership,
 native/broadcast/anycast classification, and six-location global latency.
-Pulse credentials and host metrics are never sent. Requests originate from the
+Senulun credentials and host metrics are never sent. Requests originate from the
 Service, not the browser. This implementation deliberately has no automatic
 fallback to additional third parties. Third-party accuracy, availability and
-terms are outside Pulse's control. Unknown fields remain null; no risk scores,
+terms are outside Senulun's control. Unknown fields remain null; no risk scores,
 media-unlock results or AI-unlock results are invented.
 
 Bounds per Service process: one serialized provider lane; 256 cached records;
@@ -140,6 +140,6 @@ does not retroactively cancel an already-dispatched provider request.
 
 Protocol reference: [Komari-IP-Info](https://github.com/shanyang242/Komari-IP-Info).
 This is a Rust implementation of the theme-facing API, not a Komari plugin
-installer. The updated Pulse theme ZIP is required for CSRF-protected refresh.
+installer. The updated Senulun theme ZIP is required for CSRF-protected refresh.
 For an already-installed package, export its settings before replacing it;
 the installer does not silently overwrite an installed theme.

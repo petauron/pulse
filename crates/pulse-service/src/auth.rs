@@ -299,7 +299,7 @@ impl AuthState {
                     .connect_timeout(Duration::from_secs(5))
                     .redirect(reqwest::redirect::Policy::none())
                     .pool_max_idle_per_host(1)
-                    .user_agent("Pulse-Service")
+                    .user_agent("Senulun-Service")
                     .build()?,
                 dummy_password_hash,
             }),
@@ -1271,7 +1271,7 @@ fn totp(secret: &[u8], username: &str) -> Result<Totp, AuthError> {
     Builder::new()
         .with_secret(secret.to_vec())
         .with_account_name(username)
-        .with_issuer(Some("Pulse"))
+        .with_issuer(Some("Senulun"))
         .build()
         .map_err(|_| AuthError::internal())
 }

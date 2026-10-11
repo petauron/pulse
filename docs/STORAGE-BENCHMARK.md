@@ -17,7 +17,7 @@ The measure is the Service process's `ri_diskio_byteswritten` delta from macOS `
 | 1 second | 358 | 13,262,848 | 11,866,112 | 12.6484 | 11.3164 | 10.53% |
 | 3 seconds | 120 | 4,096,000 | 3,596,288 | 3.9063 | 3.4297 | 12.20% |
 
-This is one local before/after run, not a statistical bound or a prediction for Linux production hosts. In particular, these numbers are not directly comparable to the earlier Linux Agent/Komari benchmark. No claim of Komari-like minute-aggregation write volume is made: every accepted raw Pulse sample is still persisted immediately.
+This is one local before/after run, not a statistical bound or a prediction for Linux production hosts. In particular, these numbers are not directly comparable to the earlier Linux Agent/Komari benchmark. No claim of Komari-like minute-aggregation write volume is made: every accepted raw Senulun sample is still persisted immediately.
 
 Measurement binary SHA-256 values:
 

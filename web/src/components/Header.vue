@@ -52,7 +52,7 @@ function handleButtonClick(action: string) {
   }
 }
 
-const sitename = computed(() => appStore.publicSettings?.sitename || 'Pulse')
+const sitename = computed(() => appStore.publicSettings?.sitename || 'Senulun')
 </script>
 
 <template>
@@ -62,7 +62,7 @@ const sitename = computed(() => appStore.publicSettings?.sitename || 'Pulse')
   >
     <div class="px-4 flex-between h-14 max-w-[1280px] mx-auto">
       <div
-        role="link" tabindex="0" aria-label="返回 Pulse 首页"
+        role="link" tabindex="0" aria-label="返回 Senulun 首页"
         class="flex items-center gap-3 cursor-pointer"
         @click="router.push('/')" @keydown.enter.prevent="router.push('/')"
       >

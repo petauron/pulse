@@ -42,7 +42,7 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            site_name: "Pulse".into(),
+            site_name: "Senulun".into(),
             private_site: true,
             agent_interval_seconds: 3,
             ip_info_enabled: false,
