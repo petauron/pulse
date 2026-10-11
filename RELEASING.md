@@ -77,7 +77,9 @@ additional `release-source` dependency identifies the immutable product source,
 which can differ during recovery. Recovery records `release_tag` in dispatch
 inputs. The workflow path, trigger and run attempt identify the builder
 invocation, following the GitHub Actions workflow schema. It makes no additional
-SLSA level claim. Checksums and SBOM generation remain mandatory. CI exercises
+SLSA level claim. The publishing job binds the invocation to its actual run
+attempt, including failed-job retries that reuse preparation outputs.
+Checksums and SBOM generation remain mandatory. CI exercises
 draft rejection, immutable identity, provenance and workflow safeguards without
 GitHub writes or publication.
 

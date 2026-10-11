@@ -76,8 +76,12 @@ test('release workflow retains draft permissions, identity gates and one publica
   }
   for (const step of workflow.jobs.publish.steps.filter((step) => step.uses?.startsWith('actions/attest@'))) {
     assert.equal(step.with['predicate-type'], 'https://slsa.dev/provenance/v1');
-    assert.equal(step.with.predicate, '${{ needs.prepare.outputs.provenance }}');
+    assert.equal(step.with.predicate, '${{ steps.provenance.outputs.predicate }}');
   }
+  const binding = workflow.jobs.publish.steps.find((step) => step.id === 'provenance');
+  assert.equal(binding.env.SOURCE_PROVENANCE, '${{ needs.prepare.outputs.provenance }}');
+  assert.ok(binding.run.includes('$GITHUB_RUN_ATTEMPT'));
+  assert.ok(binding.run.includes('.runDetails.metadata.invocationId = $invocation'));
   assert.ok(workflow.jobs['release-pr'].if.includes("pending_draft != 'true'"));
   assert.ok(!/actions\/(?:upload|download)-artifact@/.test(text));
   assert.equal(workflow.env.DOCKER_BUILD_RECORD_UPLOAD, 'false');
