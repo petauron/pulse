@@ -17,6 +17,7 @@ const env = {
   GITHUB_REPOSITORY: 'example/monitor', GITHUB_SERVER_URL: 'https://github.com',
   GITHUB_WORKFLOW_REF: 'example/monitor/.github/workflows/release.yml@refs/heads/main',
   RUNNER_ENVIRONMENT: 'github-hosted', GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '2',
+  GITHUB_REPOSITORY_ID: '456', GITHUB_REPOSITORY_OWNER_ID: '789',
 };
 
 test('resume only the original immutable draft source', () => {
@@ -36,10 +37,17 @@ test('reject published, mutable, mismatched or non-bot releases', () => {
 
 test('provenance distinguishes product source from recovery workflow', () => {
   const proof = provenanceFor({ tag, sha: sourceSha }, env);
-  assert.equal(proof.buildDefinition.externalParameters.release.source, sourceSha);
-  assert.deepEqual(proof.buildDefinition.resolvedDependencies.map((item) => item.digest.gitCommit), [sourceSha, workflowSha]);
+  assert.equal(proof.buildDefinition.buildType, 'https://actions.github.io/buildtypes/workflow/v1');
+  assert.deepEqual(proof.buildDefinition.externalParameters.inputs, { release_tag: tag });
+  assert.deepEqual(Object.keys(proof.buildDefinition.externalParameters).sort(), ['inputs', 'workflow']);
+  assert.deepEqual(proof.buildDefinition.resolvedDependencies.map((item) => item.digest.gitCommit), [workflowSha, sourceSha]);
+  assert.equal(proof.buildDefinition.resolvedDependencies[0].uri, 'git+https://github.com/example/monitor@refs/heads/main');
+  assert.equal(proof.buildDefinition.resolvedDependencies[1].name, 'release-source');
+  assert.equal(proof.runDetails.builder.id, 'https://github.com/example/monitor/.github/workflows/release.yml@refs/heads/main');
   assert.match(proof.runDetails.metadata.invocationId, /\/runs\/123\/attempts\/2$/);
-  assert.equal(provenanceFor({ tag, sha: workflowSha }, { ...env, GITHUB_EVENT_NAME: 'push' }).buildDefinition.externalParameters.release.source, workflowSha);
+  const push = provenanceFor({ tag, sha: workflowSha }, { ...env, GITHUB_EVENT_NAME: 'push' });
+  assert.deepEqual(Object.keys(push.buildDefinition.externalParameters), ['workflow']);
+  assert.equal(push.buildDefinition.resolvedDependencies[1].digest.gitCommit, workflowSha);
 });
 
 test('provenance fails closed outside the checked main workflow', () => {
