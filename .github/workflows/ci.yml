@@ -113,6 +113,7 @@ jobs:
         working-directory: web
         run: |
           npm ci
+          npm ls tinypool --all
           npm audit --omit=dev --audit-level=high
       - name: Audit and constrain Rust dependencies
         env:
