@@ -5,6 +5,24 @@ Like Vastora, it uses only the built-in GITHUB_TOKEN; no extra release secret or
 personal token is needed. Repository settings must allow Actions to create pull
 requests. Existing branch protection and required CI remain mandatory.
 
+Senulun is one release unit: its virtual Rust workspace uses
+`workspace.package.version`, and all three crates inherit that version. The
+pinned action bundles release-please 17.6.0, whose native Rust strategy expects
+literal `package.version` values and cannot update this layout. Use the native
+`simple` strategy with `version.txt` and native TOML/JSON extra-file updaters to
+keep Cargo.toml, the three workspace Cargo.lock entries, and Web package files
+in sync with the generated manifest. Do not replace inherited crate versions
+with independently maintained versions. Cargo.lock selectors use `name.value`
+because this updater queries tagged TOML values; third-party crates are excluded.
+
+CI runs `scripts/check-release-please.mjs` against that pinned engine. It builds
+a candidate version PR in memory using the repository configuration and checks
+all version updates, inherited crate manifests, and unchanged dependencies.
+It has no GitHub client or write credentials and does not create a PR or tag.
+When updating the action SHA, review its bundled release-please version and
+update the regression engine pin together. The candidate version's ordinary
+CI still checks the actual generated files with Cargo's `--locked` checks.
+
 After a push to main, the release workflow waits (at most 30 minutes) for the
 exact commit's normal CI to succeed. It then creates the release, finishes
 publication, and maintains the next version PR. Review and merge that PR rather

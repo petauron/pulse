@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
+      "version-file": "version.txt",
       "package-name": "pulse",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
@@ -12,6 +13,16 @@
       "prerelease-type": "alpha",
       "versioning": "prerelease",
       "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value == 'pulse-agent' || @.name.value == 'pulse-protocol' || @.name.value == 'pulse-service')].version"
+        },
         {
           "type": "json",
           "path": "web/package.json",

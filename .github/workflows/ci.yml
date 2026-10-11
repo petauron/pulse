@@ -38,6 +38,13 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install Web dependencies
         run: npm ci
+      - name: Verify Release Please workspace version updates
+        working-directory: .
+        env:
+          RELEASE_PLEASE_TEST_ROOT: ${{ runner.temp }}/release-please-regression
+        run: |
+          npm install --prefix "$RELEASE_PLEASE_TEST_ROOT" --ignore-scripts --no-audit --no-fund --package-lock=false release-please@17.6.0
+          node scripts/check-release-please.mjs
       - name: Lint Web source
         run: npm run lint
       - name: Test Web data handling

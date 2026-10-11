@@ -97,6 +97,7 @@ jobs:
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           release_version=${RELEASE_TAG#v}
           test "$(jq -r '."."' .release-please-manifest.json)" = "$release_version"
+          test "$(cat version.txt)" = "$release_version"
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           cargo_version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '[.packages[].version] | unique | if length == 1 then .[0] else empty end')
           web_version=$(jq -r .version web/package.json)
