@@ -38,11 +38,46 @@ PR workflows can require manual approval. The release workflow explicitly
 dispatches ci.yml on the version PR branch to run the existing checks.
 
 Publication runs in the same release.yml, gated by release_created, using the
-Release Please output tag and immutable source SHA. The source must equal the
-workflow commit. Builds and provenance checks remain required; only successful
-publication makes the draft public. Tags are not a second release entry point.
-On a build failure, use GitHub's Re-run failed jobs for that run; do not move tags
-or overwrite published releases. A stale run skips preparation when main moved.
+Release Please output tag and immutable source SHA. For new releases the source
+must equal the workflow commit. Builds and provenance checks remain required;
+only successful publication makes the draft public. Tags are not a second
+release entry point. A stale push skips preparation when main moved.
+
+## Recover an unpublished draft
+
+On a transient build failure, use GitHub's Re-run failed jobs for that run. If
+the workflow itself needs a fix, merge the fix through ordinary PR checks first.
+Then dispatch the existing Release workflow **on main**, with `release_tag` set
+to the exact unfinished tag, for example:
+
+```sh
+gh workflow run release.yml --ref main -f release_tag=v0.1.0-alpha.15
+```
+
+Recovery does not invoke Release Please to recreate the release. It requires an
+existing bot-created draft whose target is a full commit SHA. It preserves that
+source, checks main ancestry, any existing tag, successful source CI and all
+version files, then runs the same binary, container and publication jobs. The
+workflow revision must itself be current checked main. Published releases and
+mutable targets are rejected. Never delete/recreate the draft, move its tag or
+overwrite a published release to work around a failure.
+
+Push-triggered preparation preserves pending drafts and does not create the next
+version PR while one remains unfinished. Draft readers need job-scoped
+`contents: write`: GitHub hides drafts from tokens without push-level access,
+even when the job only checks metadata or downloads assets. Ordinary CI stays
+read-only. No personal token, new secret or protection bypass is needed.
+
+## Release provenance
+
+The pinned `actions/attest` action signs an explicit SLSA v1 predicate for both
+archives and containers. This release build type records the release tag/source
+SHA separately from the checked main workflow SHA, which can differ during
+recovery. Both immutable revisions are resolved dependencies; the workflow path,
+trigger and run attempt identify the builder invocation. It makes no additional
+SLSA level claim. Checksums and SBOM generation remain mandatory. CI exercises
+draft rejection, immutable identity, provenance and workflow safeguards without
+GitHub writes or publication.
 
 
 Local workflow edits alone do not activate releases. Push/review the changes,

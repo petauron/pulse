@@ -38,6 +38,9 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Install Web dependencies
         run: npm ci
+      - name: Verify release recovery safeguards
+        working-directory: .
+        run: node --test scripts/release-source.test.mjs
       - name: Verify Release Please workspace version updates
         working-directory: .
         env:

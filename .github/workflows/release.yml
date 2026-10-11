@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing unpublished Release Please draft to recover
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -19,6 +25,7 @@ env:
 jobs:
   prepare:
     name: Prepare release from checked main
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     permissions:
@@ -27,9 +34,11 @@ jobs:
       issues: write
       pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      release_sha: ${{ steps.release.outputs.sha }}
-      release_tag: ${{ steps.release.outputs.tag_name }}
+      release_created: ${{ steps.source.outputs.release_created }}
+      release_sha: ${{ steps.source.outputs.release_sha }}
+      release_tag: ${{ steps.source.outputs.release_tag }}
+      provenance: ${{ steps.source.outputs.provenance }}
+      pending_draft: ${{ steps.pending.outputs.exists }}
     steps:
       - name: Wait for the exact source CI
         env:
@@ -55,20 +64,44 @@ jobs:
           current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
           if [ "$current" = "$GITHUB_SHA" ]; then
             echo "matches=true" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "Recovery must run from current protected main" >&2
+            exit 1
+          fi
+      - name: Check out checked release tooling
+        if: steps.current.outputs.matches == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Preserve unfinished release drafts
+        if: github.event_name == 'push' && steps.current.outputs.matches == 'true'
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pending=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.draft) | .tag_name')
+          if [ -n "$pending" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "An unfinished draft exists; use the documented recovery dispatch." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Create release without updating the next version PR
-        if: steps.current.outputs.matches == 'true'
+        if: github.event_name == 'push' && steps.current.outputs.matches == 'true' && steps.pending.outputs.exists != 'true'
         id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         with:
           token: ${{ github.token }}
           target-branch: main
           skip-github-pull-request: true
-      - name: Require the release to use this run's checked source
-        if: steps.release.outputs.release_created == 'true'
+      - name: Resolve and validate the immutable release source
+        if: steps.current.outputs.matches == 'true' && (github.event_name == 'workflow_dispatch' || steps.release.outputs.release_created == 'true')
+        id: source
         env:
-          RELEASE_SHA: ${{ steps.release.outputs.sha }}
-        run: test "$RELEASE_SHA" = "$GITHUB_SHA"
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag || steps.release.outputs.tag_name }}
+          EXPECTED_RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: node scripts/release-source.mjs
 
   verify-source:
     env:
@@ -80,8 +113,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: read
+      # GitHub hides draft releases from tokens without push-level access.
+      contents: write
       checks: read
+      actions: read
     steps:
       - name: Check out release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -99,6 +134,10 @@ jobs:
           test "$(jq -r '."."' .release-please-manifest.json)" = "$release_version"
           test "$(cat version.txt)" = "$release_version"
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          test "$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)" = "$RELEASE_SHA"
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_SHA"
+          fi
           cargo_version=$(cargo metadata --locked --no-deps --format-version 1 | jq -r '[.packages[].version] | unique | if length == 1 then .[0] else empty end')
           web_version=$(jq -r .version web/package.json)
           test "$cargo_version" = "$release_version"
@@ -106,6 +145,9 @@ jobs:
           gate=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/check-runs?per_page=100" \
             --jq '[.check_runs[] | select(.name == "rust" and .conclusion == "success")] | length')
           test "$gate" -ge 1
+          source_ci=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$RELEASE_SHA&per_page=100" \
+            --jq '.workflow_runs | sort_by(.run_number) | last | .conclusion')
+          test "$source_ci" = success
 
   binaries:
     permissions:
@@ -206,7 +248,8 @@ jobs:
             archive_arch: aarch64
             runner: ubuntu-24.04-arm
     permissions:
-      contents: read
+      # Downloading staged assets also requires access to the release draft.
+      contents: write
     steps:
       - name: Check out release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -284,6 +327,8 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: release/SHA256SUMS
+          predicate-type: https://slsa.dev/provenance/v1
+          predicate: ${{ needs.prepare.outputs.provenance }}
       - name: Upload assets to the Release Please draft
         id: draft
         env:
@@ -326,6 +371,8 @@ jobs:
           subject-name: ghcr.io/${{ github.repository }}
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
+          predicate-type: https://slsa.dev/provenance/v1
+          predicate: ${{ needs.prepare.outputs.provenance }}
       - name: Publish the completed release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -368,7 +415,7 @@ jobs:
   release-pr:
     name: Prepare next version PR and start its CI
     needs: [prepare, publish]
-    if: always() && needs.prepare.result == 'success' && (needs.publish.result == 'success' || (needs.prepare.outputs.release_created != 'true' && needs.publish.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.pending_draft != 'true' && (needs.publish.result == 'success' || (needs.prepare.outputs.release_created != 'true' && needs.publish.result == 'skipped'))
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
