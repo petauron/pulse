@@ -323,12 +323,21 @@ jobs:
       - name: Create checksums
         working-directory: release
         run: sha256sum pulse-*.tar.gz pulse-*.spdx.json LuminaPlus-v1.3.5-pulse.zip LICENSE.LuminaPlus > SHA256SUMS
+      - name: Bind provenance to this publication attempt
+        id: provenance
+        env:
+          SOURCE_PROVENANCE: ${{ needs.prepare.outputs.provenance }}
+        run: |
+          invocation="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          predicate=$(printf '%s' "$SOURCE_PROVENANCE" | jq -c --arg invocation "$invocation" \
+            '.runDetails.metadata.invocationId = $invocation')
+          echo "predicate=$predicate" >> "$GITHUB_OUTPUT"
       - name: Attest binary provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: release/SHA256SUMS
           predicate-type: https://slsa.dev/provenance/v1
-          predicate: ${{ needs.prepare.outputs.provenance }}
+          predicate: ${{ steps.provenance.outputs.predicate }}
       - name: Upload assets to the Release Please draft
         id: draft
         env:
@@ -372,7 +381,7 @@ jobs:
           subject-digest: ${{ steps.image.outputs.digest }}
           push-to-registry: true
           predicate-type: https://slsa.dev/provenance/v1
-          predicate: ${{ needs.prepare.outputs.provenance }}
+          predicate: ${{ steps.provenance.outputs.predicate }}
       - name: Publish the completed release
         env:
           GH_TOKEN: ${{ github.token }}

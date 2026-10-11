@@ -33,24 +33,32 @@ export function provenanceFor(release, env) {
   assert.equal(env.RUNNER_ENVIRONMENT, 'github-hosted');
   assert.match(env.GITHUB_RUN_ID, /^\d+$/);
   assert.match(env.GITHUB_RUN_ATTEMPT, /^\d+$/);
+  assert.match(env.GITHUB_REPOSITORY_ID, /^\d+$/);
+  assert.match(env.GITHUB_REPOSITORY_OWNER_ID, /^\d+$/);
   const repository = `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}`;
   const workflowPath = '.github/workflows/release.yml';
   assert.equal(env.GITHUB_WORKFLOW_REF, `${env.GITHUB_REPOSITORY}/${workflowPath}@refs/heads/main`);
   return {
     buildDefinition: {
-      buildType: `${repository}/blob/main/RELEASING.md#release-provenance`,
+      // GitHub's attestation API accepts this standard workflow build type.
+      buildType: 'https://actions.github.io/buildtypes/workflow/v1',
       externalParameters: {
         workflow: { repository, path: workflowPath, ref: env.GITHUB_REF },
-        release: { tag: release.tag, source: release.sha },
+        ...(env.GITHUB_EVENT_NAME === 'workflow_dispatch' ? { inputs: { release_tag: release.tag } } : {}),
       },
-      internalParameters: { github: { event_name: env.GITHUB_EVENT_NAME } },
+      internalParameters: { github: {
+        event_name: env.GITHUB_EVENT_NAME,
+        repository_id: env.GITHUB_REPOSITORY_ID,
+        repository_owner_id: env.GITHUB_REPOSITORY_OWNER_ID,
+        runner_environment: env.RUNNER_ENVIRONMENT,
+      } },
       resolvedDependencies: [
-        { uri: `git+${repository}@${release.sha}`, digest: { gitCommit: release.sha } },
-        { uri: `git+${repository}@${env.GITHUB_SHA}`, digest: { gitCommit: env.GITHUB_SHA } },
+        { uri: `git+${repository}@${env.GITHUB_REF}`, digest: { gitCommit: env.GITHUB_SHA } },
+        { name: 'release-source', uri: `git+${repository}@${release.sha}`, digest: { gitCommit: release.sha } },
       ],
     },
     runDetails: {
-      builder: { id: 'https://github.com/actions/runner/github-hosted' },
+      builder: { id: `${env.GITHUB_SERVER_URL}/${env.GITHUB_WORKFLOW_REF}` },
       metadata: { invocationId: `${repository}/actions/runs/${env.GITHUB_RUN_ID}/attempts/${env.GITHUB_RUN_ATTEMPT}` },
     },
   };

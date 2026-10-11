@@ -70,12 +70,16 @@ read-only. No personal token, new secret or protection bypass is needed.
 
 ## Release provenance
 
-The pinned `actions/attest` action signs an explicit SLSA v1 predicate for both
-archives and containers. This release build type records the release tag/source
-SHA separately from the checked main workflow SHA, which can differ during
-recovery. Both immutable revisions are resolved dependencies; the workflow path,
-trigger and run attempt identify the builder invocation. It makes no additional
-SLSA level claim. Checksums and SBOM generation remain mandatory. CI exercises
+The pinned `actions/attest` action signs a SLSA v1 predicate using the standard
+`https://actions.github.io/buildtypes/workflow/v1` build type accepted by GitHub.
+The workflow dependency resolves `refs/heads/main` to its checked SHA; an
+additional `release-source` dependency identifies the immutable product source,
+which can differ during recovery. Recovery records `release_tag` in dispatch
+inputs. The workflow path, trigger and run attempt identify the builder
+invocation, following the GitHub Actions workflow schema. It makes no additional
+SLSA level claim. The publishing job binds the invocation to its actual run
+attempt, including failed-job retries that reuse preparation outputs.
+Checksums and SBOM generation remain mandatory. CI exercises
 draft rejection, immutable identity, provenance and workflow safeguards without
 GitHub writes or publication.
 
