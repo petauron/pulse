@@ -4,6 +4,15 @@ All notable changes to Pulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) after its first stable release.
 
+## [0.1.0-alpha.16](https://github.com/petauron/pulse/compare/v0.1.0-alpha.15...v0.1.0-alpha.16) (2026-10-12)
+
+
+### Bug Fixes
+
+* **release:** recover immutable drafts with scoped permissions ([#49](https://github.com/petauron/pulse/issues/49)) ([24f944a](https://github.com/petauron/pulse/commit/24f944a598059d3741c89342e7d1b906a5abaac8))
+* **release:** use supported GitHub workflow provenance ([#50](https://github.com/petauron/pulse/issues/50)) ([f0491a4](https://github.com/petauron/pulse/commit/f0491a4a88d2fb69f497ca05da8994d686c7df15))
+* **web:** remove approximation prefix from remaining value ([fa09883](https://github.com/petauron/pulse/commit/fa0988390899d3991dceb2e2e8f6bb758da0da3b))
+
 ## [0.1.0-alpha.15](https://github.com/petauron/pulse/compare/v0.1.0-alpha.14...v0.1.0-alpha.15) (2026-10-11)
 
 
