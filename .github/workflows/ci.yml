@@ -43,7 +43,7 @@ jobs:
         run: npm ci
       - name: Verify release recovery safeguards
         working-directory: .
-        run: node --test scripts/release-source.test.mjs
+        run: node --test scripts/release-source.test.mjs scripts/version-pr-checks.test.mjs
       - name: Verify Release Please workspace version updates
         working-directory: .
         env:
@@ -251,7 +251,9 @@ jobs:
   # while the gate now includes Web, Rust, security, browser, and container jobs.
   rust:
     needs: [web, rust-checks, security, e2e, container]
-    if: always()
+    # A cancelled duplicate must not leave a failed required check on its PR.
+    # Ordinary failed/skipped dependencies still execute the fail-closed gate.
+    if: always() && !cancelled()
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:

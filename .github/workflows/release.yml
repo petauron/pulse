@@ -440,6 +440,11 @@ jobs:
       pull-requests: write
       actions: write
     steps:
+      - name: Check out checked workflow source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - name: Maintain version PR without publishing
         id: release_pr
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
@@ -448,13 +453,10 @@ jobs:
           target-branch: main
           skip-github-release: true
       # GITHUB_TOKEN-created PR workflows can require manual approval.
-      # Explicit dispatch starts the existing CI on the version PR branch.
-      - name: Dispatch CI for the version PR
+      # Preserve any real PR checks; dispatch only missing/approval-blocked runs.
+      - name: Start missing checks for the version PR
         if: steps.release_pr.outputs.prs_created == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_PR: ${{ steps.release_pr.outputs.pr }}
-        run: |
-          branch=$(printf '%s' "$RELEASE_PR" | jq -er '.headBranchName')
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
-          gh workflow run dependency-review.yml --repo "$GITHUB_REPOSITORY" --ref "$branch"
+        run: node scripts/version-pr-checks.mjs

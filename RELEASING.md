@@ -36,10 +36,17 @@ than bumping versions or creating tags manually.
 GITHUB_TOKEN-created tags do not start another release workflow, and generated
 PR workflows can require manual approval. The release workflow explicitly
 dispatches ci.yml on the version PR branch to run the existing checks.
+Before dispatching each workflow, it reads the exact PR head and reuses an active
+or completed native/dispatched run. It does not automatically rerun real failures;
+approval-blocked, cancelled or absent runs still require dispatch. This avoids
+cancelling native PR checks with a redundant dispatch.
 CI and dependency review use the same repository/branch concurrency identity for
 PR and dispatch events, so overlapping runs cancel the older duplicate. A later
 dispatch after completion is still a deliberate rerun. CI checks out the exact
 PR head (or dispatch/push SHA); both event paths execute all existing checks.
+The aggregate gate does not run in cancelled workflows, but still fails on any
+failed or skipped dependency in an ordinary run. Release preparation requires a
+complete successful CI workflow; cancellation or a skipped gate cannot publish.
 
 Publication runs in the same release.yml, gated by release_created, using the
 Release Please output tag and immutable source SHA. For new releases the source
