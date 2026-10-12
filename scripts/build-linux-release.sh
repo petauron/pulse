@@ -9,11 +9,18 @@ set -eu
 repository=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 builder=rust:1.98-bookworm@sha256:82150a52ec202c1b14d7817e14516c392bb7f5cfebd88f1ed531cb37ebd39922
 runtime=debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171
+cargo_home=${CARGO_HOME:-$HOME/.cargo}
+mkdir -p "$cargo_home"
 
+# Share the runner's restored registry with Docker and leave cache files readable
+# by the runner. Keep absolute paths stable for Cargo dependency fingerprints.
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   --env PULSE_BUILD_GIT_HASH --env PULSE_BUILD_TARGET \
+  --env "CARGO_HOME=$cargo_home" \
   --env CARGO_INCREMENTAL=0 --env RUSTUP_TOOLCHAIN=1.98.0 \
-  --mount "type=bind,src=$repository,dst=/src" --workdir /src \
+  --mount "type=bind,src=$cargo_home,dst=$cargo_home" \
+  --mount "type=bind,src=$repository,dst=$repository" --workdir "$repository" \
   "$builder" sh -c '
     set -eu
     test "$(rustc -vV | sed -n "s/^host: //p")" = "$PULSE_BUILD_TARGET"

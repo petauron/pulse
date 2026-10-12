@@ -36,6 +36,17 @@ than bumping versions or creating tags manually.
 GITHUB_TOKEN-created tags do not start another release workflow, and generated
 PR workflows can require manual approval. The release workflow explicitly
 dispatches ci.yml on the version PR branch to run the existing checks.
+Before dispatching each workflow, it reads the exact PR head and reuses an active
+or completed native/dispatched run. It does not automatically rerun real failures;
+approval-blocked, cancelled or absent runs still require dispatch. This avoids
+cancelling native PR checks with a redundant dispatch.
+CI and dependency review use the same repository/branch concurrency identity for
+PR and dispatch events, so overlapping runs cancel the older duplicate. A later
+dispatch after completion is still a deliberate rerun. CI checks out the exact
+PR head (or dispatch/push SHA); both event paths execute all existing checks.
+The aggregate gate does not run in cancelled workflows, but still fails on any
+failed or skipped dependency in an ordinary run. Release preparation requires a
+complete successful CI workflow; cancellation or a skipped gate cannot publish.
 
 Publication runs in the same release.yml, gated by release_created, using the
 Release Please output tag and immutable source SHA. For new releases the source
@@ -96,3 +107,27 @@ Manual maintenance workflows follow the same no-artifact policy. The redundant
 source-patch download workflow has been removed; ordinary CI retains its format,
 generated-icon and frontend checks. Coverage reports are the only permitted
 downloadable CI artifact, and require explicit approval and short retention.
+
+## CI dependency caches and compilation
+
+The pinned Swatinem/rust-cache action retains Cargo downloads and compiled
+dependencies, prunes unused crates and artifacts older than one week, and excludes
+workspace binaries and incremental outputs. Ubuntu checks and browser tests have
+separate job keys; security caches only dependency sources. Native Bookworm builds
+share a key between CI and release jobs, scoped by CPU architecture, Rust toolchain
+and the pinned builder script. Ubuntu outputs never enter this cache. The Docker
+builder mounts the restored Cargo home and runs with the runner's UID/GID.
+Dependency changes retain the action's partial restore behavior. Product source
+and embedded Web assets are compiled again for the checked source SHA.
+
+Within CI, the container job compiles the Debian 12 binaries once, verifies both
+binaries in the restricted non-root Debian runtime, then packages those same
+binaries with Dockerfile.release and checks the final container's identity and
+health. Clippy, Rust tests, Web checks, security, browser flows and the required
+`rust` aggregate gate remain mandatory. Release builds still compile their own
+immutable source for both supported architectures; only dependencies are reused.
+
+Caches stay within GitHub's repository cache quota and normal eviction policy;
+there are no per-commit cache keys or downloadable CI artifacts. PR caches cannot
+seed main, so the first run on a new scope is cold. Compare actual job/step times
+and cache hit logs separately from runner queue time when measuring improvements.
