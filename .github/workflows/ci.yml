@@ -10,12 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # PR and Release Please dispatch use different refs for the same branch.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  PULSE_BUILD_GIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   web:
@@ -29,6 +31,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -53,8 +56,6 @@ jobs:
       - name: Test Web data handling
         run: npm run test:unit
       - name: Build embedded Web assets
-        env:
-          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
         run: npm run build
       - name: Verify third-party notices
         run: npm run verify:licenses
@@ -69,9 +70,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - name: Install pinned Rust toolchain
         run: rustup show
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: ubuntu-24.04
+          cache-bin: false
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Install Node.js for embedded Web assets
@@ -82,8 +89,6 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - name: Build embedded Web assets before compiling Rust
         working-directory: web
-        env:
-          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
         run: |
           npm ci
           npm run build
@@ -91,11 +96,6 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --locked --workspace --all-targets
-      - name: Build and verify release binaries on Debian 12
-        env:
-          PULSE_BUILD_GIT_HASH: ${{ github.sha }}
-          PULSE_BUILD_TARGET: x86_64-unknown-linux-gnu
-        run: sh scripts/build-linux-release.sh
 
   security:
     name: Dependency security
@@ -105,7 +105,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Cache Rust dependency sources
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: ubuntu-24.04
+          cache-bin: false
+          cache-targets: false
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -158,7 +167,15 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: ubuntu-24.04
+          cache-bin: false
       - name: Install Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -176,25 +193,44 @@ jobs:
         run: npm run test:e2e
 
   container:
-    name: Non-root container smoke test
+    name: Debian 12 binaries and non-root container smoke test
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Build image
-        run: docker build --build-arg PULSE_BUILD_GIT_HASH=${{ github.sha }} --tag pulse-ci .
+      - name: Install pinned Rust toolchain
+        run: rustup show
+      - name: Cache Debian 12 Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: bookworm-native-${{ hashFiles('scripts/build-linux-release.sh') }}
+          cache-bin: false
+      - name: Install Node.js for embedded Web assets
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Build embedded Web assets
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Build and verify release binaries on Debian 12
+        env:
+          PULSE_BUILD_TARGET: x86_64-unknown-linux-gnu
+        run: sh scripts/build-linux-release.sh
       - name: Verify release image packaging
         run: |
           mkdir -p image/amd64/web
-          source_container=$(docker create pulse-ci)
-          trap 'docker rm "$source_container" >/dev/null' EXIT
-          docker cp "$source_container:/usr/local/bin/pulse-service" image/amd64/
-          docker cp "$source_container:/usr/local/bin/pulse-agent" image/amd64/
-          docker cp "$source_container:/usr/share/doc/pulse/." image/amd64/
-          docker build --file Dockerfile.release --build-arg PULSE_BUILD_GIT_HASH=${{ github.sha }} --tag pulse-ci image
+          install -m 0755 target/release/pulse-service target/release/pulse-agent image/amd64/
+          install -m 0644 LICENSE NOTICE RUST_THIRD_PARTY_LICENSES.html RUST_STDLIB_LICENSES.html image/amd64/
+          install -m 0644 web/THIRD_PARTY_NOTICES.md web/LICENSE.* web/dist/THIRD_PARTY_LICENSES.md image/amd64/web/
+          docker build --file Dockerfile.release --build-arg "PULSE_BUILD_GIT_HASH=$PULSE_BUILD_GIT_HASH" --tag pulse-ci image
       - name: Verify runtime identity and health
         run: |
           container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 pulse-ci)
