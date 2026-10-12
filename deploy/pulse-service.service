@@ -1,6 +1,6 @@
 [Unit]
 Description=Senulun monitoring service
-Documentation=https://github.com/petauron/pulse
+Documentation=https://github.com/petauron/senulun
 After=network.target
 
 [Service]

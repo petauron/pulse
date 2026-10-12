@@ -25,9 +25,9 @@ CI and release checks still gate publication; no production restart is implied.
 - [x] Required local Rust formatting, Clippy and complete workspace regression tests
 - [x] Regenerate checked-in Web distribution and Rust license bundle, then verify
 - Browser tests and protected GitHub CI are required before merge; see the
-  [integration PR checks](https://github.com/petauron/pulse/pull/12/checks) for the
+  [integration PR checks](https://github.com/petauron/senulun/pull/12/checks) for the
   final revision's live result.
-- Alpha.3 publication is tracked on the [release page](https://github.com/petauron/pulse/releases/tag/v0.1.0-alpha.3).
+- Alpha.3 publication is tracked on the [release page](https://github.com/petauron/senulun/releases/tag/v0.1.0-alpha.3).
 - [ ] Separately completed Vastora program integration and signed catalog publication
 
 The Web license check, lint, 24 unit tests, Vue type check and production build

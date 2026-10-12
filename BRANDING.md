@@ -9,7 +9,7 @@ messages and documentation.
 Keep the existing `pulse-service` / `pulse-agent` executables, `PULSE_*`
 environment keys, systemd unit/user names, `/etc/pulse` and `/var/lib/pulse`
 paths, database and credential files, catalog IDs `pulse` / `pulse-agent`,
-protocol fields, image coordinates and release asset names. These are stable
+protocol fields and release asset names. These are stable
 installation identities, not compatibility aliases. There is no parallel
 Senulun binary, dual environment lookup or fallback implementation.
 
@@ -31,10 +31,16 @@ Fresh installations follow the same migration path and default to Senulun.
 
 ## Release boundary
 
+The canonical source repository is `petauron/senulun`. Future releases publish
+the Service image to `ghcr.io/petauron/senulun` and bind provenance to the new
+repository identity. The catalog source registry must use that same identity.
+Previously published `ghcr.io/petauron/pulse` images, archive names, tags and
+attestations remain immutable; a repository rename does not re-sign old assets
+or upgrade installed applications. Do not accept an old signer as a fallback
+for a new-repository release.
+
 Use the existing Release Please version PR and checked immutable commit. Keep
-the source repository and published coordinates unchanged during PR review.
-A GitHub repository rename, if desired later, is a separate coordinated change
-to all source/provenance consumers, not a prerequisite for the product rename.
+the `pulse` release component, Rust crate names and existing version history.
 After release, use the protected catalog publication and an explicitly approved
 Vastora managed upgrade. Preserve owned resources; never install a second app
 or replace live containers by hand. Source PRs do not deploy production.

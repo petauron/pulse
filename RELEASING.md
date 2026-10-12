@@ -1,5 +1,12 @@
 # Version releases
 
+The canonical repository is `petauron/senulun`. Release jobs derive source,
+workflow, attestation and new `ghcr.io/petauron/senulun` image coordinates from
+`github.repository`; OCI source labels use the same canonical URL. Existing
+`pulse-*` archives, binaries, crates and the Release Please component remain
+stable. Do not retag, republish or delete historical `ghcr.io/petauron/pulse`
+images or rewrite their provenance during a source repository migration.
+
 Release Please v5 is pinned to 45996ed1f6d02564a971a2fa1b5860e934307cf7.
 Like Vastora, it uses only the built-in GITHUB_TOKEN; no extra release secret or
 personal token is needed. Repository settings must allow Actions to create pull

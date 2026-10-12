@@ -58,6 +58,26 @@ test('provenance fails closed outside the checked main workflow', () => {
   ]) assert.throws(() => provenanceFor({ tag, sha: sourceSha }, { ...env, ...change }));
 });
 
+test('renamed repository binds new provenance and keeps stable distribution names', () => {
+  const repository = 'petauron/senulun';
+  const renamed = { ...env, GITHUB_REPOSITORY: repository,
+    GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/release.yml@refs/heads/main` };
+  const proof = provenanceFor({ tag, sha: sourceSha }, renamed);
+  assert.equal(proof.buildDefinition.externalParameters.workflow.repository, `https://github.com/${repository}`);
+  assert.ok(proof.buildDefinition.resolvedDependencies.every((item) => item.uri.startsWith(`git+https://github.com/${repository}@`)));
+  assert.equal(proof.runDetails.builder.id, `https://github.com/${renamed.GITHUB_WORKFLOW_REF}`);
+  assert.throws(() => provenanceFor({ tag, sha: sourceSha }, {
+    ...renamed, GITHUB_WORKFLOW_REF: 'petauron/pulse/.github/workflows/release.yml@refs/heads/main',
+  }));
+  for (const file of ['Dockerfile', 'Dockerfile.release']) {
+    assert.ok(readFileSync(file, 'utf8').includes(`https://github.com/${repository}`));
+  }
+  const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
+  assert.ok(workflow.includes('ghcr.io/${{ github.repository }}'));
+  const config = JSON.parse(readFileSync('release-please-config.json', 'utf8'));
+  assert.equal(config.packages['.']['package-name'], 'pulse');
+});
+
 test('release workflow retains draft permissions, identity gates and one publication path', () => {
   const text = readFileSync('.github/workflows/release.yml', 'utf8');
   const workflow = parse(text);

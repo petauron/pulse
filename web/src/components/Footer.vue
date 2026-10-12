@@ -40,7 +40,7 @@ const showFiling = computed(() => showIcp.value || showPolice.value)
           :content="formattedServerVersion ?? ''"
         >
           <a
-            href="https://github.com/petauron/pulse" target="_blank" rel="noopener noreferrer"
+            href="https://github.com/petauron/senulun" target="_blank" rel="noopener noreferrer"
             class="transition-opacity hover:opacity-80"
           >
             <span class="font-medium text-foreground">Senulun</span>
