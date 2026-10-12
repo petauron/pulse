@@ -1,7 +1,7 @@
 {
   "name": "@petauron/senulun-web",
   "type": "module",
-  "version": "0.1.0-alpha.16",
+  "version": "0.1.0-alpha.17",
   "private": true,
   "packageManager": "npm@11.17.0",
   "author": {
