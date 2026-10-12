@@ -104,7 +104,7 @@ const now = useNow({ interval: 60000 })
 const finance = computed(() => summarizeNodeValue(summaryNodes.value, now.value.getTime(), rates.value))
 const formatValue = (value: number) => (value * (rates.value[financeCurrency.value] ?? 1)).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const formattedRemainingValue = computed(() => ({
-  value: `${dailyRates.value ? '' : '≈'}${CURRENCY_SYMBOLS[financeCurrency.value]}${formatValue(finance.value.remaining)}`,
+  value: `${CURRENCY_SYMBOLS[financeCurrency.value]}${formatValue(finance.value.remaining)}`,
   unit: financeCurrency.value,
 }))
 const financeSummaryItems = computed(() => [
