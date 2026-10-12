@@ -1,6 +1,6 @@
 [Unit]
 Description=Senulun outbound monitoring agent
-Documentation=https://github.com/petauron/pulse
+Documentation=https://github.com/petauron/senulun
 Wants=network-online.target
 After=network-online.target
 

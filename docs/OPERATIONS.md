@@ -19,8 +19,16 @@ Download the archive for the host architecture together with `SHA256SUMS`, its S
 
 ```bash
 sha256sum --check --ignore-missing SHA256SUMS
-gh attestation verify pulse-v0.1.0-alpha.5-linux-x86_64.tar.gz --repo petauron/pulse
+gh attestation verify "$ARCHIVE" --repo petauron/senulun
 ```
+
+Set `ARCHIVE` to the downloaded `pulse-<tag>-linux-<arch>.tar.gz` from a release
+built in `petauron/senulun`. This policy is for releases after the repository
+rename. Historical artifacts were signed by `petauron/pulse`; retain their
+original provenance and verification policy instead of treating them as newly
+signed Senulun releases. Published images at `ghcr.io/petauron/pulse` remain
+available under their original immutable digests. Do not overwrite old releases
+or relax the new-source attestation policy to accept both identities.
 
 Official Linux archives target `x86_64` and `aarch64` GNU/Linux with a Debian 12 (glibc 2.36) runtime baseline. Both binaries are built in the pinned Debian 12 Rust image and must start in a clean Debian 12 runtime before packaging. The same build/verification script runs in CI. Use the container or build from source for other environments, including musl-based distributions.
 

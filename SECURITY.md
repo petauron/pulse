@@ -8,7 +8,7 @@ Senulun is currently alpha and has no supported release line yet. Security fixes
 
 Do not open a public Issue for a suspected vulnerability.
 
-Use [GitHub private vulnerability reporting](https://github.com/petauron/pulse/security/advisories/new). Include affected versions or commits, reproduction conditions, impact, and any suggested mitigation. Do not include real credentials or production data.
+Use [GitHub private vulnerability reporting](https://github.com/petauron/senulun/security/advisories/new). Include affected versions or commits, reproduction conditions, impact, and any suggested mitigation. Do not include real credentials or production data.
 
 Maintainers will acknowledge a complete report when it is reviewed, coordinate remediation and disclosure, and credit reporters who want public attribution.
 
