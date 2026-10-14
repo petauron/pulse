@@ -1066,7 +1066,7 @@ version = "0.1.0-alpha.17"
 dependencies = [
  "argon2",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "hex",
  "mime_guess",
  "pulse-protocol",
