@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Query, Request, State},
@@ -1233,10 +1233,8 @@ fn validate_password(password: &str) -> Result<(), AuthError> {
 }
 
 fn hash_password(password: &str) -> Result<String, AuthError> {
-    let salt =
-        SaltString::encode_b64(Uuid::new_v4().as_bytes()).map_err(|_| AuthError::internal())?;
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|_| AuthError::internal())
 }
@@ -1386,6 +1384,27 @@ mod tests {
     const TEST_ORIGIN: &str = "http://127.0.0.1:8080";
     // Exercise setup, login, and account operations with a one-character password.
     const PASSWORD: &str = "p";
+
+    #[test]
+    fn password_hashes_use_random_salts_and_verify() {
+        let first = hash_password(PASSWORD).unwrap();
+        let second = hash_password(PASSWORD).unwrap();
+        assert_ne!(first, second);
+        assert!(first.starts_with("$argon2id$v=19$"));
+        assert!(verify_password(PASSWORD, &first));
+        assert!(verify_password(PASSWORD, &second));
+        assert!(!verify_password("wrong", &first));
+        assert!(!verify_password("", &first));
+        assert!(!verify_password(PASSWORD, "invalid PHC string"));
+    }
+
+    #[test]
+    fn stored_argon2id_phc_hashes_remain_verifiable() {
+        // Published PHC reference vector; persisted hashes retain their own parameters.
+        let encoded = "$argon2id$v=19$m=65536,t=2,p=1$c29tZXNhbHQ$CTFhFdXPJO1aFaMaO6Mm5c8y7cJHAph8ArZWb2GRPPc";
+        assert!(verify_password("password", encoded));
+        assert!(!verify_password("wrong", encoded));
+    }
 
     fn state() -> (tempfile::TempDir, AuthState) {
         let directory = tempfile::tempdir().unwrap();
