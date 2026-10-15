@@ -99,7 +99,7 @@ test('network quality offers the full retained range with an exact custom label'
   await expect(ranges.getByRole('button', { name: '100 天' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('probe analysis switches tasks without changing the selected chart series', async ({ page }) => {
+test('probe analysis switches tasks without changing the selected chart series', async ({ page }, testInfo) => {
   await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
     await route.fulfill({
       json: {
@@ -141,6 +141,7 @@ test('probe analysis switches tasks without changing the selected chart series',
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'true')
   const chart = page.locator('[aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点"]')
+  await expect.poll(() => chart.evaluate(element => Math.round(element.getBoundingClientRect().height))).toBe(testInfo.project.name === 'mobile-chromium' ? 328 : 392)
   await chart.hover()
   await expect(chart.getByText('20 ms', { exact: true })).toBeVisible()
   await expect(chart.getByText('50.0%', { exact: true })).toBeVisible()

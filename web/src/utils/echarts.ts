@@ -6,8 +6,11 @@
 import { LineChart } from 'echarts/charts'
 import {
   AriaComponent,
+  DataZoomComponent,
   GridComponent,
   LegendComponent,
+  MarkLineComponent,
+  MarkPointComponent,
   TooltipComponent,
 } from 'echarts/components'
 import { use } from 'echarts/core'
@@ -16,9 +19,12 @@ import { CanvasRenderer } from 'echarts/renderers'
 // 一次性注册所有需要的 ECharts 组件
 use([
   AriaComponent,
+  DataZoomComponent,
   LineChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
+  MarkLineComponent,
+  MarkPointComponent,
   CanvasRenderer,
 ])

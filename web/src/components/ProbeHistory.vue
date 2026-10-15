@@ -200,6 +200,20 @@ function taskFailureData(id: string): Array<[number, number | null]> {
 
 const failureLabel = (kind: ProbeHistory['tasks'][number]['kind']) => kind === 'icmp' ? '丢包率' : '失败率'
 const failureMetricLabel = computed(() => tasks.value.every(task => task.kind === 'icmp') ? '丢包率' : tasks.value.every(task => task.kind !== 'icmp') ? '失败率' : '丢包 / 失败率')
+const showZoom = computed(() => app.publicSettings?.theme_settings?.pingChartShowZoom !== false)
+const chartThresholds = computed(() => {
+  const settings = app.publicSettings?.theme_settings
+  const value = (key: string, fallback: number, min: number, max: number) => {
+    const candidate = settings?.[key]
+    return typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max ? candidate : fallback
+  }
+  return {
+    latencyWarning: value('pingLatencyWarning', 160, 1, 5000),
+    latencyCritical: value('pingLatencyCritical', 300, 1, 5000),
+    failureWarning: value('pingLossWarning', 3, 0, 100),
+    failureCritical: value('pingLossCritical', 10, 0, 100),
+  }
+})
 
 function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   const style = getComputedStyle(document.documentElement)
@@ -208,7 +222,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   const border = app.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
   const grid = app.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
   const latencySeries = showDelay.value && mode !== 'failure'
-    ? selectedTasks.value.map(task => ({
+    ? selectedTasks.value.map((task, index) => ({
         id: `${task.id}:latency`,
         name: task.name,
         type: 'line' as const,
@@ -216,14 +230,29 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
         showSymbol: false,
         symbolSize: 3,
         smooth: cutPeak.value ? 0.6 : 0.1,
-        lineStyle: { width: 1.5, cap: 'round' as const, color: taskColor(task.id) },
+        lineStyle: { width: 1.8, cap: 'round' as const, color: taskColor(task.id) },
         itemStyle: { color: taskColor(task.id) },
         connectNulls: false,
         data: taskChartData(task.id),
+        markLine: index === 0 ? {
+          silent: true,
+          symbol: ['none', 'none'] as [string, string],
+          label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
+          lineStyle: { width: 1, type: 'dashed' as const, opacity: 0.65 },
+          data: [
+            { name: '延迟警告', yAxis: chartThresholds.value.latencyWarning, lineStyle: { color: '#FACC15' } },
+            { name: '延迟严重', yAxis: chartThresholds.value.latencyCritical, lineStyle: { color: '#F43F5E' } },
+          ],
+        } : undefined,
+        markPoint: {
+          symbolSize: 28,
+          label: { fontSize: 9, formatter: '峰值' },
+          data: [{ type: 'max' as const, name: '峰值' }],
+        },
       }))
     : []
   const failureSeries = showFailures.value && mode !== 'latency'
-    ? selectedTasks.value.map((task) => {
+    ? selectedTasks.value.map((task, index) => {
         const points = taskFailureData(task.id)
         return {
           id: `${task.id}:failure-rate`,
@@ -233,10 +262,21 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
           showSymbol: points.length === 1,
           symbolSize: 4,
           step: 'end' as const,
-          lineStyle: { width: 1.5, type: 'dashed' as const, color: taskColor(task.id) },
+          lineStyle: { width: 1.4, type: 'dashed' as const, color: taskColor(task.id), opacity: 0.8 },
+          areaStyle: { color: taskColor(task.id), opacity: 0.05 },
           itemStyle: { color: taskColor(task.id) },
           connectNulls: false,
           data: points,
+          markLine: index === 0 ? {
+            silent: true,
+            symbol: ['none', 'none'] as [string, string],
+            label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
+            lineStyle: { width: 1, type: 'dotted' as const, opacity: 0.65 },
+            data: [
+              { name: `${failureMetricLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: '#FACC15' } },
+              { name: `${failureMetricLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: '#F43F5E' } },
+            ],
+          } : undefined,
         }
       })
     : []
@@ -280,8 +320,12 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
       axisPointer: { type: 'cross', crossStyle: { color: secondary }, lineStyle: { color: border, width: 1, type: 'dashed' } },
       formatter: chartTooltip,
     },
-    legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: 16, icon: 'roundRect', textStyle: { fontSize: 11, color: secondary } },
-    grid: { left: 56, right: mode === 'combined' ? 66 : 24, top: 30, bottom: 52 },
+    legend: { type: 'scroll', bottom: showZoom.value ? 24 : 0, itemWidth: 12, itemHeight: 8, itemGap: 14, icon: 'roundRect', textStyle: { fontSize: 10, color: secondary } },
+    dataZoom: showZoom.value ? [
+      { type: 'inside', start: 0, end: 100 },
+      { type: 'slider', height: 14, bottom: 0, borderColor: 'transparent', fillerColor: app.isDark ? 'rgba(52,211,153,.16)' : 'rgba(5,150,105,.12)', backgroundColor: grid, showDetail: false },
+    ] : [{ type: 'inside', start: 0, end: 100 }],
+    grid: { left: 56, right: mode === 'combined' ? 66 : 24, top: 30, bottom: showZoom.value ? 72 : 52 },
     xAxis: {
       type: 'time',
       min: data.value?.range_start_unix_ms,
@@ -499,14 +543,14 @@ function exportPng(): void {
           曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
         <template v-if="data.chart.length && (showDelay || showFailures)">
-          <div v-if="chartLayout === 'combined'" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+          <div v-if="chartLayout === 'combined'" class="h-88 rounded-md p-3 md:h-104" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
             <VChart :key="app.resolvedThemeMode" ref="combinedChartRef" :option="combinedOption" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
           </div>
           <template v-else>
-            <div v-if="showDelay" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+            <div v-if="showDelay" class="h-72 rounded-md p-3 md:h-80" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
               <VChart :key="app.resolvedThemeMode" ref="latencyChartRef" :option="latencyOption" autoresize style="height: 100%; width: 100%" aria-label="独立延迟曲线，纵轴为毫秒，长时间缺报为断点" />
             </div>
-            <div v-if="showFailures" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+            <div v-if="showFailures" class="h-72 rounded-md p-3 md:h-80" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
               <VChart :key="app.resolvedThemeMode" ref="failureChartRef" :option="failureOption" autoresize style="height: 100%; width: 100%" aria-label="独立丢包或失败率曲线，纵轴为百分比，长时间缺报为断点" />
             </div>
           </template>
