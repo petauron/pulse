@@ -106,6 +106,8 @@ test('probe task information opens without changing the selected chart series', 
   await expect(tooltip).toContainText('0.45')
   await information.click()
   await expect(series).toHaveAttribute('aria-pressed', 'true')
+  await page.locator('[aria-label="探测延迟曲线，失败样本为断点，可显示失败标记"]').hover()
+  await expect(page.getByText('20 ms', { exact: true })).toBeVisible()
   await series.click()
   await expect(series).toHaveAttribute('aria-pressed', 'false')
 })

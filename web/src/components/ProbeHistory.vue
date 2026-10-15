@@ -110,6 +110,51 @@ function taskStatsLabel(task: ProbeHistory['tasks'][number]): string {
 const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
 const taskColor = (id: string) => colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
 const rangeLabel = (range: number) => range < 24 ? `${range} 小时` : `${range / 24} 天`
+function tooltipTime(value: number): string {
+  const date = new Date(value)
+  const pad = (number: number) => String(number).padStart(2, '0')
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`
+  return hours.value < 24 ? `${clock}:${pad(date.getSeconds())}` : `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${clock}`
+}
+
+function chartTooltip(params: unknown): HTMLElement {
+  const root = document.createElement('div')
+  const points = (Array.isArray(params) ? params : [params]) as { seriesName?: unknown, data?: unknown, value?: unknown, color?: unknown }[]
+  const rows = points.flatMap((point) => {
+    if (!point || typeof point !== 'object')
+      return []
+    const pair = Array.isArray(point.data) ? point.data : point.value
+    if (!Array.isArray(pair) || typeof pair[0] !== 'number' || !Number.isFinite(pair[0]) || typeof pair[1] !== 'number' || !Number.isFinite(pair[1]))
+      return []
+    return [{ time: pair[0] as number, value: pair[1] as number, name: String(point.seriesName ?? ''), color: typeof point.color === 'string' ? point.color : colors[0]! }]
+  }).sort((a, b) => a.value - b.value)
+  if (!rows.length)
+    return root
+
+  const title = document.createElement('div')
+  title.style.cssText = 'font-weight:600;margin-bottom:6px'
+  title.textContent = tooltipTime(rows[0]!.time)
+  root.append(title)
+  const list = document.createElement('div')
+  list.style.cssText = 'display:flex;flex-direction:column;gap:4px'
+  for (const row of rows) {
+    const line = document.createElement('div')
+    line.style.cssText = 'display:flex;align-items:center'
+    const dot = document.createElement('span')
+    dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;flex-shrink:0'
+    dot.style.backgroundColor = row.color
+    const name = document.createElement('span')
+    name.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+    name.textContent = row.name
+    const value = document.createElement('span')
+    value.style.cssText = 'margin-left:16px;font-weight:600;font-variant-numeric:tabular-nums'
+    value.textContent = `${Math.round(row.value)} ms`
+    line.append(dot, name, value)
+    list.append(line)
+  }
+  root.append(list)
+  return root
+}
 function toggleTask(id: string): void {
   selectedTaskIds.value = selectedTaskIds.value.includes(id)
     ? selectedTaskIds.value.filter(selected => selected !== id)
@@ -130,7 +175,7 @@ const option = computed<EChartsOption>(() => {
     textStyle: { color: foreground },
     tooltip: {
       trigger: 'axis',
-      renderMode: 'richText',
+      renderMode: 'html',
       confine: true,
       backgroundColor: app.isDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.8)',
       borderColor: 'transparent',
@@ -138,8 +183,9 @@ const option = computed<EChartsOption>(() => {
       borderRadius: 6,
       textStyle: { color: foreground, fontSize: 12, lineHeight: 20 },
       axisPointer: { type: 'cross', crossStyle: { color: secondary }, lineStyle: { color: border, width: 1, type: 'dashed' } },
+      formatter: chartTooltip,
     },
-    legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 8, itemGap: 14, textStyle: { fontSize: 10, color: secondary } },
+    legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: 16, icon: 'roundRect', textStyle: { fontSize: 11, color: secondary } },
     grid: { left: 56, right: 24, top: 30, bottom: 52 },
     xAxis: {
       type: 'time',
