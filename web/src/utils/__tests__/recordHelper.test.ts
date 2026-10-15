@@ -1,6 +1,6 @@
 import type { RecordFormat } from '../recordHelper'
 import { describe, expect, it } from 'vitest'
-import { alignRecordsToTimeWindow } from '../recordHelper'
+import { alignRecordsToTimeWindow, cutPeakValues } from '../recordHelper'
 
 const minute = 60_000
 const start = Date.parse('2026-01-01T00:00:00.000Z')
@@ -87,5 +87,16 @@ describe('alignRecordsToTimeWindow', () => {
       new Date(start + 20 * minute).toISOString(),
       new Date(start + 30 * minute).toISOString(),
     ])
+  })
+})
+
+describe('cutPeakValues', () => {
+  it('smooths a single spike without changing the source samples', () => {
+    const source = Array.from({ length: 31 }, (_, index) => ({ latency: index === 15 ? 200 : 10 }))
+    const smoothed = cutPeakValues(source, ['latency'])
+
+    expect(source[15]?.latency).toBe(200)
+    expect(smoothed).toHaveLength(source.length)
+    expect(smoothed.every(point => point.latency === 10)).toBe(true)
   })
 })

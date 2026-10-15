@@ -10,6 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
+import { cutPeakValues } from '@/utils/recordHelper'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
@@ -18,6 +19,7 @@ const { pickSurfaceClass } = useBackgroundSurface()
 const hours = ref(props.selectedHours ?? 1)
 const showDelay = ref(true)
 const showFailures = ref(true)
+const cutPeak = ref(false)
 const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
   const max = app.publicSettings?.ping_record_preserve_time ?? 168
@@ -161,6 +163,17 @@ function toggleTask(id: string): void {
     : [...selectedTaskIds.value, id]
 }
 
+function taskChartData(id: string): Array<[number, number | null]> {
+  const records = (data.value?.records ?? [])
+    .filter(record => record.task_id === id)
+    .sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms)
+  if (!cutPeak.value)
+    return records.map((record): [number, number | null] => [record.received_at_unix_ms, record.success ? record.latency_ms : null])
+
+  const smoothed = cutPeakValues(records.map(record => ({ latency: record.success ? record.latency_ms : null })), ['latency'])
+  return smoothed.map((point, index): [number, number | null] => [records[index]!.received_at_unix_ms, typeof point.latency === 'number' ? point.latency : null])
+}
+
 const option = computed<EChartsOption>(() => {
   const style = getComputedStyle(document.documentElement)
   const foreground = style.getPropertyValue('--foreground').trim()
@@ -209,11 +222,11 @@ const option = computed<EChartsOption>(() => {
       type: 'line',
       showSymbol: false,
       symbolSize: 3,
-      smooth: 0.1,
+      smooth: showDelay.value ? (cutPeak.value ? 0.6 : 0.1) : 0,
       lineStyle: { width: showDelay.value ? 1.5 : 0, cap: 'round', color: taskColor(task.id) },
       itemStyle: { color: taskColor(task.id), opacity: showDelay.value ? 1 : 0 },
       connectNulls: false,
-      data: (data.value?.records ?? []).filter(record => record.task_id === task.id).sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms).map(record => [record.received_at_unix_ms, record.success ? record.latency_ms : null]),
+      data: taskChartData(task.id),
       markLine: showFailures.value
         ? {
             silent: true,
@@ -326,6 +339,16 @@ const option = computed<EChartsOption>(() => {
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
             失败标记
           </Button>
+          <div class="flex items-center gap-1">
+            <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="cutPeak && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="cutPeak" @click="cutPeak = !cutPeak">
+              平滑峰值
+            </Button>
+            <DataTooltip content="使用 EWMA 算法平滑曲线并过滤突变值；汇总和失败标记仍按原始样本计算" placement="top" content-class="max-w-56 text-[11px] leading-relaxed">
+              <button type="button" class="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-emerald-600" aria-label="平滑峰值说明">
+                <Icon icon="lucide:info" :width="14" :height="14" aria-hidden="true" />
+              </button>
+            </DataTooltip>
+          </div>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">
             {{ loading ? '加载中…' : '刷新' }}
           </Button>
