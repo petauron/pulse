@@ -229,7 +229,9 @@ fn hidden_metadata_applies_to_all_public_read_models() {
         .unwrap();
     assert_eq!(storage.native_nodes(0, 100, 90).unwrap().0, 0);
     assert!(
-        storage.emerald_dashboard(90, 100).unwrap()["clients"]
+        storage
+            .emerald_dashboard(90, 100, &crate::control::DashboardProbeConfig::default())
+            .unwrap()["clients"]
             .as_object()
             .unwrap()
             .is_empty()
@@ -460,7 +462,12 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
         ).unwrap();
     }
     let tasks = vec![task.clone(); 5];
-    let preview = crate::control::dashboard_probes(&db, &node.node_id, &tasks, now).unwrap();
+    let config = crate::control::DashboardProbeConfig {
+        row_count: 3,
+        ..Default::default()
+    };
+    let preview =
+        crate::control::dashboard_probes(&db, &node.node_id, &tasks, now, &config).unwrap();
     assert_eq!(preview.len(), 3);
     assert_eq!(preview[0]["points"].as_array().unwrap().len(), 1);
     assert_eq!(preview[0]["kind"], "tcp");
@@ -471,18 +478,83 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     assert_eq!(preview[0]["points"][0]["bucket"], 9);
     assert!(preview[0].get("target").is_none());
     assert!(preview[0].get("node_ids").is_none());
+    db.execute(
+        "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success) VALUES(?1,?2,'older',?3,?3,30,1)",
+        rusqlite::params![node.node_id, task.id, i64::try_from(now - 5_400_000).unwrap()],
+    ).unwrap();
+    let other = ProbeDefinition {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: "other".into(),
+        ..task.clone()
+    };
+    let configured = crate::control::DashboardProbeConfig {
+        hours: 2,
+        row_count: 2,
+        tasks_by_node: std::collections::HashMap::from([(
+            node.node_id.clone(),
+            vec![other.id.clone(), task.id.clone()],
+        )]),
+    };
+    let custom = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &[task.clone(), other.clone()],
+        now,
+        &configured,
+    )
+    .unwrap();
+    assert_eq!(custom.len(), 2);
+    assert_eq!(custom[0]["id"], other.id);
+    assert_eq!(custom[1]["id"], task.id);
+    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 2);
+    assert_eq!(custom[1]["points"][0]["bucket"], 2);
+    assert_eq!(custom[1]["points"][0]["latency"], 30.0);
+    let eight_tasks = (0..8)
+        .map(|index| ProbeDefinition {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: format!("task-{index}"),
+            ..task.clone()
+        })
+        .collect::<Vec<_>>();
+    let eight_rows = crate::control::DashboardProbeConfig {
+        row_count: 8,
+        ..Default::default()
+    };
+    assert_eq!(
+        crate::control::dashboard_probes(&db, &node.node_id, &eight_tasks, now, &eight_rows)
+            .unwrap()
+            .len(),
+        8
+    );
     task.enabled = false;
     assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now)
+        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now, &config)
             .unwrap()
             .is_empty()
     );
     task.enabled = true;
     task.node_ids = vec!["another-node".into()];
     assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task], now)
+        crate::control::dashboard_probes(&db, &node.node_id, &[task], now, &config)
             .unwrap()
             .is_empty()
+    );
+}
+
+#[test]
+fn dashboard_probe_theme_limits_match_retention_and_eight_rows() {
+    let node = uuid::Uuid::new_v4().to_string();
+    let settings = serde_json::json!({
+        "homePingHistoryHours": 168,
+        "homePingRowCount": 99,
+        "homePingTasksByNode": { (node.clone()): ["task-8", "task-8", "task-1"] }
+    });
+    let config = crate::control::DashboardProbeConfig::from_theme(&settings, 1);
+    assert_eq!(config.hours, 24);
+    assert_eq!(config.row_count, 8);
+    assert_eq!(
+        config.tasks_by_node[&node],
+        vec!["task-8".to_owned(), "task-1".to_owned()]
     );
 }
 

@@ -1,6 +1,6 @@
 //! Bounded monitoring configuration, probe history, asset metadata and alerts.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pulse_protocol::{AgentRuntimeConfig, ProbeBatch, ProbeKind, ProbeTask, SystemSnapshot};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -19,6 +19,67 @@ const MAX_PROBE_CHART_PER_TASK: usize = 1_000;
 const MAX_PROBE_CHART_TOTAL: usize = 12_000;
 const MAX_PROBE_STATS_SAMPLES: usize = 100_000;
 const MAX_INCIDENTS: usize = 1_000;
+
+#[derive(Clone)]
+pub(crate) struct DashboardProbeConfig {
+    pub hours: u32,
+    pub row_count: usize,
+    pub tasks_by_node: HashMap<String, Vec<String>>,
+}
+
+impl DashboardProbeConfig {
+    pub(crate) fn from_theme(settings: &Value, retention_days: u32) -> Self {
+        let bounded = |key: &str, default: u32, min: u32, max: u32| {
+            settings[key]
+                .as_f64()
+                .filter(|value| value.is_finite())
+                .map_or(default, |value| {
+                    value.clamp(f64::from(min), f64::from(max)).round() as u32
+                })
+        };
+        let hours = bounded("homePingHistoryHours", 1, 1, 168)
+            .min(retention_days.saturating_mul(24).max(1));
+        let row_count = bounded("homePingRowCount", 2, 1, 8) as usize;
+        let mut tasks_by_node = HashMap::new();
+        if let Some(nodes) = settings["homePingTasksByNode"].as_object() {
+            for (node, task_ids) in nodes {
+                if Uuid::parse_str(node).is_err() {
+                    continue;
+                }
+                let Some(task_ids) = task_ids.as_array() else {
+                    continue;
+                };
+                let mut seen = HashSet::new();
+                let ids = task_ids
+                    .iter()
+                    .filter_map(|id| {
+                        id.as_str()
+                            .map(str::to_owned)
+                            .or_else(|| id.as_u64().map(|id| id.to_string()))
+                    })
+                    .filter(|id| !id.is_empty() && seen.insert(id.clone()))
+                    .take(8)
+                    .collect();
+                tasks_by_node.insert(node.clone(), ids);
+            }
+        }
+        Self {
+            hours,
+            row_count,
+            tasks_by_node,
+        }
+    }
+}
+
+impl Default for DashboardProbeConfig {
+    fn default() -> Self {
+        Self {
+            hours: 1,
+            row_count: 2,
+            tasks_by_node: HashMap::new(),
+        }
+    }
+}
 
 pub(crate) fn probe_percentile(sorted: &[f64], percentile: usize) -> Option<f64> {
     if sorted.is_empty() {
@@ -1097,36 +1158,48 @@ fn period_usage(db: &Connection, node: &str) -> Result<(u64, u64), StorageError>
         .unwrap_or_default())
 }
 
-/// One-hour overview: at most three tasks and ten six-minute buckets per node.
-/// Reuses the dashboard poll with a bounded one-hour indexed range and ten output rows.
+/// Bounded ten-bucket overview for the theme-selected tasks and history range.
 pub(crate) fn dashboard_probes(
     db: &Connection,
     node: &str,
     tasks: &[ProbeDefinition],
     now: u64,
+    config: &DashboardProbeConfig,
 ) -> Result<Vec<Value>, StorageError> {
     let mut result = Vec::new();
+    let range_ms = u64::from(config.hours) * 3_600_000;
+    let start_ms = now.saturating_sub(range_ms);
+    let bucket_ms = range_ms.div_ceil(10).max(1);
     let mut statement = db.prepare_cached(
         "SELECT max(received_at_ms),avg(CASE WHEN success=1 THEN latency_ms END),
                 sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),count(*),
                 sum(CASE WHEN success=1 AND latency_ms IS NOT NULL THEN 1 ELSE 0 END),
-                (received_at_ms-?3-1)/360000
+                (received_at_ms-?3-1)/?5
          FROM probe_results
          WHERE node_id=?1 AND task_id=?2 AND received_at_ms>?3 AND received_at_ms<=?4
-         GROUP BY (received_at_ms-?3-1)/360000 ORDER BY max(received_at_ms) DESC LIMIT 10",
+         GROUP BY (received_at_ms-?3-1)/?5 ORDER BY max(received_at_ms) DESC LIMIT 10",
     )?;
-    for task in tasks
-        .iter()
-        .filter(|t| t.enabled && (t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node)))
-        .take(3)
-    {
+    let assigned = |task: &&ProbeDefinition| {
+        task.enabled && (task.node_ids.is_empty() || task.node_ids.iter().any(|id| id == node))
+    };
+    let available: Vec<_> = tasks.iter().filter(assigned).collect();
+    let selected: Vec<_> = if let Some(ids) = config.tasks_by_node.get(node) {
+        ids.iter()
+            .take(config.row_count)
+            .filter_map(|id| available.iter().find(|task| task.id.as_str() == id).copied())
+            .collect()
+    } else {
+        available.into_iter().take(config.row_count).collect()
+    };
+    for task in selected {
         let mut points = statement
             .query_map(
                 params![
                     node,
                     task.id,
-                    integer(now.saturating_sub(3_600_000)),
-                    integer(now)
+                    integer(start_ms),
+                    integer(now),
+                    integer(bucket_ms),
                 ],
                 |row| {
                     Ok(json!({

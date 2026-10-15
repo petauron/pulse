@@ -723,8 +723,11 @@ async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, Api
         "common:getNodes" | "public:getNodesInformation" | "common:getNodesLatestStatus" => {
             let offline_after = state.offline_after_seconds;
             let max_nodes = state.max_nodes;
+            let probe_config = dashboard_probe_config(state);
             let dashboard = state
-                .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+                .database(move |storage| {
+                    storage.emerald_dashboard(offline_after, max_nodes, &probe_config)
+                })
                 .await?;
             let key = if request.method == "common:getNodesLatestStatus" {
                 "statuses"
@@ -768,8 +771,11 @@ async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, Api
         "common:getDashboard" => {
             let offline_after = state.offline_after_seconds;
             let max_nodes = state.max_nodes;
+            let probe_config = dashboard_probe_config(state);
             state
-                .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+                .database(move |storage| {
+                    storage.emerald_dashboard(offline_after, max_nodes, &probe_config)
+                })
                 .await
         }
         "common:getNodeRecentStatus" | "common:getRecords" => {
@@ -1140,6 +1146,10 @@ fn history_hours(requested: Option<u32>, retention_days: u32) -> u32 {
     requested
         .unwrap_or(4)
         .clamp(1, retention_days.saturating_mul(24).max(1))
+}
+
+pub(crate) fn dashboard_probe_config(state: &AppState) -> control::DashboardProbeConfig {
+    control::DashboardProbeConfig::from_theme(&state.themes.settings(), state.retention_days)
 }
 
 fn current_time() -> Result<u64, ApiError> {

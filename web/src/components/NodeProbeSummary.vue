@@ -8,6 +8,14 @@ import { getProbeToneColor, selectHomeProbes } from '@/utils/nodeHelpers'
 const props = defineProps<{ probes?: NodeProbe[], compact?: boolean, nodeUuid?: string }>()
 const app = useAppStore()
 const metrics = ['latency', 'loss'] as const
+const historyHours = computed(() => {
+  if (!props.nodeUuid)
+    return 1
+  const configured = app.publicSettings?.theme_settings?.homePingHistoryHours
+  const requested = typeof configured === 'number' && Number.isFinite(configured) ? Math.round(configured) : 1
+  return Math.min(168, app.publicSettings?.ping_record_preserve_time ?? 168, Math.max(1, requested))
+})
+const historyLabel = computed(() => historyHours.value % 24 === 0 ? `${historyHours.value / 24} 天` : `${historyHours.value} 小时`)
 const emptyPoints: NodeProbe['points'] = Array.from({ length: 10 }, (_, bucket) => ({ bucket, time: 0, latency: null, loss: 0, samples: 0, successful_samples: 0 }))
 const rows = computed(() => {
   const selected = props.nodeUuid
@@ -17,8 +25,7 @@ const rows = computed(() => {
     if (!task) {
       return { id: `empty-${index}`, name: '未配置', kind: 'icmp' as const, stale: true, points: emptyPoints, latency: '—', loss: '—' }
     }
-    const last = task.points.at(-1)
-    const stale = !last || Date.now() - last.time > Math.max(90000, task.interval_seconds * 3000)
+    const stale = !task.points.some(point => point.samples > 0)
     const points = task.points.slice(-10)
     const successes = points.filter(p => p.successful_samples > 0 && p.latency !== null)
     return {
@@ -38,18 +45,19 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
   const result = metric === 'loss'
     ? `${point.loss.toFixed(1)}% · ${point.samples} 次探测`
     : point.latency === null ? '无成功样本' : `${Math.round(point.latency)} ms · ${point.successful_samples} 次成功探测`
-  return `${name} · ${new Date(point.time).toLocaleTimeString()} · ${result}`
+  const time = historyHours.value >= 24 ? new Date(point.time).toLocaleString() : new Date(point.time).toLocaleTimeString()
+  return `${name} · ${time} · ${result}`
 }
 </script>
 
 <template>
-  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" aria-label="最近 1 小时的平均延迟与失败率，每格 6 分钟">
+  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" :aria-label="`最近 ${historyLabel}的平均延迟与失败率，每格约 ${historyHours * 6} 分钟`">
     <div v-for="row in rows" :key="row.id" class="grid h-8 grid-cols-[minmax(64px,0.75fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2">
       <DataTooltip placement="top" :content="row.name" class="min-w-0" content-class="min-w-24">
         <span class="block truncate font-medium text-foreground/75">{{ row.name }}</span>
-        <span v-if="row.stale" class="sr-only">暂无新数据</span>
+        <span v-if="row.stale" class="sr-only">暂无数据</span>
       </DataTooltip>
-      <div v-for="metric in metrics" :key="metric" role="group" class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left" :aria-label="`${row.name} ${metric === 'latency' ? '延迟' : (row.kind === 'icmp' ? '丢包率' : '失败率')} ${row.stale ? '暂无新数据' : row[metric]}`">
+      <div v-for="metric in metrics" :key="metric" role="group" class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left" :aria-label="`${row.name} ${metric === 'latency' ? '延迟' : (row.kind === 'icmp' ? '丢包率' : '失败率')} ${row.stale ? '暂无数据' : row[metric]}`">
         <div class="relative flex items-center justify-between leading-none">
           <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : (row.kind === 'icmp' ? '丢包' : '失败') }}</span>
           <div class="mx-1 flex-1 border-t-2 border-dotted border-gray-500/10" />
@@ -58,7 +66,7 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
         <div class="grid h-2 grid-cols-10 items-end gap-px opacity-80 group-hover/panel:opacity-100">
           <DataTooltip
             v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full" content-class="w-40 leading-relaxed"
-            :content="row.stale ? `${row.name} · 暂无新数据` : sampleTooltip(row.name, point, metric)"
+            :content="row.stale ? `${row.name} · 暂无数据` : sampleTooltip(row.name, point, metric)"
           >
             <span
               class="block h-full w-full rounded-[1px] bg-muted-foreground/15 transition-transform duration-150 group-hover/data-tooltip:scale-y-200 motion-reduce:transition-none"

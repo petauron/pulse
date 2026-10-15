@@ -21,7 +21,7 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
       <DialogContent class="max-h-[85dvh] overflow-y-auto sm:max-w-4xl" @click.stop>
         <DialogHeader>
           <DialogTitle>{{ node.name }} · 网络质量</DialogTitle>
-          <DialogDescription>首页显示最近 1 小时统计，每格 6 分钟；详情按所选时间范围统计。失败率表示探测未成功的比例。</DialogDescription>
+          <DialogDescription>首页按主题设置的时间范围展示 10 格统计；详情按所选时间范围统计。失败率表示探测未成功的比例。</DialogDescription>
         </DialogHeader>
         <ProbeHistory v-if="open" :uuid="node.uuid" />
       </DialogContent>

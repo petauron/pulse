@@ -572,6 +572,7 @@ impl Storage {
         &self,
         offline_after_seconds: u64,
         max_nodes: u32,
+        probe_config: &crate::control::DashboardProbeConfig,
     ) -> Result<Value, StorageError> {
         let connection = self.connection()?;
         let clients = query_clients(&connection, 0, max_nodes)?;
@@ -592,7 +593,8 @@ impl Storage {
                 &connection,
                 &client.id,
                 &probe_tasks,
-                now
+                now,
+                probe_config
             )?);
             client_values.insert(client.id.clone(), value);
         }
@@ -1630,7 +1632,9 @@ mod tests {
             assert_eq!(total, 1);
             assert_eq!(nodes[0]["client"]["id"], credentials.node_id);
             assert_eq!(nodes[0]["client"]["region"], region);
-            let dashboard = storage.emerald_dashboard(90, 10).unwrap();
+            let dashboard = storage
+                .emerald_dashboard(90, 10, &crate::control::DashboardProbeConfig::default())
+                .unwrap();
             assert_eq!(dashboard["clients"][&credentials.node_id]["region"], region);
         }
 
