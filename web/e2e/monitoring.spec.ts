@@ -185,7 +185,7 @@ test('probe auto-refresh pauses without blocking range changes or manual refresh
   await page.clock.runFor(31_000)
   expect(requests).toHaveLength(1)
 
-  await page.getByRole('tab', { name: '6 小时' }).click()
+  await page.getByRole('tablist', { name: '探测历史时间范围' }).getByRole('tab', { name: '6 小时' }).click()
   await expect.poll(() => requests.length).toBe(2)
   expect(requests[1]).toContain('hours=6')
   await page.getByRole('button', { name: '立即刷新' }).click()
