@@ -48,7 +48,7 @@ struct AgentConfig {
 }
 
 impl AgentConfig {
-    fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
+    async fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let service_url = parse_service_url(
             &env::var("PULSE_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
         )?;
@@ -102,7 +102,9 @@ impl AgentConfig {
         if config.virtualization.trim().is_empty()
             && parse_enabled("PULSE_AUTODETECT_VIRTUALIZATION")?
         {
-            config.virtualization = extended_metrics::detect_virtualization().unwrap_or_default();
+            config.virtualization = extended_metrics::detect_virtualization()
+                .await
+                .unwrap_or_default();
         }
         Ok(config)
     }
@@ -122,6 +124,7 @@ struct Collector {
     disks: Disks,
     networks: Networks,
     last_network_refresh: Instant,
+    operating_system: String,
 }
 
 impl Collector {
@@ -137,6 +140,10 @@ impl Collector {
             disks: Disks::new_with_refreshed_list(),
             networks: Networks::new_with_refreshed_list(),
             last_network_refresh: Instant::now(),
+            operating_system: extended_metrics::operating_system()
+                .or_else(System::long_os_version)
+                .filter(|name| name.len() <= 128)
+                .unwrap_or_else(|| "Unknown".to_owned()),
         }
     }
 
@@ -209,7 +216,7 @@ impl Collector {
             collected_at_unix_ms: collected_at.as_millis().try_into()?,
             host_name: Some(config.node_name.clone()),
             agent_version: env!("CARGO_PKG_VERSION").to_owned(),
-            operating_system: System::long_os_version().unwrap_or_else(|| "Unknown".to_owned()),
+            operating_system: self.operating_system.clone(),
             kernel_version: System::kernel_long_version(),
             architecture: System::cpu_arch(),
             cpu_name,
@@ -246,7 +253,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if run_credentials_command()? {
         return Ok(());
     }
-    let config = AgentConfig::from_env()?;
+    let config = AgentConfig::from_env().await?;
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))

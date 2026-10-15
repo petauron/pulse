@@ -115,7 +115,11 @@ the Agent in a container does not turn container metrics into host metrics.
 AMD GPU metrics use readable sysfs fields; NVIDIA uses a fixed `nvidia-smi` command
 with bounded output/time. Hardware, drivers, permissions and hardened systemd
 device isolation may make GPU data unavailable. Missing capabilities produce
-null/N/A. Virtualization auto-detection is best-effort; explicit configuration wins.
+null/N/A. On Linux, the Agent reads the bounded `/etc/os-release` `PRETTY_NAME`
+for the exact distribution version and uses a fixed, two-second
+`systemd-detect-virt` invocation when installed; bounded local metadata remains
+the fallback. Virtualization auto-detection is best-effort, and explicit
+configuration wins. No shell or PATH lookup is used.
 
 Set `PULSE_EXTENDED_METRICS=disabled`, `PULSE_GPU_METRICS=disabled`, or
 `PULSE_AUTODETECT_VIRTUALIZATION=disabled` to disable the corresponding collection.
