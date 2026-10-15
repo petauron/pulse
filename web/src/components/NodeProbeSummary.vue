@@ -2,8 +2,11 @@
 import type { NodeProbe } from '@/utils/rpc'
 import { computed } from 'vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
+import { useAppStore } from '@/stores/app'
+import { getProbeToneColor } from '@/utils/nodeHelpers'
 
 const props = defineProps<{ probes?: NodeProbe[], compact?: boolean }>()
+const app = useAppStore()
 const metrics = ['latency', 'loss'] as const
 const telecomPattern = /电信|telecom/i
 const unicomPattern = /联通|unicom/i
@@ -33,31 +36,6 @@ const rows = computed(() => [...(props.probes ?? [])]
       loss: !stale && points.length ? `${(points.reduce((sum, p) => sum + p.loss * p.samples, 0) / points.reduce((sum, p) => sum + p.samples, 0)).toFixed(1)}%` : '—',
     }
   }))
-// Emerald-Cazi latency scale; keep these thresholds and colors together.
-function tone(latency: number | null, success: boolean): string | undefined {
-  if (!success)
-    return '#F43F5E'
-  if (latency === null)
-    return undefined
-  if (latency <= 60)
-    return '#5EEAA6'
-  if (latency <= 100)
-    return '#47B592'
-  if (latency <= 160)
-    return '#A3E635'
-  if (latency <= 200)
-    return '#FACC15'
-  return '#F43F5E'
-}
-function lossTone(loss: number): string {
-  if (loss <= 0)
-    return '#5EEAA6'
-  if (loss < 5)
-    return '#A3E635'
-  if (loss < 20)
-    return '#FACC15'
-  return '#F43F5E'
-}
 function sampleTooltip(name: string, point: NodeProbe['points'][number], metric: typeof metrics[number]): string {
   if (!point.samples)
     return `${name} · 此时间段无样本`
@@ -88,7 +66,7 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
           >
             <span
               class="block h-full w-full rounded-[1px] bg-muted-foreground/15 transition-transform duration-150 group-hover/data-tooltip:scale-y-200 motion-reduce:transition-none"
-              :style="!point.samples || row.stale ? undefined : { backgroundColor: metric === 'latency' ? tone(point.latency, point.loss < 100) : lossTone(point.loss), opacity: metric === 'latency' ? 0.9 : 0.86 }"
+              :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor(metric, metric === 'latency' ? point.latency : point.loss, app.publicSettings?.theme_settings), opacity: metric === 'latency' ? 0.9 : 0.86 }"
             />
           </DataTooltip>
         </div>
@@ -98,7 +76,7 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
   </div>
   <div v-else class="flex h-8 w-full flex-col justify-center gap-px overflow-hidden" aria-label="三网延迟概览，点击查看详情">
     <div v-for="row in rows" :key="row.id" class="grid h-[3px] shrink-0 grid-cols-10 gap-px" :title="`${row.name} · 延迟 ${row.latency} · 失败率 ${row.loss}`">
-      <span v-for="(point, i) in row.points" :key="i" class="h-full bg-muted-foreground/15" :style="!point.samples || row.stale ? undefined : { backgroundColor: tone(point.latency, point.loss < 100) }" />
+      <span v-for="(point, i) in row.points" :key="i" class="h-full bg-muted-foreground/15" :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor('latency', point.latency, app.publicSettings?.theme_settings) }" />
     </div>
     <span v-if="!rows.length" class="text-[11px] text-muted-foreground">未配置探测</span>
   </div>

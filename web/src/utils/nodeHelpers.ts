@@ -83,3 +83,17 @@ export function getMemPercentage(node: NodeData): number {
 export function getDiskPercentage(node: NodeData): number {
   return (node.disk ?? 0) / (node.disk_total || 1) * 100
 }
+
+const probeToneKeys = ['pingExcellentColor', 'pingGoodColor', 'pingModerateColor', 'pingWarningColor', 'pingCriticalColor'] as const
+const probeToneDefaults = ['#5EEAA6', '#47B592', '#A3E635', '#FACC15', '#F43F5E'] as const
+const hexColor = /^#[0-9a-f]{6}$/i
+
+export function getProbeToneColor(metric: 'latency' | 'loss', value: number | null, settings?: Record<string, unknown> | null): string | undefined {
+  if (value === null)
+    return undefined
+  const limits = metric === 'latency' ? [60, 100, 160, 200] : [1, 3, 6, 9]
+  const index = limits.findIndex(limit => value <= limit)
+  const tone = index < 0 ? 4 : index
+  const configured = settings?.[probeToneKeys[tone]!]
+  return typeof configured === 'string' && hexColor.test(configured) ? configured.toUpperCase() : probeToneDefaults[tone]!
+}
