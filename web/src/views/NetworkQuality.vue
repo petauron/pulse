@@ -14,8 +14,15 @@ const store = useNodesStore()
 const router = useRouter()
 const kind = ref<'icmp' | 'tcp' | 'http'>('tcp')
 const modes = [{ kind: 'icmp', label: 'ICMP 延迟详情' }, { kind: 'tcp', label: 'TCP 连接质量' }, { kind: 'http', label: 'HTTP 可用性' }] as const
-const ranges = [1, 6, 12, 24, 72, 168]
-const availableRanges = computed(() => ranges.filter(range => range <= (app.publicSettings?.ping_record_preserve_time ?? 168)))
+const ranges = [1, 6, 12, 24, 168, 720, 1440, 2160]
+const availableRanges = computed(() => {
+  const max = app.publicSettings?.ping_record_preserve_time ?? 168
+  const available = ranges.filter(range => range <= max)
+  if (max > 1 && !available.includes(max))
+    available.push(max)
+  return available
+})
+const rangeLabel = (range: number) => range < 24 || range % 24 !== 0 ? `${range} 小时` : `${range / 24} 天`
 const hours = ref(1)
 watch(availableRanges, (available) => {
   if (!available.includes(hours.value))
@@ -113,7 +120,7 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
       <label v-if="tasks.length" class="flex items-center gap-2 text-sm">线路目标<select :value="task?.id" class="rounded-md border border-border bg-background p-2" @change="taskId = ($event.target as HTMLSelectElement).value"><option v-for="item in tasks" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
       <div class="flex flex-wrap gap-1 rounded-md bg-muted/70 p-1" role="group" aria-label="统计范围">
         <button v-for="range in availableRanges" :key="range" type="button" class="rounded px-2 py-1 text-xs" :aria-pressed="hours === range" :class="hours === range ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'" @click="hours = range">
-          {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
+          {{ rangeLabel(range) }}
         </button>
       </div>
     </div>

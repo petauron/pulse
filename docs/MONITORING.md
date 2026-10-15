@@ -71,10 +71,12 @@ These TCP failures contribute to failure rate, not to average latency. Historica
 samples retain the measurement rule used when they were collected, so a window
 can contain both rules until its older samples age out. ICMP reports the system
 ping RTT.
-The detail page shows the newest 1000 results and an aggregate for the requested
-window. A selected probe task is filtered before the 1000-result cap; its aggregate
-and the cross-node comparison use the full requested window. Server receipt time
-controls ordering and retention; Agent collection time
+The detail page shows a time-bucketed chart spanning the requested window, with
+at most 1000 points per task and 12000 points per response. The latest 100 raw
+results remain available as a separate table. A selected probe task is filtered
+before aggregation; its summary and the cross-node comparison use all samples
+in the requested window. Server receipt time controls ordering and retention;
+Agent collection time
 is diagnostic. Probe storage has a hard 100000-row per-node cap in addition to
 retention. Missing samples are not counted as received failures: node-offline
 alerts cover an absent Agent separately.

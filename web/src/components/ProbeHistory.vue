@@ -111,7 +111,7 @@ function taskStatsLabel(task: ProbeHistory['tasks'][number]): string {
 }
 const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
 const taskColor = (id: string) => colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
-const rangeLabel = (range: number) => range < 24 ? `${range} 小时` : `${range / 24} 天`
+const rangeLabel = (range: number) => range < 24 || range % 24 !== 0 ? `${range} 小时` : `${range / 24} 天`
 function tooltipTime(value: number): string {
   const date = new Date(value)
   const pad = (number: number) => String(number).padStart(2, '0')

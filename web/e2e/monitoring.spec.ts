@@ -83,6 +83,20 @@ test('the first failed connection recovers without reloading the page', async ({
   await expect(page.getByText('连接服务器失败，正在自动重试。请检查网络设置。')).toBeHidden()
 })
 
+test('network quality offers the full retained range with an exact custom label', async ({ page }) => {
+  await page.route('**/api/public', async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data.ping_record_preserve_time = 2400
+    await route.fulfill({ response, json: payload })
+  })
+  await login(page, '/network-quality')
+  const ranges = page.getByRole('group', { name: '统计范围' })
+  await expect(ranges.getByRole('button')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '7 天', '30 天', '60 天', '90 天', '100 天'])
+  await ranges.getByRole('button', { name: '100 天' }).click()
+  await expect(ranges.getByRole('button', { name: '100 天' })).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('probe task information opens without changing the selected chart series', async ({ page }) => {
   await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
     await route.fulfill({
