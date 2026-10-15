@@ -82,3 +82,30 @@ test('the first failed connection recovers without reloading the page', async ({
   await expect(page.getByRole('button', { name: '查看 e2e-node 节点详情' })).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText('连接服务器失败，正在自动重试。请检查网络设置。')).toBeHidden()
 })
+
+test('probe task information opens without changing the selected chart series', async ({ page }) => {
+  await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
+    await route.fulfill({
+      json: {
+        tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
+        records: [{ task_id: 'e2e-probe', collected_at_unix_ms: Date.now(), received_at_unix_ms: Date.now(), latency_ms: 20, success: true, error: null }],
+        summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
+        limit: 1000,
+        history_order: 'newest_first',
+      },
+    })
+  })
+  await login(page)
+  await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
+  const series = page.getByRole('button', { name: /^e2e-probe，平均延迟/ })
+  await expect(series).toHaveAttribute('aria-pressed', 'true')
+  const information = page.getByRole('button', { name: /^e2e-probe，最低/ })
+  await information.focus()
+  const tooltip = information.locator('..').getByRole('tooltip')
+  await expect(tooltip).toContainText('P99')
+  await expect(tooltip).toContainText('0.45')
+  await information.click()
+  await expect(series).toHaveAttribute('aria-pressed', 'true')
+  await series.click()
+  await expect(series).toHaveAttribute('aria-pressed', 'false')
+})

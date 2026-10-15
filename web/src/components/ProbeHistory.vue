@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import type { EChartsOption } from 'echarts'
 import type { ProbeHistory } from '@/utils/admin'
+import { Icon } from '@iconify/vue'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { Button } from '@/components/ui/button'
+import { DataTooltip } from '@/components/ui/data-tooltip'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
@@ -99,6 +101,12 @@ const recent = computed(() => [...(data.value?.records ?? [])].filter(record => 
 const date = (value: number) => new Date(value).toLocaleString()
 const latency = (value: number | null | undefined) => value == null ? '无成功样本' : `${value.toFixed(1)} ms`
 const cardLatency = (value: number | null | undefined) => value == null ? '-' : `${Math.round(value)}ms`
+function taskStatsLabel(task: ProbeHistory['tasks'][number]): string {
+  const stats = summaryByTask.value.get(task.id)
+  if (!stats)
+    return `${task.name}，暂无上报样本，间隔 ${task.interval_seconds} 秒，类型 ${task.kind.toUpperCase()}`
+  return `${task.name}，最低 ${latency(stats.min_latency_ms)}，最高 ${latency(stats.max_latency_ms)}，平均 ${latency(stats.avg_latency_ms)}，最新 ${latency(stats.latest_latency_ms)}，P50 ${latency(stats.p50_latency_ms)}，P99 ${latency(stats.p99_latency_ms)}，波动率 ${stats.p99_p50_ratio == null ? '不可计算' : stats.p99_p50_ratio.toFixed(2)}，间隔 ${task.interval_seconds} 秒，类型 ${task.kind.toUpperCase()}，样本 ${stats.samples}`
+}
 const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
 const taskColor = (id: string) => colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
 const rangeLabel = (range: number) => range < 24 ? `${range} 小时` : `${range / 24} 天`
@@ -211,27 +219,59 @@ const option = computed<EChartsOption>(() => {
       </p>
       <template v-else>
         <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
-          <button
-            v-for="task in tasks" :key="task.id" type="button"
-            class="flex min-h-11 items-center gap-3 rounded-md p-2 text-left transition-all bg-background/60 hover:bg-background hover:shadow-[0_0_0_1px] hover:shadow-emerald-600/10"
+          <div
+            v-for="task in tasks" :key="task.id"
+            class="flex min-h-11 items-center rounded-md p-2 transition-all bg-background/60 hover:bg-background hover:shadow-[0_0_0_1px] hover:shadow-emerald-600/10"
             :class="!selectedTaskIds.includes(task.id) && 'ring-1 ring-border'"
-            :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，${props.kind === 'icmp' ? '丢包率' : '失败率'} ${summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本'}，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
-            @click="toggleTask(task.id)"
           >
-            <span class="h-4 w-1 shrink-0 rounded" :style="{ backgroundColor: taskColor(task.id) }" aria-hidden="true" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-semibold">{{ task.name }}</span>
-              <span class="mt-1 block text-xs text-muted-foreground">
-                {{ cardLatency(summaryByTask.get(task.id)?.avg_latency_ms) }}
-                <span class="opacity-60">·</span>
-                {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
-                <template v-if="summaryByTask.get(task.id)?.p99_p50_ratio != null">
+            <button
+              type="button" class="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+              :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，${task.kind === 'icmp' ? '丢包率' : '失败率'} ${summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本'}，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
+              @click="toggleTask(task.id)"
+            >
+              <span class="h-4 w-1 shrink-0 rounded" :style="{ backgroundColor: taskColor(task.id) }" aria-hidden="true" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-semibold" :title="task.name">{{ task.name }}</span>
+                <span class="mt-1 block text-xs text-muted-foreground">
+                  {{ cardLatency(summaryByTask.get(task.id)?.avg_latency_ms) }}
                   <span class="opacity-60">·</span>
-                  <span title="波动率">{{ summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}</span>
-                </template>
+                  {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
+                  <template v-if="summaryByTask.get(task.id)?.p99_p50_ratio != null">
+                    <span class="opacity-60">·</span>
+                    <span title="波动率">{{ summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}</span>
+                  </template>
+                </span>
               </span>
-            </span>
-          </button>
+            </button>
+            <DataTooltip placement="left" class="shrink-0" content-class="!rounded !bg-popover !text-popover-foreground border border-border p-3 w-60 shadow-lg backdrop-blur max-sm:!top-full max-sm:!right-0 max-sm:!left-auto max-sm:!mt-2 max-sm:!mr-0 max-sm:!translate-y-0">
+              <button type="button" class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-emerald-600" :aria-label="taskStatsLabel(task)">
+                <Icon icon="lucide:info" :width="14" :height="14" aria-hidden="true" />
+              </button>
+              <template #content>
+                <div class="grid grid-cols-4 gap-x-3 gap-y-1.5 text-xs">
+                  <template v-for="(metric, index) in [
+                    ['最小', summaryByTask.get(task.id)?.min_latency_ms],
+                    ['最大', summaryByTask.get(task.id)?.max_latency_ms],
+                    ['平均', summaryByTask.get(task.id)?.avg_latency_ms],
+                    ['最新', summaryByTask.get(task.id)?.latest_latency_ms],
+                    ['P50', summaryByTask.get(task.id)?.p50_latency_ms],
+                    ['P99', summaryByTask.get(task.id)?.p99_latency_ms],
+                  ]" :key="index">
+                    <span class="text-muted-foreground">{{ metric[0] }}</span>
+                    <span class="font-medium tabular-nums">{{ metric[1] == null ? '—' : `${Math.round(Number(metric[1]))} ms` }}</span>
+                  </template>
+                  <span class="text-muted-foreground">波动率</span>
+                  <span class="font-medium tabular-nums">{{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}</span>
+                  <span class="text-muted-foreground">间隔</span>
+                  <span class="font-medium tabular-nums">{{ task.interval_seconds }}s</span>
+                  <span class="text-muted-foreground">类型</span>
+                  <span class="font-medium">{{ task.kind.toUpperCase() }}</span>
+                  <span class="text-muted-foreground">总数</span>
+                  <span class="font-medium tabular-nums">{{ summaryByTask.get(task.id)?.samples ?? 0 }}</span>
+                </div>
+              </template>
+            </DataTooltip>
+          </div>
         </div>
         <div class="flex flex-wrap items-center gap-2 py-2">
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showDelay && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showDelay" @click="showDelay = !showDelay">
