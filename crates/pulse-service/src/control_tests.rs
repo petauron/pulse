@@ -377,7 +377,7 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
             };
             tx.execute(
                 "INSERT INTO metrics.probe_results (node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES (?1,?2,?3,?4,?4,?5,?6,NULL)",
-                rusqlite::params![node.node_id, task.id, index.to_string(), now as i64 - 1_002 + index, latency, latency.is_some()],
+                rusqlite::params![node.node_id, task.id, index.to_string(), i64::try_from(now).unwrap() - 1_002 + index, latency, latency.is_some()],
             ).unwrap();
         }
         tx.commit().unwrap();
@@ -397,10 +397,10 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
 
 #[test]
 fn probe_percentile_interpolates_and_preserves_empty_sample_state() {
-    assert_eq!(probe_percentile(&[], 0.5), None);
-    assert_eq!(probe_percentile(&[10.0], 0.99), Some(10.0));
-    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 0.5), Some(25.0));
-    assert!((probe_percentile(&[10.0, 20.0, 30.0, 40.0], 0.99).unwrap() - 39.7).abs() < 1e-9);
+    assert_eq!(probe_percentile(&[], 50), None);
+    assert_eq!(probe_percentile(&[10.0], 99), Some(10.0));
+    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 50), Some(25.0));
+    assert!((probe_percentile(&[10.0, 20.0, 30.0, 40.0], 99).unwrap() - 39.7).abs() < 1e-9);
 }
 
 #[test]

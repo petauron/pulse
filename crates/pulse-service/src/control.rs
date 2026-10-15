@@ -18,14 +18,16 @@ const MAX_PROBE_HISTORY: usize = 1_000;
 const MAX_PROBE_STATS_SAMPLES: usize = 100_000;
 const MAX_INCIDENTS: usize = 1_000;
 
-pub(crate) fn probe_percentile(sorted: &[f64], fraction: f64) -> Option<f64> {
+pub(crate) fn probe_percentile(sorted: &[f64], percentile: usize) -> Option<f64> {
     if sorted.is_empty() {
         return None;
     }
-    let position = (sorted.len() - 1) as f64 * fraction;
-    let lower = position.floor() as usize;
-    let upper = position.ceil() as usize;
-    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower as f64))
+    let rank = (sorted.len() - 1).checked_mul(percentile)?;
+    let lower = rank / 100;
+    let remainder = rank % 100;
+    let upper = lower + usize::from(remainder != 0);
+    let weight = f64::from(u32::try_from(remainder).ok()?) / 100.0;
+    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * weight)
 }
 
 /// A current-cycle correction anchored to the provider-interface counters.
@@ -746,11 +748,11 @@ impl Storage {
             }
             let latest = values.first().copied();
             values.sort_by(f64::total_cmp);
-            let p50 = probe_percentile(&values, 0.5);
-            let p99 = probe_percentile(&values, 0.99);
+            let p50 = probe_percentile(&values, 50);
+            let p99 = probe_percentile(&values, 99);
             let ratio = p50.zip(p99).and_then(|(median, high)| {
                 (median > 0.0 && high >= median)
-                    .then(|| (high - median) / median.min(50.0).max(10.0))
+                    .then(|| (high - median) / median.clamp(10.0, 50.0))
             });
             item["min_latency_ms"] = json!(values.first());
             item["max_latency_ms"] = json!(values.last());
