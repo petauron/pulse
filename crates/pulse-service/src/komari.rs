@@ -13,9 +13,7 @@ pub(crate) async fn nodes(
     let max_nodes = state.max_nodes;
     let probe_config = dashboard_probe_config(&state);
     let dashboard = state
-        .database(move |storage| {
-            storage.emerald_dashboard(offline_after, max_nodes, &probe_config)
-        })
+        .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes, &probe_config))
         .await?;
     let clients = dashboard["clients"]
         .as_object()

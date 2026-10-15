@@ -1186,7 +1186,12 @@ pub(crate) fn dashboard_probes(
     let selected: Vec<_> = if let Some(ids) = config.tasks_by_node.get(node) {
         ids.iter()
             .take(config.row_count)
-            .filter_map(|id| available.iter().find(|task| task.id.as_str() == id).copied())
+            .filter_map(|id| {
+                available
+                    .iter()
+                    .find(|task| task.id.as_str() == id)
+                    .copied()
+            })
             .collect()
     } else {
         available.into_iter().take(config.row_count).collect()
