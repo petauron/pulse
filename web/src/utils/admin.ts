@@ -109,6 +109,7 @@ export interface ProbeHistory {
     max_latency_ms: number | null
     latest_latency_ms: number | null
     p50_latency_ms: number | null
+    p95_latency_ms: number | null
     p99_latency_ms: number | null
     p99_p50_ratio: number | null
   }[]

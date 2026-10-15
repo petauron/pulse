@@ -104,7 +104,7 @@ test('probe task information opens without changing the selected chart series', 
         tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
         records: [{ task_id: 'e2e-probe', collected_at_unix_ms: Date.now(), received_at_unix_ms: Date.now(), latency_ms: 20, success: true, error: null }],
         chart: [{ task_id: 'e2e-probe', received_at_unix_ms: Date.now(), latency_ms: 20, failed_samples: 0, samples: 1 }],
-        summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
+        summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p95_latency_ms: 27, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
         chart_source_points: 1,
         chart_bucket_ms: 3601,
         range_start_unix_ms: Date.now() - 3_600_000,
@@ -116,10 +116,13 @@ test('probe task information opens without changing the selected chart series', 
   await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
   const series = page.getByRole('button', { name: /^e2e-probe，平均延迟/ })
   await expect(series).toHaveAttribute('aria-pressed', 'true')
+  await expect(series).toContainText('P95')
+  await expect(series).toContainText('27ms')
   const information = page.getByRole('button', { name: /^e2e-probe，最低/ })
   await information.focus()
   const tooltip = information.locator('..').getByRole('tooltip')
   await expect(tooltip).toContainText('P99')
+  await expect(tooltip).toContainText('P95')
   await expect(tooltip).toContainText('0.45')
   await information.click()
   await expect(series).toHaveAttribute('aria-pressed', 'true')

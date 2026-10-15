@@ -756,6 +756,7 @@ impl Storage {
             let latest = values.first().copied();
             values.sort_by(f64::total_cmp);
             let p50 = probe_percentile(&values, 50);
+            let p95 = probe_percentile(&values, 95);
             let p99 = probe_percentile(&values, 99);
             let ratio = p50.zip(p99).and_then(|(median, high)| {
                 (median > 0.0 && high >= median).then(|| (high - median) / median.clamp(10.0, 50.0))
@@ -764,6 +765,7 @@ impl Storage {
             item["max_latency_ms"] = json!(values.last());
             item["latest_latency_ms"] = json!(latest);
             item["p50_latency_ms"] = json!(p50);
+            item["p95_latency_ms"] = json!(p95);
             item["p99_latency_ms"] = json!(p99);
             item["p99_p50_ratio"] = json!(ratio);
         }

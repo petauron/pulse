@@ -414,6 +414,7 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
     assert_eq!(summary["max_latency_ms"], 1_000.0);
     assert_eq!(summary["latest_latency_ms"], 10.0);
     assert_eq!(summary["p50_latency_ms"], 10.0);
+    assert_eq!(summary["p95_latency_ms"], 10.0);
     assert_eq!(summary["p99_latency_ms"], 10.0);
     assert_eq!(summary["p99_p50_ratio"], 0.0);
     assert!((summary["loss_percent"].as_f64().unwrap() - 100.0 / 1_002.0).abs() < 0.001);
@@ -424,6 +425,7 @@ fn probe_percentile_interpolates_and_preserves_empty_sample_state() {
     assert_eq!(probe_percentile(&[], 50), None);
     assert_eq!(probe_percentile(&[10.0], 99), Some(10.0));
     assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 50), Some(25.0));
+    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 95), Some(38.5));
     assert!((probe_percentile(&[10.0, 20.0, 30.0, 40.0], 99).unwrap() - 39.7).abs() < 1e-9);
 }
 
