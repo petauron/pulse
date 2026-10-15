@@ -117,7 +117,7 @@ test('probe history honors Emerald chart defaults and retained range', async ({ 
     requests.push(route.request().url())
     await route.fulfill({
       json: {
-        tasks: [],
+        tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
         records: [],
         chart: [],
         summary: [],
