@@ -196,7 +196,7 @@ const customTags = computed(() => getCustomTags(props.node))
                 </div>
               </div>
             </div>
-            <div class="flex items-center justify-between">
+            <div v-if="priceTags.length" class="flex items-center justify-between">
               <span class="truncate">
                 在线
               </span>

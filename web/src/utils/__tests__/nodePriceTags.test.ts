@@ -10,12 +10,10 @@ describe('getPriceTags', () => {
     expired_at: '',
   } as NodeData
 
-  it('does not add a free-price label to the Emerald card', () => {
-    expect(getPriceTags(freeNode, 'zh-CN')).toEqual([])
-    const expiredAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    const withExpiry = getPriceTags({ ...freeNode, expired_at: expiredAt }, 'zh-CN')
-    expect(withExpiry).toHaveLength(1)
-    expect(withExpiry[0]?.text).toMatch(/^余 \d+ 天$/)
+  it('shows free and long-term labels as the deployed Komari card does', () => {
+    expect(getPriceTags(freeNode, 'zh-CN')).toEqual([{ text: '免费' }])
+    expect(getPriceTags({ ...freeNode, expired_at: '2099-01-01T00:00:00Z' }, 'zh-CN'))
+      .toEqual([{ text: '免费' }, { text: '长期' }])
   })
 
   it('keeps the existing list price label', () => {
