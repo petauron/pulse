@@ -93,6 +93,13 @@ export interface ProbeRecord {
 export interface ProbeHistory {
   tasks: Pick<ProbeTask, 'id' | 'name' | 'kind' | 'interval_seconds'>[]
   records: ProbeRecord[]
+  chart: {
+    task_id: string
+    received_at_unix_ms: number
+    latency_ms: number | null
+    failed_samples: number
+    samples: number
+  }[]
   summary: {
     task_id: string
     samples: number
@@ -105,8 +112,10 @@ export interface ProbeHistory {
     p99_latency_ms: number | null
     p99_p50_ratio: number | null
   }[]
-  limit: number
-  history_order: 'newest_first'
+  chart_source_points: number
+  chart_bucket_ms: number
+  range_start_unix_ms: number
+  range_end_unix_ms: number
 }
 
 export interface ProbeComparison {

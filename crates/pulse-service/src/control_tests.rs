@@ -377,14 +377,23 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
             };
             tx.execute(
                 "INSERT INTO metrics.probe_results (node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES (?1,?2,?3,?4,?4,?5,?6,NULL)",
-                rusqlite::params![node.node_id, task.id, index.to_string(), i64::try_from(now).unwrap() - 1_002 + index, latency, latency.is_some()],
+                rusqlite::params![node.node_id, task.id, index.to_string(), i64::try_from(now).unwrap() - 3_003 + index * 3, latency, latency.is_some()],
             ).unwrap();
         }
         tx.commit().unwrap();
     }
     let history = storage.probe_history(&node.node_id, None, 1, now).unwrap();
     let summary = &history["summary"][0];
-    assert_eq!(history["records"].as_array().unwrap().len(), 1_000);
+    let recent = history["records"].as_array().unwrap();
+    let chart = history["chart"].as_array().unwrap();
+    assert_eq!(recent.len(), 100);
+    assert!(chart.len() <= 1_000);
+    assert_eq!(history["chart_source_points"], 1_002);
+    assert!(history["chart_bucket_ms"].as_u64().unwrap() > 1);
+    assert_eq!(history["range_end_unix_ms"], now);
+    assert!(chart[0]["received_at_unix_ms"].as_i64().unwrap() < recent[99]["received_at_unix_ms"].as_i64().unwrap());
+    assert_eq!(chart.iter().map(|point| point["samples"].as_u64().unwrap()).sum::<u64>(), 1_002);
+    assert_eq!(chart.iter().map(|point| point["failed_samples"].as_u64().unwrap()).sum::<u64>(), 1);
     assert_eq!(summary["samples"], 1_002);
     assert_eq!(summary["min_latency_ms"], 10.0);
     assert_eq!(summary["max_latency_ms"], 1_000.0);

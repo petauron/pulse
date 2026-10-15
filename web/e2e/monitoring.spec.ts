@@ -89,9 +89,12 @@ test('probe task information opens without changing the selected chart series', 
       json: {
         tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
         records: [{ task_id: 'e2e-probe', collected_at_unix_ms: Date.now(), received_at_unix_ms: Date.now(), latency_ms: 20, success: true, error: null }],
+        chart: [{ task_id: 'e2e-probe', received_at_unix_ms: Date.now(), latency_ms: 20, failed_samples: 0, samples: 1 }],
         summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
-        limit: 1000,
-        history_order: 'newest_first',
+        chart_source_points: 1,
+        chart_bucket_ms: 3600,
+        range_start_unix_ms: Date.now() - 3_600_000,
+        range_end_unix_ms: Date.now(),
       },
     })
   })

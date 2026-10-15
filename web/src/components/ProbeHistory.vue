@@ -164,13 +164,11 @@ function toggleTask(id: string): void {
 }
 
 function taskChartData(id: string): Array<[number, number | null]> {
-  const records = (data.value?.records ?? [])
-    .filter(record => record.task_id === id)
-    .sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms)
+  const records = (data.value?.chart ?? []).filter(record => record.task_id === id)
   if (!cutPeak.value)
-    return records.map((record): [number, number | null] => [record.received_at_unix_ms, record.success ? record.latency_ms : null])
+    return records.map((record): [number, number | null] => [record.received_at_unix_ms, record.latency_ms])
 
-  const smoothed = cutPeakValues(records.map(record => ({ latency: record.success ? record.latency_ms : null })), ['latency'])
+  const smoothed = cutPeakValues(records.map(record => ({ latency: record.latency_ms })), ['latency'])
   return smoothed.map((point, index): [number, number | null] => [records[index]!.received_at_unix_ms, typeof point.latency === 'number' ? point.latency : null])
 }
 
@@ -202,6 +200,8 @@ const option = computed<EChartsOption>(() => {
     grid: { left: 56, right: 24, top: 30, bottom: 52 },
     xAxis: {
       type: 'time',
+      min: data.value?.range_start_unix_ms,
+      max: data.value?.range_end_unix_ms,
       axisLabel: { fontSize: 11, color: secondary, margin: 12 },
       axisLine: { show: true, lineStyle: { color: border, width: 1 } },
       axisTick: { show: false },
@@ -234,7 +234,7 @@ const option = computed<EChartsOption>(() => {
             animation: false,
             label: { show: false },
             lineStyle: { color: taskColor(task.id), width: 1, opacity: 0.55 },
-            data: (data.value?.records ?? []).filter(record => record.task_id === task.id && !record.success).slice(0, 200).map(record => ({ xAxis: record.received_at_unix_ms })),
+            data: (data.value?.chart ?? []).filter(record => record.task_id === task.id && record.failed_samples > 0).map(record => ({ xAxis: record.received_at_unix_ms })),
           }
         : undefined,
     })),
@@ -343,7 +343,7 @@ const option = computed<EChartsOption>(() => {
             <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="cutPeak && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="cutPeak" @click="cutPeak = !cutPeak">
               平滑峰值
             </Button>
-            <DataTooltip content="使用 EWMA 算法平滑曲线并过滤突变值；汇总和失败标记仍按原始样本计算" placement="top" content-class="max-w-56 text-[11px] leading-relaxed">
+            <DataTooltip content="使用 EWMA 算法平滑曲线并过滤突变值；汇总仍按原始样本计算" placement="top" content-class="max-w-56 text-[11px] leading-relaxed">
               <button type="button" class="flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-emerald-600" aria-label="平滑峰值说明">
                 <Icon icon="lucide:info" :width="14" :height="14" aria-hidden="true" />
               </button>
@@ -353,10 +353,10 @@ const option = computed<EChartsOption>(() => {
             {{ loading ? '加载中…' : '刷新' }}
           </Button>
         </div>
-        <p v-if="data.records.length >= data.limit" class="text-sm text-muted-foreground">
-          曲线仅展示最近 {{ data.limit }} 个样本；汇总按整个所选时间范围计算。
+        <p v-if="data.chart_source_points > data.chart.length" class="text-sm text-muted-foreground">
+          曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
-        <div v-if="data.records.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+        <div v-if="data.chart.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
           <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，失败样本为断点，可显示失败标记" />
         </div>
         <p v-else class="text-sm text-muted-foreground">
