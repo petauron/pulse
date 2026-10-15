@@ -148,6 +148,15 @@ test('probe history honors Emerald chart defaults and retained range', async ({ 
 })
 
 test('probe analysis switches tasks without changing the selected chart series', async ({ page }, testInfo) => {
+  await page.route('**/api/public', async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data.theme_settings = {
+      ...payload.data.theme_settings,
+      pingTaskColors: { 'e2e-probe': '#123456', 'e2e-probe-2': 'invalid' },
+    }
+    await route.fulfill({ response, json: payload })
+  })
   await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
     await route.fulfill({
       json: {
@@ -174,6 +183,9 @@ test('probe analysis switches tasks without changing the selected chart series',
   await login(page)
   await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
   const analysis = page.getByRole('region', { name: '延迟数据分析' })
+  const taskColors = analysis.locator('span[style*="background-color"]')
+  await expect(taskColors.nth(0)).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(taskColors.nth(1)).toHaveCSS('background-color', 'rgb(78, 205, 196)')
   await expect(analysis.getByRole('button', { name: '分析 e2e-probe', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(analysis).toContainText('27ms')
   await expect(analysis).toContainText('P99')

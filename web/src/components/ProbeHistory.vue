@@ -136,7 +136,16 @@ const date = (value: number) => new Date(value).toLocaleString()
 const latency = (value: number | null | undefined) => value == null ? '无成功样本' : `${value.toFixed(1)} ms`
 const cardLatency = (value: number | null | undefined) => value == null ? '-' : `${Math.round(value)}ms`
 const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
-const taskColor = (id: string) => colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
+const hexColor = /^#[0-9a-f]{6}$/i
+function taskColor(id: string): string {
+  const configured = app.publicSettings?.theme_settings?.pingTaskColors
+  if (configured && typeof configured === 'object' && !Array.isArray(configured)) {
+    const color = (configured as Record<string, unknown>)[id]
+    if (typeof color === 'string' && hexColor.test(color))
+      return color.toUpperCase()
+  }
+  return colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
+}
 const rangeLabel = (range: number) => range < 24 || range % 24 !== 0 ? `${range} 小时` : `${range / 24} 天`
 function tooltipTime(value: number): string {
   const date = new Date(value)
@@ -314,7 +323,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   return {
     darkMode: app.isDark,
     animation: false,
-    color: colors,
+    color: selectedTasks.value.map(task => taskColor(task.id)),
     aria: { enabled: true },
     textStyle: { color: foreground },
     tooltip: {
