@@ -751,8 +751,7 @@ impl Storage {
             let p50 = probe_percentile(&values, 50);
             let p99 = probe_percentile(&values, 99);
             let ratio = p50.zip(p99).and_then(|(median, high)| {
-                (median > 0.0 && high >= median)
-                    .then(|| (high - median) / median.clamp(10.0, 50.0))
+                (median > 0.0 && high >= median).then(|| (high - median) / median.clamp(10.0, 50.0))
             });
             item["min_latency_ms"] = json!(values.first());
             item["max_latency_ms"] = json!(values.last());
