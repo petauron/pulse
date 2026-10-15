@@ -767,8 +767,11 @@ impl Storage {
             item["p99_latency_ms"] = json!(p99);
             item["p99_p50_ratio"] = json!(ratio);
         }
-        let points_per_task = MAX_PROBE_CHART_PER_TASK.min(MAX_PROBE_CHART_TOTAL / tasks.len().max(1));
-        let bucket_ms = now.saturating_sub(start_ms).saturating_add(1)
+        let points_per_task =
+            MAX_PROBE_CHART_PER_TASK.min(MAX_PROBE_CHART_TOTAL / tasks.len().max(1));
+        let bucket_ms = now
+            .saturating_sub(start_ms)
+            .saturating_add(1)
             .div_ceil(u64::try_from(points_per_task).expect("probe chart point limit fits u64"))
             .max(1);
         let mut statement = db.prepare(
@@ -780,17 +783,24 @@ impl Storage {
              GROUP BY task_id,(received_at_ms-?2)/?5
              ORDER BY task_id,MAX(received_at_ms)",
         )?;
-        let chart = statement.query_map(
-            params![node,start,end,task_ids,integer(bucket_ms)],
-            |row| Ok(json!({
-                "task_id": row.get::<_, String>(0)?,
-                "received_at_unix_ms": row.get::<_, i64>(1)?,
-                "latency_ms": row.get::<_, Option<f64>>(2)?,
-                "failed_samples": row.get::<_, i64>(3)?,
-                "samples": row.get::<_, i64>(4)?
-            })),
-        )?.collect::<Result<Vec<_>,_>>()?;
-        let chart_source_points: u64 = summary.iter().map(|item| item["samples"].as_u64().unwrap_or(0)).sum();
+        let chart = statement
+            .query_map(
+                params![node, start, end, task_ids, integer(bucket_ms)],
+                |row| {
+                    Ok(json!({
+                        "task_id": row.get::<_, String>(0)?,
+                        "received_at_unix_ms": row.get::<_, i64>(1)?,
+                        "latency_ms": row.get::<_, Option<f64>>(2)?,
+                        "failed_samples": row.get::<_, i64>(3)?,
+                        "samples": row.get::<_, i64>(4)?
+                    }))
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        let chart_source_points: u64 = summary
+            .iter()
+            .map(|item| item["samples"].as_u64().unwrap_or(0))
+            .sum();
         // Public readers need names/types, never private probe targets or node assignments.
         let tasks:Vec<_>=tasks.into_iter().map(|t|json!({"id":t.id,"name":t.name,"kind":t.kind,"interval_seconds":t.interval_seconds})).collect();
         Ok(

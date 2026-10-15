@@ -391,9 +391,24 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
     assert_eq!(history["chart_source_points"], 1_002);
     assert!(history["chart_bucket_ms"].as_u64().unwrap() > 1);
     assert_eq!(history["range_end_unix_ms"], now);
-    assert!(chart[0]["received_at_unix_ms"].as_i64().unwrap() < recent[99]["received_at_unix_ms"].as_i64().unwrap());
-    assert_eq!(chart.iter().map(|point| point["samples"].as_u64().unwrap()).sum::<u64>(), 1_002);
-    assert_eq!(chart.iter().map(|point| point["failed_samples"].as_u64().unwrap()).sum::<u64>(), 1);
+    assert!(
+        chart[0]["received_at_unix_ms"].as_i64().unwrap()
+            < recent[99]["received_at_unix_ms"].as_i64().unwrap()
+    );
+    assert_eq!(
+        chart
+            .iter()
+            .map(|point| point["samples"].as_u64().unwrap())
+            .sum::<u64>(),
+        1_002
+    );
+    assert_eq!(
+        chart
+            .iter()
+            .map(|point| point["failed_samples"].as_u64().unwrap())
+            .sum::<u64>(),
+        1
+    );
     assert_eq!(summary["samples"], 1_002);
     assert_eq!(summary["min_latency_ms"], 10.0);
     assert_eq!(summary["max_latency_ms"], 1_000.0);
