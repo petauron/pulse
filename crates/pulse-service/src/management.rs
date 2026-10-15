@@ -168,3 +168,22 @@ pub(crate) async fn probe_history(
             .await?,
     ))
 }
+
+#[derive(Deserialize)]
+pub(crate) struct ProbeComparisonQuery {
+    task_id: String,
+    hours: Option<u32>,
+}
+
+pub(crate) async fn probe_comparison(
+    State(state): State<AppState>,
+    Query(query): Query<ProbeComparisonQuery>,
+) -> Result<Json<Value>, ApiError> {
+    let now = current_time()?;
+    let hours = history_hours(query.hours, state.retention_days);
+    let task_id = query.task_id;
+    let result = state
+        .database(move |storage| storage.probe_comparison(&task_id, hours, now))
+        .await?;
+    Ok(Json(json!({ "rows": result })))
+}

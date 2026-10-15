@@ -708,6 +708,47 @@ impl Storage {
             json!({"tasks":tasks,"records":records,"summary":summary,"limit":MAX_PROBE_HISTORY,"history_order":"newest_first"}),
         )
     }
+    /// Full-range per-node aggregates for one public probe task.
+    pub(crate) fn probe_comparison(
+        &self,
+        task_id: &str,
+        hours: u32,
+        now: u64,
+    ) -> Result<Vec<Value>, StorageError> {
+        let db = self.connection()?;
+        let enabled = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+            .into_iter()
+            .any(|task| task.id == task_id && task.enabled);
+        if !enabled {
+            return Err(StorageError::NotFound);
+        }
+        let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
+        let mut statement = db.prepare(
+            "SELECT node_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms)
+             FROM probe_results WHERE task_id=?1 AND received_at_ms>=?2 GROUP BY node_id",
+        )?;
+        let rows = statement.query_map(params![task_id, start], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, Option<f64>>(3)?,
+            ))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (node, samples, loss, latency) = row?;
+            if visible(&db, &node)? {
+                result.push(json!({
+                    "node_id": node,
+                    "samples": samples,
+                    "loss_percent": loss,
+                    "avg_latency_ms": latency,
+                }));
+            }
+        }
+        Ok(result)
+    }
     /// Bounded public cross-node probe history for Komari-style overview charts.
     pub(crate) fn probe_overview(
         &self,

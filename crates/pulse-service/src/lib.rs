@@ -389,6 +389,7 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/nodes/{node_id}/probes",
             get(management::probe_history),
         )
+        .route("/api/v1/probes/comparison", get(management::probe_comparison))
         .merge(management::routes())
         .merge(ip_info::routes())
         .route("/api/rpc2", post(rpc_handler))
@@ -441,6 +442,7 @@ async fn request_guard(
         || path == "/api/rpc2"
         || path == "/api/v1/nodes"
         || path.starts_with("/api/v1/nodes/")
+        || path == "/api/v1/probes/comparison"
         || path.starts_with("/api/records/");
     let protected = protected
         || path == "/api/nodes"
@@ -1408,6 +1410,7 @@ mod tests {
             "/api/records/ping?uuid=00000000-0000-0000-0000-000000000000",
             "/api/records/load?uuid=00000000-0000-0000-0000-000000000000",
             "/api/v1/nodes/00000000-0000-0000-0000-000000000000/probes",
+            "/api/v1/probes/comparison?task_id=example&hours=1",
             "/api/admin/state",
         ] {
             let response = router(state.clone())

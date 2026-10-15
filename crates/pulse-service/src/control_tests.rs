@@ -299,7 +299,21 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
     assert_eq!(history["summary"][0]["samples"], 2);
     assert_eq!(history["summary"][0]["loss_percent"], 0.0);
     assert!(history["tasks"][0].get("target").is_none());
+    let comparison = storage.probe_comparison(&task.id, 1, now + 200).unwrap();
+    assert_eq!(comparison.len(), 1);
+    assert_eq!(comparison[0]["node_id"], node.node_id);
+    assert_eq!(comparison[0]["samples"], 2);
+    assert_eq!(comparison[0]["avg_latency_ms"], 1.0);
+    assert!(comparison[0].get("target").is_none());
+    assert!(matches!(
+        storage.probe_comparison("unknown", 1, now + 200),
+        Err(StorageError::NotFound)
+    ));
     storage.revoke_node(&node.node_id, now + 1000).unwrap();
+    assert!(storage
+        .probe_comparison(&task.id, 1, now + 1000)
+        .unwrap()
+        .is_empty());
     assert!(matches!(
         storage.agent_runtime_config(&node.agent_token),
         Err(StorageError::Unauthorized)

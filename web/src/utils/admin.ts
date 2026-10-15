@@ -98,6 +98,13 @@ export interface ProbeHistory {
   history_order: 'newest_first'
 }
 
+export interface ProbeComparison {
+  node_id: string
+  samples: number
+  loss_percent: number
+  avg_latency_ms: number | null
+}
+
 /** Do not send read-only counters or newly added admin-state fields as metadata. */
 export function nodeMetadata(node: ManagedNode): ManagedNode {
   const { id, name, region, group, weight, hidden, tags, public_remark, ipv4, ipv6, price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day } = node
@@ -106,4 +113,9 @@ export function nodeMetadata(node: ManagedNode): ManagedNode {
 
 export function fetchProbeHistory(id: string, hours: number, signal?: AbortSignal): Promise<ProbeHistory> {
   return getSharedApi().get(`v1/nodes/${encodeURIComponent(id)}/probes?hours=${hours}`, signal)
+}
+
+export async function fetchProbeComparison(taskId: string, hours: number, signal?: AbortSignal): Promise<ProbeComparison[]> {
+  const result = await getSharedApi().get<{ rows: ProbeComparison[] }>(`v1/probes/comparison?task_id=${encodeURIComponent(taskId)}&hours=${hours}`, signal)
+  return result.rows
 }

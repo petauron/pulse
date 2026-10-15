@@ -10,9 +10,9 @@ import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
 import '@/utils/echarts'
 
-const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string }>()
+const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
 const app = useAppStore()
-const hours = ref(1)
+const hours = ref(props.selectedHours ?? 1)
 const metric = ref<'latency' | 'loss'>('latency')
 const ranges = [1, 6, 12, 24, 72, 168]
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
@@ -46,6 +46,10 @@ async function reload(): Promise<void> {
   }
 }
 
+watch(() => props.selectedHours, (value) => {
+  if (value !== undefined)
+    hours.value = value
+})
 watch(() => [props.uuid, hours.value], () => {
   data.value = null
   void reload()
@@ -152,7 +156,7 @@ const option = computed<EChartsOption>(() => {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Tabs class="min-w-0 max-w-full" :model-value="String(hours)" @update:model-value="hours = Number($event)">
+        <Tabs v-if="selectedHours === undefined" class="min-w-0 max-w-full" :model-value="String(hours)" @update:model-value="hours = Number($event)">
           <TabsList class="flex-wrap h-auto" aria-label="探测历史时间范围">
             <TabsTrigger v-for="range in ranges" :key="range" :value="String(range)">
               {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
