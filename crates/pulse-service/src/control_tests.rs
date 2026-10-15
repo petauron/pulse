@@ -305,6 +305,16 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
     assert_eq!(comparison[0]["samples"], 2);
     assert_eq!(comparison[0]["avg_latency_ms"], 1.0);
     assert!(comparison[0].get("target").is_none());
+    assert!(storage
+        .probe_comparison(&task.id, 1, now + 2 * 3_600_000)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        storage
+            .probe_comparison(&task.id, 3, now + 2 * 3_600_000)
+            .unwrap()[0]["samples"],
+        2
+    );
     assert!(matches!(
         storage.probe_comparison("unknown", 1, now + 200),
         Err(StorageError::NotFound)

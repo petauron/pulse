@@ -15,6 +15,7 @@ const app = useAppStore()
 const hours = ref(props.selectedHours ?? 1)
 const metric = ref<'latency' | 'loss'>('latency')
 const ranges = [1, 6, 12, 24, 72, 168]
+const availableRanges = computed(() => ranges.filter(range => range <= (app.publicSettings?.ping_record_preserve_time ?? 168)))
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const data = shallowRef<ProbeHistory | null>(null)
 const loading = ref(false)
@@ -49,6 +50,10 @@ async function reload(): Promise<void> {
 watch(() => props.selectedHours, (value) => {
   if (value !== undefined)
     hours.value = value
+})
+watch(availableRanges, (available) => {
+  if (props.selectedHours === undefined && !available.includes(hours.value))
+    hours.value = available.at(-1) ?? 1
 })
 watch(() => [props.uuid, hours.value], () => {
   data.value = null
@@ -158,7 +163,7 @@ const option = computed<EChartsOption>(() => {
         </Tabs>
         <Tabs v-if="selectedHours === undefined" class="min-w-0 max-w-full" :model-value="String(hours)" @update:model-value="hours = Number($event)">
           <TabsList class="flex-wrap h-auto" aria-label="探测历史时间范围">
-            <TabsTrigger v-for="range in ranges" :key="range" :value="String(range)">
+            <TabsTrigger v-for="range in availableRanges" :key="range" :value="String(range)">
               {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
             </TabsTrigger>
           </TabsList>

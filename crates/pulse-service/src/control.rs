@@ -716,12 +716,11 @@ impl Storage {
         now: u64,
     ) -> Result<Vec<Value>, StorageError> {
         let db = self.connection()?;
-        let enabled = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let task = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
             .into_iter()
-            .any(|task| task.id == task_id && task.enabled);
-        if !enabled {
-            return Err(StorageError::NotFound);
-        }
+            .find(|task| task.id == task_id && task.enabled)
+            .ok_or(StorageError::NotFound)?;
+        let assigned: HashSet<&str> = task.node_ids.iter().map(String::as_str).collect();
         let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
         let mut statement = db.prepare(
             "SELECT node_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms)
@@ -738,7 +737,7 @@ impl Storage {
         let mut result = Vec::new();
         for row in rows {
             let (node, samples, loss, latency) = row?;
-            if visible(&db, &node)? {
+            if (assigned.is_empty() || assigned.contains(node.as_str())) && visible(&db, &node)? {
                 result.push(json!({
                     "node_id": node,
                     "samples": samples,
