@@ -1,4 +1,5 @@
 import type { NodeData, TrafficLimitType } from '@/stores/nodes'
+import type { NodeProbe } from '@/utils/rpc'
 import { formatDateTime } from '@/utils/helper'
 import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireTextClass, parseTags } from '@/utils/tagHelper'
 
@@ -96,4 +97,19 @@ export function getProbeToneColor(metric: 'latency' | 'loss', value: number | nu
   const tone = index < 0 ? 4 : index
   const configured = settings?.[probeToneKeys[tone]!]
   return typeof configured === 'string' && hexColor.test(configured) ? configured.toUpperCase() : probeToneDefaults[tone]!
+}
+
+export function selectHomeProbes(probes: NodeProbe[], nodeUuid: string, settings?: Record<string, unknown> | null): Array<NodeProbe | null> {
+  const configuredCount = settings?.homePingRowCount
+  const rowCount = typeof configuredCount === 'number' && Number.isFinite(configuredCount)
+    ? Math.round(Math.min(8, Math.max(1, configuredCount)))
+    : 2
+  const configuredMap = settings?.homePingTasksByNode
+  const taskIds = configuredMap && typeof configuredMap === 'object' && !Array.isArray(configuredMap) && Object.hasOwn(configuredMap, nodeUuid)
+    ? (configuredMap as Record<string, unknown>)[nodeUuid]
+    : undefined
+  const selected = Array.isArray(taskIds)
+    ? [...new Set(taskIds.filter(id => typeof id === 'string' || (typeof id === 'number' && Number.isInteger(id) && id >= 0)).map(String))].map(id => probes.find(task => task.id === id) ?? null)
+    : probes
+  return Array.from({ length: rowCount }, (_, index) => selected[index] ?? null)
 }

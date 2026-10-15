@@ -3,39 +3,35 @@ import type { NodeProbe } from '@/utils/rpc'
 import { computed } from 'vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { useAppStore } from '@/stores/app'
-import { getProbeToneColor } from '@/utils/nodeHelpers'
+import { getProbeToneColor, selectHomeProbes } from '@/utils/nodeHelpers'
 
-const props = defineProps<{ probes?: NodeProbe[], compact?: boolean }>()
+const props = defineProps<{ probes?: NodeProbe[], compact?: boolean, nodeUuid?: string }>()
 const app = useAppStore()
 const metrics = ['latency', 'loss'] as const
-const telecomPattern = /电信|telecom/i
-const unicomPattern = /联通|unicom/i
-const mobilePattern = /移动|mobile/i
-function carrierOrder(name: string): number {
-  if (telecomPattern.test(name))
-    return 0
-  if (unicomPattern.test(name))
-    return 1
-  if (mobilePattern.test(name))
-    return 2
-  return 3
-}
-const rows = computed(() => [...(props.probes ?? [])]
-  .sort((a, b) => carrierOrder(a.name) - carrierOrder(b.name))
-  .slice(0, 3)
-  .map((task) => {
+const emptyPoints: NodeProbe['points'] = Array.from({ length: 10 }, (_, bucket) => ({ bucket, time: 0, latency: null, loss: 0, samples: 0, successful_samples: 0 }))
+const rows = computed(() => {
+  const selected = props.nodeUuid
+    ? selectHomeProbes(props.probes ?? [], props.nodeUuid, app.publicSettings?.theme_settings)
+    : props.probes ?? []
+  return selected.map((task, index) => {
+    if (!task) {
+      return { id: `empty-${index}`, name: '未配置', kind: 'icmp' as const, stale: true, points: emptyPoints, latency: '—', loss: '—' }
+    }
     const last = task.points.at(-1)
     const stale = !last || Date.now() - last.time > Math.max(90000, task.interval_seconds * 3000)
     const points = task.points.slice(-10)
     const successes = points.filter(p => p.successful_samples > 0 && p.latency !== null)
     return {
-      ...task,
+      id: task.id,
+      name: task.name,
+      kind: task.kind,
       stale,
-      points: Array.from({ length: 10 }, (_, bucket) => points.find(p => p.bucket === bucket) ?? { bucket, time: 0, latency: null, loss: 0, samples: 0, successful_samples: 0 }),
+      points: emptyPoints.map((empty, bucket) => points.find(p => p.bucket === bucket) ?? empty),
       latency: !stale && successes.length ? `${Math.round(successes.reduce((sum, p) => sum + p.latency! * p.successful_samples, 0) / successes.reduce((sum, p) => sum + p.successful_samples, 0))} ms` : '—',
       loss: !stale && points.length ? `${(points.reduce((sum, p) => sum + p.loss * p.samples, 0) / points.reduce((sum, p) => sum + p.samples, 0)).toFixed(1)}%` : '—',
     }
-  }))
+  })
+})
 function sampleTooltip(name: string, point: NodeProbe['points'][number], metric: typeof metrics[number]): string {
   if (!point.samples)
     return `${name} · 此时间段无样本`
@@ -74,7 +70,7 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
     </div>
     <span v-if="!rows.length" class="text-muted-foreground">未配置探测</span>
   </div>
-  <div v-else class="flex h-8 w-full flex-col justify-center gap-px overflow-hidden" aria-label="三网延迟概览，点击查看详情">
+  <div v-else class="flex h-8 w-full flex-col justify-center gap-px overflow-hidden" aria-label="探测延迟概览，点击查看详情">
     <div v-for="row in rows" :key="row.id" class="grid h-[3px] shrink-0 grid-cols-10 gap-px" :title="`${row.name} · 延迟 ${row.latency} · 失败率 ${row.loss}`">
       <span v-for="(point, i) in row.points" :key="i" class="h-full bg-muted-foreground/15" :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor('latency', point.latency, app.publicSettings?.theme_settings) }" />
     </div>

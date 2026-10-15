@@ -15,7 +15,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   const card = page.getByRole('button', { name: '查看 e2e-node 节点详情' })
   await expect(card).toBeVisible({ timeout: 20_000 })
   await expect(card).toContainText('e2e-node')
-  await expect(card).toContainText('未配置探测')
+  await expect(card.getByText('未配置', { exact: true })).toHaveCount(2)
   const flag = card.getByRole('img', { name: 'SG', exact: true })
   await expect(flag).toHaveAttribute('src', '/assets/flags/sg.svg')
   await expect.poll(() => flag.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
