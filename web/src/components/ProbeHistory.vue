@@ -21,7 +21,7 @@ const showDelay = ref(true)
 const showFailures = ref(true)
 const cutPeak = ref(false)
 const chartLayout = ref<'combined' | 'split'>('combined')
-const autoRefresh = ref(true)
+const autoRefresh = ref(app.publicSettings?.theme_settings?.pingChartAutoRefresh !== false)
 const combinedChartRef = ref<unknown>(null)
 const latencyChartRef = ref<unknown>(null)
 const failureChartRef = ref<unknown>(null)
@@ -36,7 +36,11 @@ const availableRanges = computed(() => {
     presets.push(max)
   return presets
 })
-let refreshTimer: ReturnType<typeof setTimeout> | undefined
+const refreshIntervalSeconds = computed(() => {
+  const value = app.publicSettings?.theme_settings?.pingChartRefreshInterval
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(Math.min(300, Math.max(10, value))) : 60
+})
+let refreshTimer: ReturnType<typeof setInterval> | undefined
 const data = shallowRef<ProbeHistory | null>(null)
 const loading = ref(false)
 const error = ref('')
@@ -44,8 +48,6 @@ let controller: AbortController | null = null
 let generation = 0
 
 async function reload(): Promise<void> {
-  clearTimeout(refreshTimer)
-  refreshTimer = undefined
   controller?.abort()
   const current = ++generation
   controller = new AbortController()
@@ -61,24 +63,25 @@ async function reload(): Promise<void> {
       error.value = cause instanceof Error ? cause.message : String(cause)
   }
   finally {
-    if (current === generation) {
+    if (current === generation)
       loading.value = false
-      if (autoRefresh.value)
-        refreshTimer = setTimeout(() => void reload(), 30000)
-    }
   }
 }
 
 function toggleAutoRefresh(): void {
   autoRefresh.value = !autoRefresh.value
-  if (autoRefresh.value) {
-    void reload()
-  }
-  else {
-    clearTimeout(refreshTimer)
-    refreshTimer = undefined
-  }
 }
+
+watch([autoRefresh, refreshIntervalSeconds], ([enabled, seconds]) => {
+  clearInterval(refreshTimer)
+  refreshTimer = undefined
+  if (enabled) {
+    refreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible')
+        void reload()
+    }, seconds * 1000)
+  }
+}, { immediate: true })
 
 watch(() => props.selectedHours, (value) => {
   if (value !== undefined)
@@ -93,7 +96,7 @@ watch(() => [props.uuid, props.taskId, hours.value], () => {
   void reload()
 }, { immediate: true })
 onBeforeUnmount(() => {
-  clearTimeout(refreshTimer)
+  clearInterval(refreshTimer)
   ++generation
   controller?.abort()
 })
