@@ -171,7 +171,7 @@ function chartTooltip(params: unknown): HTMLElement {
     name.textContent = row.name
     const value = document.createElement('span')
     value.style.cssText = 'margin-left:16px;font-weight:600;font-variant-numeric:tabular-nums'
-    value.textContent = row.failureRate ? `${row.value.toFixed(1)}%` : `${Math.round(row.value)} ms`
+    value.textContent = row.failureRate ? `${row.value.toFixed(2)}%` : `${Math.round(row.value)} ms`
     line.append(dot, name, value)
     list.append(line)
   }
@@ -615,7 +615,7 @@ function exportPng(): void {
                   </td><td class="p-2">
                     {{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}
                   </td><td class="p-2">
-                    {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
+                    {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
                   </td>
                 </tr>
               </tbody>

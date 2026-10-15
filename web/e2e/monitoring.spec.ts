@@ -144,7 +144,7 @@ test('probe analysis switches tasks without changing the selected chart series',
   await expect.poll(() => chart.evaluate(element => Math.round(element.getBoundingClientRect().height))).toBe(testInfo.project.name === 'mobile-chromium' ? 328 : 392)
   await chart.hover()
   await expect(chart.getByText('20 ms', { exact: true })).toBeVisible()
-  await expect(chart.getByText('50.0%', { exact: true })).toBeVisible()
+  await expect(chart.getByText('50.00%', { exact: true })).toBeVisible()
   const csvPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'CSV', exact: true }).click()
   const csvDownload = await csvPromise
@@ -158,6 +158,9 @@ test('probe analysis switches tasks without changing the selected chart series',
   const pngDownload = await pngPromise
   expect(pngDownload.suggestedFilename()).toMatch(/^senulun-ping-[\w-]+-1h\.png$/)
   expect((await readFile(await pngDownload.path())).subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  await page.locator('summary').filter({ hasText: '延迟与失败率汇总' }).click()
+  const summary = page.getByRole('table', { name: '所选时间范围的延迟与失败率汇总' })
+  await expect(summary.getByRole('row', { name: /e2e-probe / })).toContainText('25.00%')
   const layout = page.getByRole('group', { name: '图表布局' })
   await expect(layout.getByRole('button', { name: '合图' })).toHaveAttribute('aria-pressed', 'true')
   await layout.getByRole('button', { name: '分图' }).click()
@@ -168,7 +171,7 @@ test('probe analysis switches tasks without changing the selected chart series',
   await expect(latencyChart).toBeVisible()
   await expect(failureChart).toBeVisible()
   await failureChart.hover()
-  await expect(failureChart.getByText('50.0%', { exact: true })).toBeVisible()
+  await expect(failureChart.getByText('50.00%', { exact: true })).toBeVisible()
   const delay = page.getByRole('button', { name: '延迟', exact: true })
   await delay.click()
   await expect(latencyChart).toHaveCount(0)
