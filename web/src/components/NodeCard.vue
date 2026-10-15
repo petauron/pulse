@@ -237,5 +237,6 @@ const customTags = computed(() => getCustomTags(props.node))
 <style scoped>
 .node-card {
   position: relative;
+  overflow: hidden;
 }
 </style>

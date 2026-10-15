@@ -12,7 +12,7 @@ describe('getPriceTags', () => {
 
   it('shows free and long-term labels as the deployed Komari card does', () => {
     expect(getPriceTags(freeNode, 'zh-CN')).toEqual([{ text: '免费' }])
-    expect(getPriceTags({ ...freeNode, expired_at: '2099-01-01T00:00:00Z' }, 'zh-CN'))
+    expect(getPriceTags({ ...freeNode, expired_at: '9999-01-01T00:00:00Z' }, 'zh-CN'))
       .toEqual([{ text: '免费' }, { text: '长期' }])
   })
 
