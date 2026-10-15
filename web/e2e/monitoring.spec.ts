@@ -97,15 +97,24 @@ test('network quality offers the full retained range with an exact custom label'
   await expect(ranges.getByRole('button', { name: '100 天' })).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('probe task information opens without changing the selected chart series', async ({ page }) => {
+test('probe analysis switches tasks without changing the selected chart series', async ({ page }) => {
   await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
     await route.fulfill({
       json: {
-        tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
+        tasks: [
+          { id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 },
+          { id: 'e2e-probe-2', name: 'e2e-probe-2', kind: 'icmp', interval_seconds: 30 },
+        ],
         records: [{ task_id: 'e2e-probe', collected_at_unix_ms: Date.now(), received_at_unix_ms: Date.now(), latency_ms: 20, success: true, error: null }],
-        chart: [{ task_id: 'e2e-probe', received_at_unix_ms: Date.now(), latency_ms: 20, failed_samples: 0, samples: 1 }],
-        summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p95_latency_ms: 27, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
-        chart_source_points: 1,
+        chart: [
+          { task_id: 'e2e-probe', received_at_unix_ms: Date.now(), latency_ms: 20, failed_samples: 0, samples: 1 },
+          { task_id: 'e2e-probe-2', received_at_unix_ms: Date.now(), latency_ms: 40, failed_samples: 1, samples: 2 },
+        ],
+        summary: [
+          { task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p95_latency_ms: 27, p99_latency_ms: 29, p99_p50_ratio: 0.45 },
+          { task_id: 'e2e-probe-2', samples: 2, loss_percent: 50, avg_latency_ms: 40, min_latency_ms: 40, max_latency_ms: 40, latest_latency_ms: 40, p50_latency_ms: 40, p95_latency_ms: 40, p99_latency_ms: 40, p99_p50_ratio: 0 },
+        ],
+        chart_source_points: 3,
         chart_bucket_ms: 3601,
         range_start_unix_ms: Date.now() - 3_600_000,
         range_end_unix_ms: Date.now(),
@@ -114,18 +123,18 @@ test('probe task information opens without changing the selected chart series', 
   })
   await login(page)
   await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
-  const series = page.getByRole('button', { name: /^e2e-probe，平均延迟/ })
+  const analysis = page.getByRole('region', { name: '延迟数据分析' })
+  await expect(analysis.getByRole('button', { name: '分析 e2e-probe', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(analysis).toContainText('27ms')
+  await expect(analysis).toContainText('P99')
+  await expect(analysis).toContainText('0.45')
+  const series = analysis.getByRole('button', { name: '隐藏 e2e-probe 曲线' })
   await expect(series).toHaveAttribute('aria-pressed', 'true')
-  await expect(series).toContainText('P95')
-  await expect(series).toContainText('27ms')
-  const information = page.getByRole('button', { name: /^e2e-probe，最低/ })
-  await information.focus()
-  const tooltip = information.locator('..').getByRole('tooltip')
-  await expect(tooltip).toContainText('P99')
-  await expect(tooltip).toContainText('P95')
-  await expect(tooltip).toContainText('0.45')
-  await information.click()
+  await analysis.getByRole('button', { name: '分析 e2e-probe-2' }).click()
+  await expect(analysis.getByRole('button', { name: '分析 e2e-probe-2' })).toHaveAttribute('aria-pressed', 'true')
   await expect(series).toHaveAttribute('aria-pressed', 'true')
+  await analysis.getByRole('combobox', { name: '分析任务' }).selectOption('e2e-probe')
+  await expect(analysis.getByRole('button', { name: '分析 e2e-probe', exact: true })).toHaveAttribute('aria-pressed', 'true')
   const smoothing = page.getByRole('button', { name: '平滑峰值', exact: true })
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'true')
@@ -135,5 +144,8 @@ test('probe task information opens without changing the selected chart series', 
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'false')
   await series.click()
-  await expect(series).toHaveAttribute('aria-pressed', 'false')
+  await expect(analysis.getByRole('button', { name: '显示 e2e-probe 曲线' })).toHaveAttribute('aria-pressed', 'false')
+  await analysis.getByRole('button', { name: '仅看此任务' }).click()
+  await expect(analysis.getByRole('button', { name: '隐藏 e2e-probe 曲线' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(analysis.getByRole('button', { name: '显示 e2e-probe-2 曲线' })).toHaveAttribute('aria-pressed', 'false')
 })
