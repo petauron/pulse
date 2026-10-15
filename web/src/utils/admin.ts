@@ -111,8 +111,9 @@ export function nodeMetadata(node: ManagedNode): ManagedNode {
   return { id, name, region, group, weight, hidden, tags, public_remark, ipv4: ipv4 ?? '', ipv6: ipv6 ?? '', price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day }
 }
 
-export function fetchProbeHistory(id: string, hours: number, signal?: AbortSignal): Promise<ProbeHistory> {
-  return getSharedApi().get(`v1/nodes/${encodeURIComponent(id)}/probes?hours=${hours}`, signal)
+export function fetchProbeHistory(id: string, hours: number, taskId?: string, signal?: AbortSignal): Promise<ProbeHistory> {
+  const taskFilter = taskId ? `&task_id=${encodeURIComponent(taskId)}` : ''
+  return getSharedApi().get(`v1/nodes/${encodeURIComponent(id)}/probes?hours=${hours}${taskFilter}`, signal)
 }
 
 export async function fetchProbeComparison(taskId: string, hours: number, signal?: AbortSignal): Promise<ProbeComparison[]> {

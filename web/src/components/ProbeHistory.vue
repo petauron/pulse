@@ -31,7 +31,7 @@ async function reload(): Promise<void> {
   loading.value = true
   error.value = ''
   try {
-    const response = await fetchProbeHistory(props.uuid, hours.value, controller.signal)
+    const response = await fetchProbeHistory(props.uuid, hours.value, props.taskId, controller.signal)
     if (current === generation)
       data.value = response
   }
@@ -55,7 +55,7 @@ watch(availableRanges, (available) => {
   if (props.selectedHours === undefined && !available.includes(hours.value))
     hours.value = available.at(-1) ?? 1
 })
-watch(() => [props.uuid, hours.value], () => {
+watch(() => [props.uuid, props.taskId, hours.value], () => {
   data.value = null
   void reload()
 }, { immediate: true })

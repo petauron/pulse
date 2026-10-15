@@ -239,7 +239,7 @@ fn hidden_metadata_applies_to_all_public_read_models() {
         Err(StorageError::NotFound)
     ));
     assert!(matches!(
-        storage.probe_history(&node.node_id, 1, unix_time_ms().unwrap()),
+        storage.probe_history(&node.node_id, None, 1, unix_time_ms().unwrap()),
         Err(StorageError::NotFound)
     ));
     assert_eq!(
@@ -295,10 +295,19 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         storage.ingest_probes(&node.agent_token, &batch, now + 200, 7),
         Err(StorageError::RateLimited)
     ));
-    let history = storage.probe_history(&node.node_id, 1, now + 200).unwrap();
+    let history = storage.probe_history(&node.node_id, None, 1, now + 200).unwrap();
     assert_eq!(history["summary"][0]["samples"], 2);
     assert_eq!(history["summary"][0]["loss_percent"], 0.0);
     assert!(history["tasks"][0].get("target").is_none());
+    let selected = storage
+        .probe_history(&node.node_id, Some(&task.id), 1, now + 200)
+        .unwrap();
+    assert_eq!(selected["records"].as_array().unwrap().len(), 2);
+    assert_eq!(selected["summary"][0]["samples"], 2);
+    assert!(matches!(
+        storage.probe_history(&node.node_id, Some("unknown"), 1, now + 200),
+        Err(StorageError::NotFound)
+    ));
     let comparison = storage.probe_comparison(&task.id, 1, now + 200).unwrap();
     assert_eq!(comparison.len(), 1);
     assert_eq!(comparison[0]["node_id"], node.node_id);

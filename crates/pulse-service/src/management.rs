@@ -154,6 +154,7 @@ pub(crate) async fn agent_probes(
 #[derive(Deserialize)]
 pub(crate) struct ProbeQuery {
     hours: Option<u32>,
+    task_id: Option<String>,
 }
 pub(crate) async fn probe_history(
     State(state): State<AppState>,
@@ -162,9 +163,10 @@ pub(crate) async fn probe_history(
 ) -> Result<Json<Value>, ApiError> {
     let now = current_time()?;
     let hours = history_hours(query.hours, state.retention_days);
+    let task_id = query.task_id;
     Ok(Json(
         state
-            .database(move |storage| storage.probe_history(&id, hours, now))
+            .database(move |storage| storage.probe_history(&id, task_id.as_deref(), hours, now))
             .await?,
     ))
 }

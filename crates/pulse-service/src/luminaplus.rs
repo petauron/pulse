@@ -138,25 +138,31 @@ pub(crate) async fn ping_records_data(
     if task_id.is_some() && requested_task.is_none() {
         return Ok(json!({"count":0,"records":[],"tasks":tasks}));
     }
+    let task_uuid = if let Some(id) = task_id {
+        let raw_tasks = state.database(Storage::public_ping_tasks).await?;
+        raw_tasks.iter().find_map(|task| {
+            let uuid = task["id"].as_str()?;
+            (numeric_task_id(uuid) == Some(id)).then(|| uuid.to_owned())
+        })
+    } else {
+        None
+    };
+    if task_id.is_some() && task_uuid.is_none() {
+        return Err(ApiError::unavailable("probe task changed during request"));
+    }
     let hours = history_hours(hours, state.retention_days);
     let now = current_time()?;
     let (raw, mut summary) = if let Some(uuid) = uuid {
         let uuid = uuid.to_owned();
+        let task_uuid = task_uuid.clone();
         let result = state
-            .database(move |storage| storage.probe_history(&uuid, hours, now))
+            .database(move |storage| storage.probe_history(&uuid, task_uuid.as_deref(), hours, now))
             .await?;
         (
             result["records"].as_array().cloned().unwrap_or_default(),
             result["summary"].clone(),
         )
     } else {
-        let raw_tasks = state.database(Storage::public_ping_tasks).await?;
-        let task_uuid = task_id.and_then(|id| {
-            raw_tasks.iter().find_map(|task| {
-                let uuid = task["id"].as_str()?;
-                (numeric_task_id(uuid) == Some(id)).then(|| uuid.to_owned())
-            })
-        });
         let records = state
             .database(move |storage| storage.probe_overview(hours, now, task_uuid.as_deref()))
             .await?;

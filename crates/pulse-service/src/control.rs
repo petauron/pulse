@@ -686,6 +686,7 @@ impl Storage {
     pub(crate) fn probe_history(
         &self,
         node: &str,
+        task_id: Option<&str>,
         hours: u32,
         now: u64,
     ) -> Result<Value, StorageError> {
@@ -695,13 +696,19 @@ impl Storage {
         }
         let tasks: Vec<_> = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
             .into_iter()
-            .filter(|t| t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node))
+            .filter(|t| {
+                (t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node))
+                    && task_id.is_none_or(|id| t.id == id && t.enabled)
+            })
             .collect();
+        if task_id.is_some() && tasks.is_empty() {
+            return Err(StorageError::NotFound);
+        }
         let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
-        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 ORDER BY received_at_ms DESC,id DESC LIMIT ?3")?;
-        let records=statement.query_map(params![node,start,i64::try_from(MAX_PROBE_HISTORY).expect("probe history limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
-        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 GROUP BY task_id")?;
-        let summary=statement.query_map(params![node,start],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 AND (?3 IS NULL OR task_id=?3) ORDER BY received_at_ms DESC,id DESC LIMIT ?4")?;
+        let records=statement.query_map(params![node,start,task_id,i64::try_from(MAX_PROBE_HISTORY).expect("probe history limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 AND (?3 IS NULL OR task_id=?3) GROUP BY task_id")?;
+        let summary=statement.query_map(params![node,start,task_id],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
         // Public readers need names/types, never private probe targets or node assignments.
         let tasks:Vec<_>=tasks.into_iter().map(|t|json!({"id":t.id,"name":t.name,"kind":t.kind,"interval_seconds":t.interval_seconds})).collect();
         Ok(
