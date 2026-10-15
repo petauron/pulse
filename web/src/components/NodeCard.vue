@@ -205,7 +205,7 @@ const customTags = computed(() => getCustomTags(props.node))
                 {{ props.node.uptime > 0 ? formatUptime(props.node.uptime) : '' }}
               </span>
             </div>
-            <div v-if="priceTags.length" class="flex items-center justify-between">
+            <div class="flex items-center justify-between">
               <span class="truncate">费用</span>
               <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
               <DataTooltip placement="left" :content="expiredDate" content-class="whitespace-nowrap right-0 mr-0">

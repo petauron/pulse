@@ -45,7 +45,8 @@ export function getTrafficUsedPercentage(node: NodeData): number {
 export function getPriceTags(node: NodeData, lang: 'zh-CN' | 'en-US', view: 'card' | 'list' = 'card'): PriceTagItem[] {
   const tags: PriceTagItem[] = []
   const priceText = formatPriceWithCycle(node.price, node.billing_cycle, node.currency, lang)
-  tags.push({ text: priceText })
+  if (node.price !== 0 || view === 'list')
+    tags.push({ text: priceText })
   if (!node.expired_at || !Number.isFinite(Date.parse(node.expired_at)))
     return tags
   const days = getDaysUntilExpired(node.expired_at)
