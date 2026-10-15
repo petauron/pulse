@@ -422,7 +422,7 @@ async fn measure_tcp(target: &str, timeout: Duration) -> Result<f64, &'static st
         .await
         .map_err(|_| "timeout")?
         .map_err(|_| "connect")?;
-    Ok(started.elapsed().as_millis() as f64)
+    Ok((started.elapsed().as_secs_f64() * 1000.0).floor())
 }
 
 fn tcp_retry_candidate(first: f64, retry: f64) -> Result<Option<f64>, &'static str> {
@@ -441,9 +441,8 @@ async fn run_tcp_probe(target: &str, timeout: Duration) -> Result<f64, &'static 
         return Ok(first);
     }
     for _ in 0..TCP_HIGH_LATENCY_RETRIES {
-        match tcp_retry_candidate(first, measure_tcp(target, timeout).await?)? {
-            Some(latency) => return Ok(latency),
-            None => continue,
+        if let Some(latency) = tcp_retry_candidate(first, measure_tcp(target, timeout).await?)? {
+            return Ok(latency);
         }
     }
     Err("probe_failed")
