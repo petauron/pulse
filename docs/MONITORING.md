@@ -59,8 +59,18 @@ failure categories, not a fabricated zero latency.
 
 HTTP success requires a 2xx response whose complete body is received within the
 timeout and 64 KiB bound; redirects, error statuses and larger responses fail.
-HTTP latency includes DNS, connection, TLS and body transfer; TCP latency includes
-DNS and connection; ICMP reports the system ping RTT.
+HTTP latency includes DNS, connection, TLS and body transfer. TCP follows Komari's
+measurement rule: resolve the hostname first, connect only to the first address,
+and report the TCP connect duration in whole milliseconds, excluding DNS time.
+Each TCP attempt uses at most three seconds (or the configured timeout, if lower).
+If the first connection takes over 1000 ms, retry up to three times. A retry
+over 1000 ms does not become a successful latency; a retry that drops by over
+800 ms is treated as a suspected retransmission failure. If no acceptable
+retry succeeds, the sample is a failure rather than a high-latency success.
+These TCP failures contribute to failure rate, not to average latency. Historical
+samples retain the measurement rule used when they were collected, so a window
+can contain both rules until its older samples age out. ICMP reports the system
+ping RTT.
 The detail page shows the newest 1000 results and an aggregate for the requested
 window. Server receipt time controls ordering and retention; Agent collection time
 is diagnostic. Probe storage has a hard 100000-row per-node cap in addition to

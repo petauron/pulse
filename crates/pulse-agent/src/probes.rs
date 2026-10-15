@@ -24,6 +24,10 @@ use crate::system_command::{self, SystemCommand};
 
 const CONFIG_REFRESH: Duration = Duration::from_secs(30);
 const MAX_HTTP_RESPONSE_BYTES: usize = 64 * 1024;
+const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const TCP_HIGH_LATENCY_MS: f64 = 1000.0;
+const TCP_RETRANSMISSION_DROP_MS: f64 = 800.0;
+const TCP_HIGH_LATENCY_RETRIES: usize = 3;
 
 pub struct ProbeRunner {
     pub interval: watch::Receiver<Duration>,
@@ -325,67 +329,64 @@ fn target_client() -> Result<Client, reqwest::Error> {
 async fn run_probe(client: Client, task: ProbeTask) -> ProbeResult {
     let started = Instant::now();
     let deadline = Duration::from_secs(task.timeout_seconds);
-    let outcome = tokio::time::timeout(deadline, async {
-        match task.kind {
-            ProbeKind::Icmp => {
-                let address = lookup_host((task.target.as_str(), 0))
-                    .await
-                    .map_err(|_| "dns")?
-                    .next()
-                    .ok_or("dns")?
-                    .ip();
-                let output = system_command::run(SystemCommand::Ping(address), deadline).await?;
-                parse_ping_latency(&output)
-                    .map(Some)
-                    .ok_or("response_parse")
-            }
-            ProbeKind::Tcp => {
-                let (host, port) = parse_tcp_target(&task.target)?;
-                let addresses = lookup_host((host.as_str(), port))
-                    .await
-                    .map_err(|_| "dns")?;
-                for address in addresses.take(8) {
-                    if TcpStream::connect(address).await.is_ok() {
-                        return Ok(Some(started.elapsed().as_secs_f64() * 1000.0));
+    let outcome = if task.kind == ProbeKind::Tcp {
+        // Komari measures only the TCP handshake, then retries suspiciously
+        // slow handshakes. Each attempt has its own timeout.
+        run_tcp_probe(&task.target, deadline.min(TCP_CONNECT_TIMEOUT))
+            .await
+            .map(Some)
+    } else {
+        tokio::time::timeout(deadline, async {
+            match task.kind {
+                ProbeKind::Icmp => {
+                    let address = lookup_host((task.target.as_str(), 0))
+                        .await
+                        .map_err(|_| "dns")?
+                        .next()
+                        .ok_or("dns")?
+                        .ip();
+                    let output = system_command::run(SystemCommand::Ping(address), deadline).await?;
+                    parse_ping_latency(&output)
+                        .map(Some)
+                        .ok_or("response_parse")
+                }
+                ProbeKind::Tcp => unreachable!("TCP probes use run_tcp_probe"),
+                ProbeKind::Http => {
+                    let mut response = client
+                        .get(parse_http_target(&task.target)?)
+                        .timeout(deadline)
+                        .send()
+                        .await
+                        .map_err(|error| {
+                            if error.is_timeout() {
+                                "timeout"
+                            } else {
+                                "connect"
+                            }
+                        })?;
+                    if !response.status().is_success() {
+                        return Err("http_status");
                     }
-                }
-                Err("connect")
-            }
-            ProbeKind::Http => {
-                let mut response = client
-                    .get(parse_http_target(&task.target)?)
-                    .timeout(deadline)
-                    .send()
-                    .await
-                    .map_err(|error| {
-                        if error.is_timeout() {
-                            "timeout"
-                        } else {
-                            "connect"
-                        }
-                    })?;
-                if !response.status().is_success() {
-                    return Err("http_status");
-                }
-                if response
-                    .content_length()
-                    .is_some_and(|length| length > MAX_HTTP_RESPONSE_BYTES as u64)
-                {
-                    return Err("response_too_large");
-                }
-                let mut received = 0_usize;
-                while let Some(chunk) = response.chunk().await.map_err(|_| "response_read")? {
-                    received = received.saturating_add(chunk.len());
-                    if received > MAX_HTTP_RESPONSE_BYTES {
+                    if response
+                        .content_length()
+                        .is_some_and(|length| length > MAX_HTTP_RESPONSE_BYTES as u64)
+                    {
                         return Err("response_too_large");
                     }
+                    let mut received = 0_usize;
+                    while let Some(chunk) = response.chunk().await.map_err(|_| "response_read")? {
+                        received = received.saturating_add(chunk.len());
+                        if received > MAX_HTTP_RESPONSE_BYTES {
+                            return Err("response_too_large");
+                        }
+                    }
+                    Ok(Some(started.elapsed().as_secs_f64() * 1000.0))
                 }
-                Ok(Some(started.elapsed().as_secs_f64() * 1000.0))
             }
-        }
-    })
-    .await
-    .unwrap_or(Err("timeout"));
+        })
+        .await
+        .unwrap_or(Err("timeout"))
+    };
     let (success, latency_ms, error) = match outcome {
         Ok(latency) => (true, latency, None),
         Err(reason) => (false, None, Some(reason.to_owned())),
@@ -402,6 +403,49 @@ async fn run_probe(client: Client, task: ProbeTask) -> ProbeResult {
         success,
         error,
     }
+}
+
+async fn measure_tcp(target: &str, timeout: Duration) -> Result<f64, &'static str> {
+    let (host, port) = parse_tcp_target(target)?;
+    // Match Komari's first-address choice and exclude name resolution from
+    // the measured latency. Bound DNS separately so a stalled resolver cannot
+    // hold a probe slot indefinitely.
+    let address = tokio::time::timeout(timeout, lookup_host((host.as_str(), port)))
+        .await
+        .map_err(|_| "timeout")?
+        .map_err(|_| "dns")?
+        .next()
+        .ok_or("dns")?;
+    let started = Instant::now();
+    tokio::time::timeout(timeout, TcpStream::connect(address))
+        .await
+        .map_err(|_| "timeout")?
+        .map_err(|_| "connect")?;
+    Ok(started.elapsed().as_millis() as f64)
+}
+
+fn tcp_retry_candidate(first: f64, retry: f64) -> Result<Option<f64>, &'static str> {
+    if retry > TCP_HIGH_LATENCY_MS {
+        return Ok(None);
+    }
+    if first - retry > TCP_RETRANSMISSION_DROP_MS {
+        return Err("probe_failed");
+    }
+    Ok(Some(retry))
+}
+
+async fn run_tcp_probe(target: &str, timeout: Duration) -> Result<f64, &'static str> {
+    let first = measure_tcp(target, timeout).await?;
+    if first <= TCP_HIGH_LATENCY_MS {
+        return Ok(first);
+    }
+    for _ in 0..TCP_HIGH_LATENCY_RETRIES {
+        match tcp_retry_candidate(first, measure_tcp(target, timeout).await?)? {
+            Some(latency) => return Ok(latency),
+            None => continue,
+        }
+    }
+    Err("probe_failed")
 }
 
 fn parse_ping_latency(output: &[u8]) -> Option<f64> {
@@ -512,6 +556,14 @@ mod tests {
         assert!(!result.success);
         assert_eq!(result.error.as_deref(), Some("connect"));
         assert!(result.latency_ms.is_none());
+    }
+
+    #[test]
+    fn tcp_high_latency_retries_match_komari_thresholds() {
+        assert_eq!(tcp_retry_candidate(1001.0, 1001.0), Ok(None));
+        assert_eq!(tcp_retry_candidate(1001.0, 1000.0), Ok(Some(1000.0)));
+        assert_eq!(tcp_retry_candidate(1800.0, 1000.0), Ok(Some(1000.0)));
+        assert_eq!(tcp_retry_candidate(1801.0, 1000.0), Err("probe_failed"));
     }
 
     async fn http_fixture(response: String) -> (String, JoinHandle<String>) {
