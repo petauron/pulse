@@ -15,7 +15,18 @@ const MAX_CONFIG_ROWS: usize = 128;
 const MAX_CHANNELS: usize = 16;
 const MAX_NODE_ASSIGNMENTS: usize = 10_000;
 const MAX_PROBE_HISTORY: usize = 1_000;
+const MAX_PROBE_STATS_SAMPLES: usize = 100_000;
 const MAX_INCIDENTS: usize = 1_000;
+
+pub(crate) fn probe_percentile(sorted: &[f64], fraction: f64) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let position = (sorted.len() - 1) as f64 * fraction;
+    let lower = position.floor() as usize;
+    let upper = position.ceil() as usize;
+    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower as f64))
+}
 
 /// A current-cycle correction anchored to the provider-interface counters.
 #[derive(Deserialize)]
@@ -708,7 +719,28 @@ impl Storage {
         let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 AND (?3 IS NULL OR task_id=?3) ORDER BY received_at_ms DESC,id DESC LIMIT ?4")?;
         let records=statement.query_map(params![node,start,task_id,i64::try_from(MAX_PROBE_HISTORY).expect("probe history limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
         let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 AND (?3 IS NULL OR task_id=?3) GROUP BY task_id")?;
-        let summary=statement.query_map(params![node,start,task_id],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut summary=statement.query_map(params![node,start,task_id],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut successful=db.prepare("SELECT latency_ms FROM probe_results WHERE node_id=?1 AND task_id=?2 AND received_at_ms>=?3 AND success=1 AND latency_ms IS NOT NULL ORDER BY received_at_ms DESC,id DESC LIMIT ?4")?;
+        for item in &mut summary {
+            let id=item["task_id"].as_str().ok_or(StorageError::InvalidInput("invalid probe summary"))?;
+            // A node retains at most 100,000 probe rows. Bound the per-task read
+            // independently so corrupt or legacy data cannot exhaust memory.
+            let mut values=successful.query_map(params![node,id,start,i64::try_from(MAX_PROBE_STATS_SAMPLES + 1).expect("probe limit fits SQLite")],|row|row.get::<_,f64>(0))?.collect::<Result<Vec<_>,_>>()?;
+            if values.len()>MAX_PROBE_STATS_SAMPLES {
+                return Err(StorageError::InvalidInput("probe statistics limit exceeded"));
+            }
+            let latest=values.first().copied();
+            values.sort_by(f64::total_cmp);
+            let p50=probe_percentile(&values,0.5);
+            let p99=probe_percentile(&values,0.99);
+            let ratio=p50.zip(p99).and_then(|(median,high)| (median>0.0 && high>=median).then(|| (high-median)/median.min(50.0).max(10.0)));
+            item["min_latency_ms"]=json!(values.first());
+            item["max_latency_ms"]=json!(values.last());
+            item["latest_latency_ms"]=json!(latest);
+            item["p50_latency_ms"]=json!(p50);
+            item["p99_latency_ms"]=json!(p99);
+            item["p99_p50_ratio"]=json!(ratio);
+        }
         // Public readers need names/types, never private probe targets or node assignments.
         let tasks:Vec<_>=tasks.into_iter().map(|t|json!({"id":t.id,"name":t.name,"kind":t.kind,"interval_seconds":t.interval_seconds})).collect();
         Ok(

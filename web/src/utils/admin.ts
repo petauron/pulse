@@ -93,7 +93,18 @@ export interface ProbeRecord {
 export interface ProbeHistory {
   tasks: Pick<ProbeTask, 'id' | 'name' | 'kind' | 'interval_seconds'>[]
   records: ProbeRecord[]
-  summary: { task_id: string, samples: number, loss_percent: number, avg_latency_ms: number | null }[]
+  summary: {
+    task_id: string
+    samples: number
+    loss_percent: number
+    avg_latency_ms: number | null
+    min_latency_ms: number | null
+    max_latency_ms: number | null
+    latest_latency_ms: number | null
+    p50_latency_ms: number | null
+    p99_latency_ms: number | null
+    p99_p50_ratio: number | null
+  }[]
   limit: number
   history_order: 'newest_first'
 }

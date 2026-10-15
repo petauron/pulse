@@ -215,7 +215,7 @@ const option = computed<EChartsOption>(() => {
             v-for="task in tasks" :key="task.id" type="button"
             class="flex min-h-11 items-center gap-3 rounded-md p-2 text-left transition-all bg-background/60 hover:bg-background hover:shadow-[0_0_0_1px] hover:shadow-emerald-600/10"
             :class="!selectedTaskIds.includes(task.id) && 'ring-1 ring-border'"
-            :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，失败率 ${(summaryByTask.get(task.id)?.loss_percent ?? 0).toFixed(2)}%，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
+            :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，${props.kind === 'icmp' ? '丢包率' : '失败率'} ${summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本'}，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
             @click="toggleTask(task.id)"
           >
             <span class="h-4 w-1 shrink-0 rounded" :style="{ backgroundColor: taskColor(task.id) }" aria-hidden="true" />
@@ -224,7 +224,11 @@ const option = computed<EChartsOption>(() => {
               <span class="mt-1 block text-xs text-muted-foreground">
                 {{ cardLatency(summaryByTask.get(task.id)?.avg_latency_ms) }}
                 <span class="opacity-60">·</span>
-                {{ (summaryByTask.get(task.id)?.loss_percent ?? 0).toFixed(2) }}%
+                {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
+                <template v-if="summaryByTask.get(task.id)?.p99_p50_ratio != null">
+                  <span class="opacity-60">·</span>
+                  <span title="波动率">{{ summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}</span>
+                </template>
               </span>
             </span>
           </button>
@@ -269,6 +273,14 @@ const option = computed<EChartsOption>(() => {
                   </th><th class="p-2">
                     平均延迟
                   </th><th class="p-2">
+                    最低 / 最高
+                  </th><th class="p-2">
+                    最新
+                  </th><th class="p-2">
+                    P50 / P99
+                  </th><th class="p-2">
+                    波动率
+                  </th><th class="p-2">
                     {{ props.kind === 'icmp' ? '丢包率' : '失败率' }}
                   </th>
                 </tr>
@@ -280,6 +292,14 @@ const option = computed<EChartsOption>(() => {
                     {{ summaryByTask.get(task.id)?.samples ?? 0 }}
                   </td><td class="p-2">
                     {{ latency(summaryByTask.get(task.id)?.avg_latency_ms) }}
+                  </td><td class="whitespace-nowrap p-2">
+                    {{ latency(summaryByTask.get(task.id)?.min_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.max_latency_ms) }}
+                  </td><td class="p-2">
+                    {{ latency(summaryByTask.get(task.id)?.latest_latency_ms) }}
+                  </td><td class="whitespace-nowrap p-2">
+                    {{ latency(summaryByTask.get(task.id)?.p50_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.p99_latency_ms) }}
+                  </td><td class="p-2">
+                    {{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}
                   </td><td class="p-2">
                     {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
                   </td>

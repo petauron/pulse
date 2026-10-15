@@ -1,5 +1,5 @@
 use crate::{
-    control::{NodeOptions, ProbeDefinition},
+    control::{NodeOptions, ProbeDefinition, probe_percentile},
     storage::{Storage, StorageError, unix_time_ms},
 };
 
@@ -347,6 +347,54 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         storage.ingest_probes(&node.agent_token, &batch, now + 10000, 7),
         Err(StorageError::Unauthorized)
     ));
+}
+
+#[test]
+fn probe_history_statistics_cover_samples_outside_chart_limit() {
+    let (_dir, storage, node) = fixture();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "percentiles".into(),
+        kind: ProbeKind::Tcp,
+        target: "127.0.0.1:8080".into(),
+        interval_seconds: 5,
+        timeout_seconds: 1,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let now = unix_time_ms().unwrap();
+    {
+        let mut db = storage.connection().unwrap();
+        let tx = db.transaction().unwrap();
+        for index in 0..1_002 {
+            let latency = if index == 0 { Some(1_000.0) } else if index == 1 { None } else { Some(10.0) };
+            tx.execute(
+                "INSERT INTO metrics.probe_results (node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES (?1,?2,?3,?4,?4,?5,?6,NULL)",
+                rusqlite::params![node.node_id, task.id, index.to_string(), now as i64 - 1_002 + index, latency, latency.is_some()],
+            ).unwrap();
+        }
+        tx.commit().unwrap();
+    }
+    let history = storage.probe_history(&node.node_id, None, 1, now).unwrap();
+    let summary = &history["summary"][0];
+    assert_eq!(history["records"].as_array().unwrap().len(), 1_000);
+    assert_eq!(summary["samples"], 1_002);
+    assert_eq!(summary["min_latency_ms"], 10.0);
+    assert_eq!(summary["max_latency_ms"], 1_000.0);
+    assert_eq!(summary["latest_latency_ms"], 10.0);
+    assert_eq!(summary["p50_latency_ms"], 10.0);
+    assert_eq!(summary["p99_latency_ms"], 10.0);
+    assert_eq!(summary["p99_p50_ratio"], 0.0);
+    assert!((summary["loss_percent"].as_f64().unwrap() - 100.0 / 1_002.0).abs() < 0.001);
+}
+
+#[test]
+fn probe_percentile_interpolates_and_preserves_empty_sample_state() {
+    assert_eq!(probe_percentile(&[], 0.5), None);
+    assert_eq!(probe_percentile(&[10.0], 0.99), Some(10.0));
+    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 0.5), Some(25.0));
+    assert!((probe_percentile(&[10.0, 20.0, 30.0, 40.0], 0.99).unwrap() - 39.7).abs() < 1e-9);
 }
 
 #[test]
