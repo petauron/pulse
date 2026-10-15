@@ -4,18 +4,26 @@ import type { ProbeHistory } from '@/utils/admin'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { Button } from '@/components/ui/button'
-import { CardX } from '@/components/ui/card-x'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
 const app = useAppStore()
+const { pickSurfaceClass } = useBackgroundSurface()
 const hours = ref(props.selectedHours ?? 1)
-const metric = ref<'latency' | 'loss'>('latency')
-const ranges = [1, 6, 12, 24, 72, 168]
-const availableRanges = computed(() => ranges.filter(range => range <= (app.publicSettings?.ping_record_preserve_time ?? 168)))
+const showDelay = ref(true)
+const showFailures = ref(true)
+const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
+const availableRanges = computed(() => {
+  const max = app.publicSettings?.ping_record_preserve_time ?? 168
+  const presets = presetRanges.filter(range => range <= max)
+  if (max > 1 && !presets.includes(max))
+    presets.push(max)
+  return presets
+})
 let refreshTimer: ReturnType<typeof setTimeout> | undefined
 const data = shallowRef<ProbeHistory | null>(null)
 const loading = ref(false)
@@ -66,31 +74,42 @@ onBeforeUnmount(() => {
 })
 const tasks = computed(() => (data.value?.tasks ?? []).filter(task => (!props.kind || task.kind === props.kind) && (!props.taskId || task.id === props.taskId)))
 const taskIds = computed(() => new Set(tasks.value.map(task => task.id)))
+const selectedTaskIds = ref<string[]>([])
+let selectionInitialized = false
+watch(tasks, (available) => {
+  const ids = available.map(task => task.id)
+  if (!ids.length)
+    return
+  if (!selectionInitialized && ids.length) {
+    selectedTaskIds.value = ids
+    selectionInitialized = true
+  }
+  else if (selectionInitialized) {
+    selectedTaskIds.value = selectedTaskIds.value.filter(id => ids.includes(id))
+  }
+})
+watch(() => [props.uuid, props.taskId, props.kind], () => {
+  selectionInitialized = false
+  selectedTaskIds.value = []
+})
+const selectedTasks = computed(() => tasks.value.filter(task => selectedTaskIds.value.includes(task.id)))
+const summaryByTask = computed(() => new Map(data.value?.summary.map(summary => [summary.task_id, summary]) ?? []))
 const names = computed(() => new Map(data.value?.tasks.map(task => [task.id, task.name]) ?? []))
 const recent = computed(() => [...(data.value?.records ?? [])].filter(record => taskIds.value.has(record.task_id)).sort((a, b) => b.received_at_unix_ms - a.received_at_unix_ms).slice(0, 100))
 const date = (value: number) => new Date(value).toLocaleString()
 const latency = (value: number | null | undefined) => value == null ? '无成功样本' : `${value.toFixed(1)} ms`
+const cardLatency = (value: number | null | undefined) => value == null ? '-' : `${Math.round(value)}ms`
+const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
+const taskColor = (id: string) => colors[tasks.value.findIndex(task => task.id === id) % colors.length] ?? colors[0]!
+const rangeLabel = (range: number) => range < 24 ? `${range} 小时` : `${range / 24} 天`
+function toggleTask(id: string): void {
+  selectedTaskIds.value = selectedTaskIds.value.includes(id)
+    ? selectedTaskIds.value.filter(selected => selected !== id)
+    : [...selectedTaskIds.value, id]
+}
 
 const option = computed<EChartsOption>(() => {
-  // Bucket the displayed history; rate summaries below remain full-range server aggregates.
-  const start = Date.now() - hours.value * 3600000
-  const width = hours.value * 3600000 / 60
-  const lossSeries = (id: string) => {
-    const buckets: { total: number, failed: number }[] = []
-    for (let i = 0; i < 60; i++)
-      buckets.push({ total: 0, failed: 0 })
-    for (const record of data.value?.records ?? []) {
-      const bucket = Math.floor((record.received_at_unix_ms - start) / width)
-      if (record.task_id !== id || bucket < 0 || bucket >= 60)
-        continue
-      buckets[bucket]!.total++
-      if (!record.success)
-        buckets[bucket]!.failed++
-    }
-    return buckets.map((bucket, i) => [start + (i + 0.5) * width, bucket.total ? bucket.failed / bucket.total * 100 : null])
-  }
   const style = getComputedStyle(document.documentElement)
-  const colors = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#60A5FA', '#FFB347', '#F472B6', '#34D399', '#FB923C']
   const foreground = style.getPropertyValue('--foreground').trim()
   const secondary = app.isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)'
   const border = app.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
@@ -113,7 +132,7 @@ const option = computed<EChartsOption>(() => {
       axisPointer: { type: 'cross', crossStyle: { color: secondary }, lineStyle: { color: border, width: 1, type: 'dashed' } },
     },
     legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 8, itemGap: 14, textStyle: { fontSize: 10, color: secondary } },
-    grid: { left: 56, right: 56, top: 30, bottom: 52 },
+    grid: { left: 56, right: 24, top: 30, bottom: 52 },
     xAxis: {
       type: 'time',
       axisLabel: { fontSize: 11, color: secondary, margin: 12 },
@@ -123,8 +142,7 @@ const option = computed<EChartsOption>(() => {
     },
     yAxis: {
       type: 'value',
-      name: metric.value === 'latency' ? '延迟 (ms)' : '失败率 (%)',
-      max: metric.value === 'loss' ? 100 : undefined,
+      name: '延迟 (ms)',
       min: 0,
       nameTextStyle: { color: secondary },
       axisLabel: { fontSize: 11, color: secondary },
@@ -132,47 +150,55 @@ const option = computed<EChartsOption>(() => {
       axisTick: { show: false },
       splitLine: { lineStyle: { color: grid, type: 'dashed' } },
     },
-    series: tasks.value.map(task => ({
+    series: selectedTasks.value.map(task => ({
       name: task.name,
       type: 'line',
-      showSymbol: (data.value?.records ?? []).filter(record => record.task_id === task.id && (metric.value === 'loss' || (record.success && record.latency_ms !== null))).length === 1,
+      showSymbol: false,
       symbolSize: 3,
-      smooth: metric.value === 'latency' ? 0.1 : false,
-      step: metric.value === 'loss' ? 'end' : false,
-      lineStyle: { width: 1.8, cap: 'round' },
+      smooth: 0.1,
+      lineStyle: { width: showDelay.value ? 1.5 : 0, cap: 'round', color: taskColor(task.id) },
+      itemStyle: { color: taskColor(task.id), opacity: showDelay.value ? 1 : 0 },
       connectNulls: false,
-      data: metric.value === 'loss' ? lossSeries(task.id) : (data.value?.records ?? []).filter(record => record.task_id === task.id).sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms).map(record => [record.received_at_unix_ms, (record.success ? record.latency_ms : null)]),
+      data: (data.value?.records ?? []).filter(record => record.task_id === task.id).sort((a, b) => a.received_at_unix_ms - b.received_at_unix_ms).map(record => [record.received_at_unix_ms, record.success ? record.latency_ms : null]),
+      markLine: showFailures.value
+        ? {
+            silent: true,
+            symbol: ['none', 'none'],
+            animation: false,
+            label: { show: false },
+            lineStyle: { color: taskColor(task.id), width: 1, opacity: 0.55 },
+            data: (data.value?.records ?? []).filter(record => record.task_id === task.id && !record.success).slice(0, 200).map(record => ({ xAxis: record.received_at_unix_ms })),
+          }
+        : undefined,
     })),
   }
 })
 </script>
 
 <template>
-  <CardX title="网络质量" content-class="space-y-4" header-class="flex-wrap [&>div:last-child]:max-w-full [&>div:last-child]:min-w-0">
-    <template #header-extra>
-      <div class="flex flex-wrap gap-2">
-        <Tabs :model-value="metric" @update:model-value="metric = $event === 'loss' ? 'loss' : 'latency'">
-          <TabsList aria-label="探测指标">
-            <TabsTrigger value="latency">
-              延迟
-            </TabsTrigger>
-            <TabsTrigger value="loss">
-              失败率
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Tabs v-if="selectedHours === undefined" class="min-w-0 max-w-full" :model-value="String(hours)" @update:model-value="hours = Number($event)">
-          <TabsList class="flex-wrap h-auto" aria-label="探测历史时间范围">
-            <TabsTrigger v-for="range in availableRanges" :key="range" :value="String(range)">
-              {{ range < 24 ? `${range} 小时` : `${range / 24} 天` }}
+  <div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <Tabs v-if="selectedHours === undefined" class="min-w-0 max-w-full flex-1" :model-value="String(hours)" @update:model-value="hours = Number($event)">
+        <div class="min-w-0 overflow-x-auto">
+          <TabsList :class="pickSurfaceClass('w-max h-8 bg-background/60 rounded-md', 'w-max h-8 bg-background/50 backdrop-blur-xl rounded-md')" aria-label="探测历史时间范围">
+            <TabsTrigger
+              v-for="range in availableRanges" :key="range" :value="String(range)"
+              class="h-6.5 shrink-0 text-xs border-none data-[state=active]:text-emerald-600 shadow-none rounded-sm"
+            >
+              {{ rangeLabel(range) }}
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-        <Button variant="outline" :disabled="loading" @click="reload">
-          {{ loading ? '加载中…' : '刷新' }}
+        </div>
+      </Tabs>
+      <div class="flex items-center gap-2">
+        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="selectedTaskIds.length === tasks.length && 'bg-background !text-emerald-600'" @click="selectedTaskIds = tasks.map(task => task.id)">
+          全选
+        </Button>
+        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="!selectedTaskIds.length && 'bg-background !text-emerald-600'" @click="selectedTaskIds = []">
+          全不选
         </Button>
       </div>
-    </template>
+    </div>
     <p v-if="error" role="alert" class="text-sm text-destructive">
       {{ error }}
     </p>
@@ -181,22 +207,52 @@ const option = computed<EChartsOption>(() => {
     </p>
     <template v-if="data">
       <p v-if="!tasks.length" class="text-sm text-muted-foreground">
-        此节点尚未配置探测任务。管理员可添加 ICMP、TCP 或 HTTP 探测。
+        暂无延迟数据
       </p>
       <template v-else>
+        <div class="grid gap-3" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr))">
+          <button
+            v-for="task in tasks" :key="task.id" type="button"
+            class="flex min-h-11 items-center gap-3 rounded-md p-2 text-left transition-all bg-background/60 hover:bg-background hover:shadow-[0_0_0_1px] hover:shadow-emerald-600/10"
+            :class="!selectedTaskIds.includes(task.id) && 'opacity-50'"
+            :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，失败率 ${(summaryByTask.get(task.id)?.loss_percent ?? 0).toFixed(2)}%，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
+            @click="toggleTask(task.id)"
+          >
+            <span class="h-4 w-1 shrink-0 rounded" :style="{ backgroundColor: taskColor(task.id) }" aria-hidden="true" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold">{{ task.name }}</span>
+              <span class="mt-1 block text-xs text-muted-foreground">
+                {{ cardLatency(summaryByTask.get(task.id)?.avg_latency_ms) }}
+                <span class="opacity-60">·</span>
+                {{ (summaryByTask.get(task.id)?.loss_percent ?? 0).toFixed(2) }}%
+              </span>
+            </span>
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 py-2">
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showDelay && 'bg-background !text-emerald-600'" :aria-pressed="showDelay" @click="showDelay = !showDelay">
+            延迟
+          </Button>
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-600'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
+            失败标记
+          </Button>
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">
+            {{ loading ? '加载中…' : '刷新' }}
+          </Button>
+        </div>
         <p v-if="data.records.length >= data.limit" class="text-sm text-muted-foreground">
           曲线仅展示最近 {{ data.limit }} 个样本；汇总按整个所选时间范围计算。
         </p>
-        <div v-if="data.records.length" class="relative isolate w-full overflow-hidden" style="height: 280px">
-          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" :aria-label="metric === 'latency' ? '探测延迟曲线，失败样本显示为断点' : '按时间分桶的探测失败率，缺失样本留空'" />
+        <div v-if="data.records.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，失败样本为断点，可显示失败标记" />
         </div>
         <p v-else class="text-sm text-muted-foreground">
           此时间范围暂无上报样本。
         </p>
-        <p v-if="metric === 'loss'" class="text-xs text-muted-foreground">
-          曲线按 60 个时间段聚合失败比例；整个时间范围的失败率见下方汇总。TCP、HTTP 失败不等同于 ICMP 丢包。
+        <p class="text-xs text-muted-foreground">
+          失败标记表示探测无响应；TCP、HTTP 失败不等同于 ICMP 丢包。
         </p>
-        <details class="relative rounded-md border p-3">
+        <details class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
             延迟与失败率汇总
           </summary>
@@ -221,18 +277,18 @@ const option = computed<EChartsOption>(() => {
                   <th class="p-2 font-medium">
                     {{ task.name }}
                   </th><td class="p-2">
-                    {{ data.summary.find(s => s.task_id === task.id)?.samples ?? 0 }}
+                    {{ summaryByTask.get(task.id)?.samples ?? 0 }}
                   </td><td class="p-2">
-                    {{ latency(data.summary.find(s => s.task_id === task.id)?.avg_latency_ms) }}
+                    {{ latency(summaryByTask.get(task.id)?.avg_latency_ms) }}
                   </td><td class="p-2">
-                    {{ data.summary.find(s => s.task_id === task.id)?.samples ? `${data.summary.find(s => s.task_id === task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
+                    {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(1)}%` : '无样本' }}
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </details>
-        <details v-if="recent.length" class="relative rounded-md border p-3">
+        <details v-if="recent.length" class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
             查看最近 {{ recent.length }} 条记录
           </summary>
@@ -266,5 +322,5 @@ const option = computed<EChartsOption>(() => {
         </details>
       </template>
     </template>
-  </CardX>
+  </div>
 </template>
