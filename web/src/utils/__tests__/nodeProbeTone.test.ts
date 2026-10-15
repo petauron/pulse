@@ -4,10 +4,18 @@ import { getProbeToneColor } from '../nodeHelpers'
 describe('getProbeToneColor', () => {
   it('uses Emerald latency and loss boundaries', () => {
     expect([60, 100, 160, 200, 201].map(value => getProbeToneColor('latency', value))).toEqual([
-      '#5EEAA6', '#47B592', '#A3E635', '#FACC15', '#F43F5E',
+      '#5EEAA6',
+      '#47B592',
+      '#A3E635',
+      '#FACC15',
+      '#F43F5E',
     ])
     expect([1, 3, 6, 9, 10].map(value => getProbeToneColor('loss', value))).toEqual([
-      '#5EEAA6', '#47B592', '#A3E635', '#FACC15', '#F43F5E',
+      '#5EEAA6',
+      '#47B592',
+      '#A3E635',
+      '#FACC15',
+      '#F43F5E',
     ])
     expect(getProbeToneColor('latency', null)).toBeUndefined()
   })
