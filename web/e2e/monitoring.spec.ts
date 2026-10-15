@@ -100,10 +100,11 @@ test('network quality offers the full retained range with an exact custom label'
 })
 
 test('probe history honors Emerald chart defaults and retained range', async ({ page }) => {
+  let retentionHours = 168
   await page.route('**/api/public', async (route) => {
     const response = await route.fetch()
     const payload = await response.json()
-    payload.data.ping_record_preserve_time = 168
+    payload.data.ping_record_preserve_time = retentionHours
     payload.data.theme_settings = {
       ...payload.data.theme_settings,
       pingChartDefaultHours: 72,
@@ -137,6 +138,13 @@ test('probe history honors Emerald chart defaults and retained range', async ({ 
   await expect(page.getByRole('button', { name: '自动刷新' })).toBeVisible()
   await expect.poll(() => requests.length).toBe(1)
   expect(requests[0]).toContain('hours=72')
+
+  retentionHours = 24
+  await page.reload()
+  await expect(ranges.getByRole('tab')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天'])
+  await expect(ranges.getByRole('tab', { name: '1 小时' })).toHaveAttribute('data-state', 'active')
+  await expect.poll(() => requests.length).toBe(2)
+  expect(requests[1]).toContain('hours=1')
 })
 
 test('probe analysis switches tasks without changing the selected chart series', async ({ page }, testInfo) => {

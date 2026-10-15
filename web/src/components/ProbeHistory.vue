@@ -91,7 +91,7 @@ watch(() => props.selectedHours, (value) => {
 })
 watch(availableRanges, (available) => {
   if (props.selectedHours === undefined && !available.includes(hours.value))
-    hours.value = available.at(-1) ?? 1
+    hours.value = available[0] ?? 1
 }, { immediate: true })
 watch(() => [props.uuid, props.taskId, hours.value], () => {
   data.value = null
