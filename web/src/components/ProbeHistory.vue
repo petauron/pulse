@@ -520,25 +520,28 @@ function exportPng(): void {
               </button>
             </DataTooltip>
           </div>
-          <div role="group" aria-label="图表布局" class="flex items-center gap-1">
-            <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="chartLayout === 'combined' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'combined'" @click="chartLayout = 'combined'">
+          <div role="group" aria-label="图表布局" class="flex items-center gap-1 rounded-md bg-background/60 p-0.5">
+            <Button variant="ghost" size="xs" class="h-6 rounded-sm border-none" :class="chartLayout === 'combined' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'combined'" @click="chartLayout = 'combined'">
               合图
             </Button>
-            <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="chartLayout === 'split' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'split'" @click="chartLayout = 'split'">
+            <Button variant="ghost" size="xs" class="h-6 rounded-sm border-none" :class="chartLayout === 'split' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'split'" @click="chartLayout = 'split'">
               分图
             </Button>
           </div>
-          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" @click="toggleAutoRefresh">
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="autoRefresh && '!text-emerald-600'" @click="toggleAutoRefresh">
+            <Icon :icon="autoRefresh ? 'lucide:pause' : 'lucide:play'" :width="13" :height="13" aria-hidden="true" />
             {{ autoRefresh ? '暂停刷新' : '自动刷新' }}
           </Button>
-          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">
-            {{ loading ? '加载中…' : '立即刷新' }}
+          <Button variant="ghost" size="icon-xs" class="size-7 rounded-sm border-none bg-background/60 hover:bg-background" aria-label="立即刷新" title="立即刷新" :disabled="loading" @click="reload">
+            <Icon icon="lucide:refresh-cw" :class="loading && 'animate-spin'" :width="14" :height="14" aria-hidden="true" />
           </Button>
           <div class="min-w-0 flex-1" />
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="!data.chart.length || !selectedTasks.length || (!showDelay && !showFailures)" @click="exportPng">
+            <Icon icon="lucide:image-down" :width="13" :height="13" aria-hidden="true" />
             PNG
           </Button>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="!data.chart.length || !selectedTasks.length" @click="exportCsv">
+            <Icon icon="lucide:file-down" :width="13" :height="13" aria-hidden="true" />
             CSV
           </Button>
         </div>

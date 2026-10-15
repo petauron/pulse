@@ -140,6 +140,8 @@ test('probe analysis switches tasks without changing the selected chart series',
   const smoothing = page.getByRole('button', { name: '平滑峰值', exact: true })
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'true')
+  for (const name of ['暂停刷新', '立即刷新', 'PNG', 'CSV'])
+    await expect(page.getByRole('button', { name, exact: true }).locator('svg')).toHaveCount(1)
   const chart = page.locator('[aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点"]')
   await expect.poll(() => chart.evaluate(element => Math.round(element.getBoundingClientRect().height))).toBe(testInfo.project.name === 'mobile-chromium' ? 328 : 392)
   await chart.hover()
@@ -221,6 +223,7 @@ test('probe auto-refresh pauses without blocking range changes or manual refresh
   await pause.click()
   const resume = page.getByRole('button', { name: '自动刷新' })
   await expect(resume).toBeVisible()
+  await expect(resume.locator('svg')).toHaveCount(1)
   await page.clock.runFor(31_000)
   expect(requests).toHaveLength(1)
 
