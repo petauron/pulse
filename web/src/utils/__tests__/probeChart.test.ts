@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { probeChartSeries } from '../probeChart'
+import { probeChartSeries, probeFailureSeries } from '../probeChart'
 
 const start = Date.parse('2026-01-01T00:00:00.000Z')
 const minute = 60_000
@@ -40,5 +40,28 @@ describe('probeChartSeries', () => {
   it('rejects an oversized or malformed bucket range', () => {
     expect(probeChartSeries([point(0, 10)], start, start + 100_000 * minute, minute, false)).toEqual([])
     expect(probeChartSeries([point(0, 10)], start, start + minute, 0, false)).toEqual([])
+  })
+})
+
+describe('probeFailureSeries', () => {
+  const failurePoint = (bucket: number, failed: number, samples: number) => ({ ...point(bucket, null), failed_samples: failed, samples })
+
+  it('shows observed 0%, partial, and total failures without inventing samples across an outage', () => {
+    const series = probeFailureSeries([
+      failurePoint(0, 0, 2),
+      failurePoint(1, 1, 4),
+      failurePoint(2, 2, 2),
+      failurePoint(52, 0, 1),
+    ], start, start + 60 * minute, minute)
+
+    expect(series.map(([, rate]) => rate)).toEqual([0, 25, 100, null, 0])
+    expect(series[3]![0]).toBeGreaterThan(series[2]![0])
+    expect(series[3]![0]).toBeLessThan(series[4]![0])
+  })
+
+  it('rejects invalid buckets and preserves a single real observation', () => {
+    expect(probeFailureSeries([failurePoint(1, 1, 2)], start, start + 60 * minute, minute)).toEqual([[point(1, null).received_at_unix_ms, 50]])
+    expect(probeFailureSeries([failurePoint(1, 2, 1), failurePoint(2, 0, 0)], start, start + 60 * minute, minute)).toEqual([])
+    expect(probeFailureSeries([failurePoint(0, 0, 1)], start, start + 100_000 * minute, minute)).toEqual([])
   })
 })

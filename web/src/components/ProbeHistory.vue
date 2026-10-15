@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
-import { probeChartSeries } from '@/utils/probeChart'
+import { probeChartSeries, probeFailureSeries } from '@/utils/probeChart'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
@@ -121,15 +121,15 @@ function tooltipTime(value: number): string {
 
 function chartTooltip(params: unknown): HTMLElement {
   const root = document.createElement('div')
-  const points = (Array.isArray(params) ? params : [params]) as { seriesName?: unknown, data?: unknown, value?: unknown, color?: unknown }[]
+  const points = (Array.isArray(params) ? params : [params]) as { seriesId?: unknown, seriesName?: unknown, data?: unknown, value?: unknown, color?: unknown }[]
   const rows = points.flatMap((point) => {
     if (!point || typeof point !== 'object')
       return []
     const pair = Array.isArray(point.data) ? point.data : point.value
     if (!Array.isArray(pair) || typeof pair[0] !== 'number' || !Number.isFinite(pair[0]) || typeof pair[1] !== 'number' || !Number.isFinite(pair[1]))
       return []
-    return [{ time: pair[0] as number, value: pair[1] as number, name: String(point.seriesName ?? ''), color: typeof point.color === 'string' ? point.color : colors[0]! }]
-  }).sort((a, b) => a.value - b.value)
+    return [{ time: pair[0] as number, value: pair[1] as number, name: String(point.seriesName ?? ''), failureRate: typeof point.seriesId === 'string' && point.seriesId.endsWith(':failure-rate'), color: typeof point.color === 'string' ? point.color : colors[0]! }]
+  }).sort((a, b) => Number(a.failureRate) - Number(b.failureRate) || a.value - b.value)
   if (!rows.length)
     return root
 
@@ -150,7 +150,7 @@ function chartTooltip(params: unknown): HTMLElement {
     name.textContent = row.name
     const value = document.createElement('span')
     value.style.cssText = 'margin-left:16px;font-weight:600;font-variant-numeric:tabular-nums'
-    value.textContent = `${Math.round(row.value)} ms`
+    value.textContent = row.failureRate ? `${row.value.toFixed(1)}%` : `${Math.round(row.value)} ms`
     line.append(dot, name, value)
     list.append(line)
   }
@@ -170,12 +170,55 @@ function taskChartData(id: string): Array<[number, number | null]> {
   return probeChartSeries(records, data.value.range_start_unix_ms, data.value.range_end_unix_ms, data.value.chart_bucket_ms, cutPeak.value)
 }
 
+function taskFailureData(id: string): Array<[number, number | null]> {
+  const records = (data.value?.chart ?? []).filter(record => record.task_id === id)
+  if (!data.value)
+    return []
+  return probeFailureSeries(records, data.value.range_start_unix_ms, data.value.range_end_unix_ms, data.value.chart_bucket_ms)
+}
+
+const failureLabel = (kind: ProbeHistory['tasks'][number]['kind']) => kind === 'icmp' ? '丢包率' : '失败率'
+const failureMetricLabel = computed(() => tasks.value.every(task => task.kind === 'icmp') ? '丢包率' : tasks.value.every(task => task.kind !== 'icmp') ? '失败率' : '丢包 / 失败率')
+
 const option = computed<EChartsOption>(() => {
   const style = getComputedStyle(document.documentElement)
   const foreground = style.getPropertyValue('--foreground').trim()
   const secondary = app.isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)'
   const border = app.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
   const grid = app.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
+  const latencySeries = showDelay.value
+    ? selectedTasks.value.map(task => ({
+        id: `${task.id}:latency`,
+        name: task.name,
+        type: 'line' as const,
+        yAxisIndex: 0,
+        showSymbol: false,
+        symbolSize: 3,
+        smooth: cutPeak.value ? 0.6 : 0.1,
+        lineStyle: { width: 1.5, cap: 'round' as const, color: taskColor(task.id) },
+        itemStyle: { color: taskColor(task.id) },
+        connectNulls: false,
+        data: taskChartData(task.id),
+      }))
+    : []
+  const failureSeries = showFailures.value
+    ? selectedTasks.value.map((task) => {
+        const points = taskFailureData(task.id)
+        return {
+          id: `${task.id}:failure-rate`,
+          name: `${task.name} · ${failureLabel(task.kind)}`,
+          type: 'line' as const,
+          yAxisIndex: 1,
+          showSymbol: points.length === 1,
+          symbolSize: 4,
+          step: 'end' as const,
+          lineStyle: { width: 1.5, type: 'dashed' as const, color: taskColor(task.id) },
+          itemStyle: { color: taskColor(task.id) },
+          connectNulls: false,
+          data: points,
+        }
+      })
+    : []
   return {
     darkMode: app.isDark,
     animation: false,
@@ -195,7 +238,7 @@ const option = computed<EChartsOption>(() => {
       formatter: chartTooltip,
     },
     legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: 16, icon: 'roundRect', textStyle: { fontSize: 11, color: secondary } },
-    grid: { left: 56, right: 24, top: 30, bottom: 52 },
+    grid: { left: 56, right: 66, top: 30, bottom: 52 },
     xAxis: {
       type: 'time',
       min: data.value?.range_start_unix_ms,
@@ -205,37 +248,30 @@ const option = computed<EChartsOption>(() => {
       axisTick: { show: false },
       splitLine: { show: false },
     },
-    yAxis: {
-      type: 'value',
-      name: '延迟 (ms)',
-      min: 0,
-      nameTextStyle: { color: secondary },
-      axisLabel: { fontSize: 11, color: secondary },
-      axisLine: { show: false },
-      axisTick: { show: false },
-      splitLine: { lineStyle: { color: grid, type: 'dashed' } },
-    },
-    series: selectedTasks.value.map(task => ({
-      name: task.name,
-      type: 'line',
-      showSymbol: false,
-      symbolSize: 3,
-      smooth: showDelay.value ? (cutPeak.value ? 0.6 : 0.1) : 0,
-      lineStyle: { width: showDelay.value ? 1.5 : 0, cap: 'round', color: taskColor(task.id) },
-      itemStyle: { color: taskColor(task.id), opacity: showDelay.value ? 1 : 0 },
-      connectNulls: false,
-      data: taskChartData(task.id),
-      markLine: showFailures.value
-        ? {
-            silent: true,
-            symbol: ['none', 'none'],
-            animation: false,
-            label: { show: false },
-            lineStyle: { color: taskColor(task.id), width: 1, opacity: 0.55 },
-            data: (data.value?.chart ?? []).filter(record => record.task_id === task.id && record.failed_samples > 0).slice(0, 200).map(record => ({ xAxis: record.received_at_unix_ms })),
-          }
-        : undefined,
-    })),
+    yAxis: [
+      {
+        type: 'value',
+        name: '延迟 (ms)',
+        min: 0,
+        nameTextStyle: { color: secondary },
+        axisLabel: { fontSize: 11, color: secondary },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: grid, type: 'dashed' } },
+      },
+      {
+        type: 'value',
+        name: `${failureMetricLabel.value} (%)`,
+        min: 0,
+        max: 100,
+        nameTextStyle: { color: secondary },
+        axisLabel: { fontSize: 11, color: secondary, formatter: '{value}%' },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+      },
+    ],
+    series: [...latencySeries, ...failureSeries],
   }
 })
 </script>
@@ -348,7 +384,7 @@ const option = computed<EChartsOption>(() => {
             延迟
           </Button>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
-            失败标记
+            {{ failureMetricLabel }}
           </Button>
           <div class="flex items-center gap-1">
             <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="cutPeak && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="cutPeak" @click="cutPeak = !cutPeak">
@@ -368,13 +404,13 @@ const option = computed<EChartsOption>(() => {
           曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
         <div v-if="data.chart.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，长时间缺报为断点，可显示失败标记" />
+          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
         </div>
         <p v-else class="text-sm text-muted-foreground">
           此时间范围暂无上报样本。
         </p>
         <p class="text-xs text-muted-foreground">
-          失败标记表示探测无响应；TCP、HTTP 失败不等同于 ICMP 丢包。
+          右轴是每个有样本时间桶的失败比例；较长缺报会断开，不计为 0%。TCP、HTTP 失败不等同于 ICMP 丢包。
         </p>
         <details class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
