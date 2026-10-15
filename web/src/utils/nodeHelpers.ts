@@ -109,7 +109,7 @@ export function selectHomeProbes(probes: NodeProbe[], nodeUuid: string, settings
     ? (configuredMap as Record<string, unknown>)[nodeUuid]
     : undefined
   const selected = Array.isArray(taskIds)
-    ? [...new Set(taskIds.filter(id => typeof id === 'string' || (typeof id === 'number' && Number.isInteger(id) && id >= 0)).map(String))].map(id => probes.find(task => task.id === id) ?? null)
+    ? Array.from(new Set(taskIds.filter(id => typeof id === 'string' || (typeof id === 'number' && Number.isInteger(id) && id >= 0)).map(String)), id => probes.find(task => task.id === id) ?? null)
     : probes
   return Array.from({ length: rowCount }, (_, index) => selected[index] ?? null)
 }
