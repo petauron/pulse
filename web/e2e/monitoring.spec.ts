@@ -155,3 +155,47 @@ test('probe analysis switches tasks without changing the selected chart series',
   await expect(analysis.getByRole('button', { name: '隐藏 e2e-probe 曲线' })).toHaveAttribute('aria-pressed', 'true')
   await expect(analysis.getByRole('button', { name: '显示 e2e-probe-2 曲线' })).toHaveAttribute('aria-pressed', 'false')
 })
+
+test('probe auto-refresh pauses without blocking range changes or manual refresh', async ({ page }) => {
+  await page.clock.install()
+  const requests: string[] = []
+  await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
+    requests.push(route.request().url())
+    await route.fulfill({
+      json: {
+        tasks: [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'tcp', interval_seconds: 60 }],
+        records: [],
+        chart: [],
+        summary: [],
+        chart_source_points: 0,
+        chart_bucket_ms: 3601,
+        range_start_unix_ms: Date.now() - 3_600_000,
+        range_end_unix_ms: Date.now(),
+      },
+    })
+  })
+  await login(page)
+  await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
+  const pause = page.getByRole('button', { name: '暂停刷新' })
+  await expect(pause).toBeVisible()
+  await expect.poll(() => requests.length).toBe(1)
+  await pause.click()
+  const resume = page.getByRole('button', { name: '自动刷新' })
+  await expect(resume).toBeVisible()
+  await page.clock.runFor(31_000)
+  expect(requests).toHaveLength(1)
+
+  await page.getByRole('tab', { name: '6 小时' }).click()
+  await expect.poll(() => requests.length).toBe(2)
+  expect(requests[1]).toContain('hours=6')
+  await page.getByRole('button', { name: '立即刷新' }).click()
+  await expect.poll(() => requests.length).toBe(3)
+  await page.clock.runFor(31_000)
+  expect(requests).toHaveLength(3)
+
+  await resume.click()
+  await expect.poll(() => requests.length).toBe(4)
+  await expect(page.getByRole('button', { name: '立即刷新' })).toBeEnabled()
+  await page.clock.runFor(31_000)
+  await expect.poll(() => requests.length).toBe(5)
+})

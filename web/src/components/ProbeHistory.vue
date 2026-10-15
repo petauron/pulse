@@ -20,6 +20,7 @@ const hours = ref(props.selectedHours ?? 1)
 const showDelay = ref(true)
 const showFailures = ref(true)
 const cutPeak = ref(false)
+const autoRefresh = ref(true)
 const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
   const max = app.publicSettings?.ping_record_preserve_time ?? 168
@@ -37,6 +38,7 @@ let generation = 0
 
 async function reload(): Promise<void> {
   clearTimeout(refreshTimer)
+  refreshTimer = undefined
   controller?.abort()
   const current = ++generation
   controller = new AbortController()
@@ -54,8 +56,20 @@ async function reload(): Promise<void> {
   finally {
     if (current === generation) {
       loading.value = false
-      refreshTimer = setTimeout(() => void reload(), 30000)
+      if (autoRefresh.value)
+        refreshTimer = setTimeout(() => void reload(), 30000)
     }
+  }
+}
+
+function toggleAutoRefresh(): void {
+  autoRefresh.value = !autoRefresh.value
+  if (autoRefresh.value) {
+    void reload()
+  }
+  else {
+    clearTimeout(refreshTimer)
+    refreshTimer = undefined
   }
 }
 
@@ -396,8 +410,11 @@ const option = computed<EChartsOption>(() => {
               </button>
             </DataTooltip>
           </div>
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" @click="toggleAutoRefresh">
+            {{ autoRefresh ? '暂停刷新' : '自动刷新' }}
+          </Button>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">
-            {{ loading ? '加载中…' : '刷新' }}
+            {{ loading ? '加载中…' : '立即刷新' }}
           </Button>
         </div>
         <p v-if="data.chart_source_points > data.chart.length" class="text-sm text-muted-foreground">
