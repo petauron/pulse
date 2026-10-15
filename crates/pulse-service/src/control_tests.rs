@@ -368,7 +368,13 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
         let mut db = storage.connection().unwrap();
         let tx = db.transaction().unwrap();
         for index in 0..1_002 {
-            let latency = if index == 0 { Some(1_000.0) } else if index == 1 { None } else { Some(10.0) };
+            let latency = if index == 0 {
+                Some(1_000.0)
+            } else if index == 1 {
+                None
+            } else {
+                Some(10.0)
+            };
             tx.execute(
                 "INSERT INTO metrics.probe_results (node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES (?1,?2,?3,?4,?4,?5,?6,NULL)",
                 rusqlite::params![node.node_id, task.id, index.to_string(), now as i64 - 1_002 + index, latency, latency.is_some()],
