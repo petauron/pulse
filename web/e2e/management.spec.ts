@@ -82,7 +82,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
       return (await response.json()).records.some((record: { task_id: string, success: boolean, latency_ms: number }) => record.task_id === taskId && record.success && record.latency_ms >= 0)
     }, { timeout: 60_000 }).toBe(true)
     await page.goto('/')
-    const preview = page.getByLabel('最近 1 小时的平均延迟与失败率，每格 6 分钟')
+    const preview = page.getByLabel(/^最近 .+的平均延迟与失败率，每格约 \d+ 分钟$/)
     await expect(preview).toContainText(name)
     await expect(preview).toContainText('ms')
     await page.goto(`/instance/${id}`)
