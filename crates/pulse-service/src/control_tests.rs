@@ -478,6 +478,37 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     assert_eq!(preview[0]["points"][0]["bucket"], 9);
     assert!(preview[0].get("target").is_none());
     assert!(preview[0].get("node_ids").is_none());
+    task.enabled = false;
+    assert!(
+        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now, &config)
+            .unwrap()
+            .is_empty()
+    );
+    task.enabled = true;
+    task.node_ids = vec!["another-node".into()];
+    assert!(
+        crate::control::dashboard_probes(&db, &node.node_id, &[task], now, &config)
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn dashboard_probe_preview_honors_history_task_selection_and_row_limit() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "carrier".into(),
+        kind: ProbeKind::Tcp,
+        target: "private-probe.example:80".into(),
+        interval_seconds: 30,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let db = storage.connection().unwrap();
     db.execute(
         "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success) VALUES(?1,?2,'older',?3,?3,30,1)",
         rusqlite::params![node.node_id, task.id, i64::try_from(now - 5_400_000).unwrap()],
@@ -506,7 +537,7 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     assert_eq!(custom.len(), 2);
     assert_eq!(custom[0]["id"], other.id);
     assert_eq!(custom[1]["id"], task.id);
-    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 2);
+    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 1);
     assert_eq!(custom[1]["points"][0]["bucket"], 2);
     assert_eq!(custom[1]["points"][0]["latency"], 30.0);
     let eight_tasks = (0..8)
@@ -525,19 +556,6 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
             .unwrap()
             .len(),
         8
-    );
-    task.enabled = false;
-    assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now, &config)
-            .unwrap()
-            .is_empty()
-    );
-    task.enabled = true;
-    task.node_ids = vec!["another-node".into()];
-    assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task], now, &config)
-            .unwrap()
-            .is_empty()
     );
 }
 

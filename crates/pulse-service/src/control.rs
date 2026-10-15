@@ -29,17 +29,11 @@ pub(crate) struct DashboardProbeConfig {
 
 impl DashboardProbeConfig {
     pub(crate) fn from_theme(settings: &Value, retention_days: u32) -> Self {
-        let bounded = |key: &str, default: u32, min: u32, max: u32| {
-            settings[key]
-                .as_f64()
-                .filter(|value| value.is_finite())
-                .map_or(default, |value| {
-                    value.clamp(f64::from(min), f64::from(max)).round() as u32
-                })
-        };
-        let hours = bounded("homePingHistoryHours", 1, 1, 168)
+        let hours = bounded_theme_integer(settings, "homePingHistoryHours", 1, 1, 168)
             .min(retention_days.saturating_mul(24).max(1));
-        let row_count = bounded("homePingRowCount", 2, 1, 8) as usize;
+        let row_count =
+            usize::try_from(bounded_theme_integer(settings, "homePingRowCount", 2, 1, 8))
+                .unwrap_or(2);
         let mut tasks_by_node = HashMap::new();
         if let Some(nodes) = settings["homePingTasksByNode"].as_object() {
             for (node, task_ids) in nodes {
@@ -69,6 +63,20 @@ impl DashboardProbeConfig {
             tasks_by_node,
         }
     }
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "finite theme value is clamped to the nonnegative u32 range before conversion"
+)]
+fn bounded_theme_integer(settings: &Value, key: &str, default: u32, min: u32, max: u32) -> u32 {
+    settings[key]
+        .as_f64()
+        .filter(|value| value.is_finite())
+        .map_or(default, |value| {
+            value.clamp(f64::from(min), f64::from(max)).round() as u32
+        })
 }
 
 impl Default for DashboardProbeConfig {
