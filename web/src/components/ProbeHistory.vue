@@ -26,6 +26,8 @@ const combinedChartRef = ref<unknown>(null)
 const latencyChartRef = ref<unknown>(null)
 const failureChartRef = ref<unknown>(null)
 const exportError = ref('')
+const filenameUnsafeChars = /[^\w-]/g
+const spreadsheetFormulaPrefix = /^\s*[-=+@]/
 const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
   const max = app.publicSettings?.ping_record_preserve_time ?? 168
@@ -307,7 +309,7 @@ function download(filename: string, href: string): void {
   link.remove()
 }
 
-const exportFilename = (extension: string) => `senulun-ping-${props.uuid.replace(/[^a-zA-Z0-9_-]/g, '_')}-${hours.value}h.${extension}`
+const exportFilename = (extension: string) => `senulun-ping-${props.uuid.replace(filenameUnsafeChars, '_')}-${hours.value}h.${extension}`
 
 function exportCsv(): void {
   if (!data.value || !selectedTasks.value.length)
@@ -322,7 +324,7 @@ function exportCsv(): void {
   const escapeCsv = (value: string | number | null | undefined) => {
     const text = value == null ? '' : String(value)
     // Spreadsheet applications can execute formula-like fields, including task names in headers.
-    const safe = /^\s*[=+\-@]/.test(text) ? `'${text}` : text
+    const safe = spreadsheetFormulaPrefix.test(text) ? `'${text}` : text
     return `"${safe.replaceAll('"', '""')}"`
   }
   const rows = times.map(time => [new Date(time).toISOString(), ...series.flatMap(task => [task.latency.get(time) ?? '', task.failure.get(time) ?? ''])])
