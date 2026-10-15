@@ -8,7 +8,7 @@ import { useNodesStore } from '@/stores/nodes'
 
 const store = useNodesStore()
 const router = useRouter()
-const kind = ref<'icmp' | 'tcp' | 'http'>('icmp')
+const kind = ref<'icmp' | 'tcp' | 'http'>('tcp')
 const modes = [{ kind: 'icmp', label: 'ICMP 延迟详情' }, { kind: 'tcp', label: 'TCP 连接质量' }, { kind: 'http', label: 'HTTP 可用性' }] as const
 const taskId = ref('')
 const tasks = computed(() => [...new Map(store.nodes.flatMap(node => node.probes ?? []).filter(task => task.kind === kind.value).map(task => [task.id, task])).values()])

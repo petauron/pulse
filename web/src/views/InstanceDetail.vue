@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { useNow } from '@vueuse/core'
 import { computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Badge } from '@/components/ui/badge'
@@ -7,12 +8,15 @@ import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
 import { Empty } from '@/components/ui/empty'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
+import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useNodesStore } from '@/stores/nodes'
 import { formatDateTime } from '@/utils/helper'
+import { CURRENCY_SYMBOLS, normalizeCurrency, summarizeNodeValue } from '@/utils/financeHelper'
 import { getTrafficUsed } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
+import { getBillingCycleText, getDaysUntilExpired } from '@/utils/tagHelper'
 
 const LoadChart = defineAsyncComponent(() => import('@/components/LoadChart.vue'))
 const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistory.vue'))
@@ -23,6 +27,8 @@ const router = useRouter()
 const { pickSurfaceClass } = useBackgroundSurface()
 const nodesStore = useNodesStore()
 const { formatBytes, formatBytesPerSecond, formatUptime } = useNodeFormatters()
+const { rates } = useExchangeRates()
+const now = useNow({ interval: 60000 })
 
 onMounted(() => {
   window.scrollTo({ top: 0, behavior: 'instant' })
@@ -48,46 +54,74 @@ const metricCards = computed<MetricCard[]>(() => {
   if (!data.value)
     return []
 
-  const memoryPercent = data.value.mem_total > 0 ? data.value.ram / data.value.mem_total * 100 : 0
-  const diskPercent = data.value.disk_total > 0 ? data.value.disk / data.value.disk_total * 100 : 0
+  const node = data.value
+  const currency = normalizeCurrency(node.currency)
+  const rate = rates.value[currency] ?? 1
+  const finance = summarizeNodeValue([node], now.value.getTime(), rates.value)
+  const formatMoney = (value: number) => `${CURRENCY_SYMBOLS[currency]}${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const hasPrice = Number.isFinite(node.price) && node.price > 0
+  const hasCycle = Number.isFinite(node.billing_cycle) && node.billing_cycle > 0
+  const expiry = Date.parse(node.expired_at)
+  const hasExpiry = Number.isFinite(expiry)
+  const daysRemaining = hasExpiry ? getDaysUntilExpired(node.expired_at) : 0
 
   return [
     {
-      label: 'CPU 使用率',
-      value: data.value.cpu.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:cpu',
+      label: '节点价格',
+      value: hasPrice ? formatMoney(node.price) : '免费',
+      unit: hasPrice && hasCycle ? `${currency}/${getBillingCycleText(node.billing_cycle)}` : undefined,
+      icon: 'icon-park-outline:wallet',
     },
     {
-      label: '内存使用率',
-      value: memoryPercent.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:memory',
+      label: '月均支出',
+      value: hasPrice && hasCycle && !finance.excluded ? formatMoney(finance.monthly * rate) : '—',
+      unit: hasPrice && hasCycle && !finance.excluded ? `${currency}/月` : undefined,
+      icon: 'icon-park-outline:calendar',
     },
     {
-      label: '硬盘使用率',
-      value: diskPercent.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:hard-disk',
+      label: '剩余时间',
+      value: hasExpiry ? String(Math.max(0, daysRemaining)) : '—',
+      unit: hasExpiry ? '天' : undefined,
+      icon: 'icon-park-outline:time',
     },
     {
-      label: '1 分钟负载',
-      value: data.value.load.toFixed(2),
-      icon: 'icon-park-outline:dashboard-one',
+      label: '剩余价值',
+      value: hasPrice && hasExpiry && !finance.excluded ? formatMoney(finance.remaining * rate) : '—',
+      unit: hasPrice && hasExpiry && !finance.excluded ? currency : undefined,
+      icon: 'icon-park-outline:money',
     },
   ]
 })
 
+function displayArchitecture(arch: string | undefined): string {
+  if (!arch)
+    return '-'
+  return arch === 'x86_64' ? 'amd64' : arch
+}
+
+function displayKernelVersion(kernel: string | undefined): string {
+  if (!kernel)
+    return '-'
+  return kernel.startsWith('Linux ') ? kernel.slice(6) : kernel
+}
+
+function displayOperatingSystem(os: string | undefined): string {
+  if (!os)
+    return '-'
+  const linuxDistro = /^Linux \((.+)\)$/.exec(os)
+  return linuxDistro?.[1] ?? os
+}
+
 const hardwareInfo = computed<InfoItem[]>(() => [
   { label: 'CPU', value: data.value ? `${data.value.cpu_name} (x${data.value.cpu_cores})` : '-', icon: 'icon-park-outline:cpu' },
-  { label: '架构', value: data.value?.arch ?? '-', icon: 'icon-park-outline:application-two' },
-  { label: '虚拟化', value: data.value?.virtualization ?? '-', icon: 'icon-park-outline:server' },
+  { label: '架构', value: displayArchitecture(data.value?.arch), icon: 'icon-park-outline:application-two' },
+  { label: '虚拟化', value: data.value?.virtualization || '未知', icon: 'icon-park-outline:server' },
   { label: 'GPU', value: data.value?.gpu_name || '-', icon: 'icon-park-outline:video-one' },
 ])
 
 const systemInfo = computed<InfoItem[]>(() => [
-  { label: '操作系统', value: data.value?.os ?? '-', icon: 'icon-park-outline:computer' },
-  { label: '内核版本', value: data.value?.kernel_version ?? '-', icon: 'icon-park-outline:code' },
+  { label: '操作系统', value: displayOperatingSystem(data.value?.os), icon: 'icon-park-outline:computer' },
+  { label: '内核版本', value: displayKernelVersion(data.value?.kernel_version), icon: 'icon-park-outline:code' },
   { label: '运行时间', value: formatUptime(data.value?.uptime ?? 0, 'minute'), icon: 'icon-park-outline:timer' },
   { label: '最后上报', value: formatDateTime(data.value?.time), icon: 'icon-park-outline:time' },
 ])

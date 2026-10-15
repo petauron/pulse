@@ -1042,9 +1042,9 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between">
               <span class="text-base font-bold">连接</span>
               <div class="text-xs flex gap-1 items-baseline">
-                <span>TCP: {{ latestStatus?.connections ?? '-' }}</span>
+                <span>TCP: {{ latestStatus?.connections == null ? '-' : Math.round(latestStatus.connections) }}</span>
                 <span>·</span>
-                <span>UDP: {{ latestStatus?.connections_udp ?? '-' }}</span>
+                <span>UDP: {{ latestStatus?.connections_udp == null ? '-' : Math.round(latestStatus.connections_udp) }}</span>
               </div>
             </div>
           </template>
