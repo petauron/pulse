@@ -12,11 +12,11 @@ import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useNodesStore } from '@/stores/nodes'
 import { formatDateTime } from '@/utils/helper'
-import { CURRENCY_SYMBOLS, normalizeCurrency, summarizeNodeValue } from '@/utils/financeHelper'
+import { CURRENCY_SYMBOLS, normalizeCurrency } from '@/utils/financeHelper'
 import { getTrafficUsed } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
-import { getBillingCycleText, getDaysUntilExpired } from '@/utils/tagHelper'
+import { getBillingCycleText, getExpireText, getExpireTextClass } from '@/utils/tagHelper'
 
 const LoadChart = defineAsyncComponent(() => import('@/components/LoadChart.vue'))
 const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistory.vue'))
@@ -56,39 +56,48 @@ const metricCards = computed<MetricCard[]>(() => {
 
   const node = data.value
   const currency = normalizeCurrency(node.currency)
-  const rate = rates.value[currency] ?? 1
-  const finance = summarizeNodeValue([node], now.value.getTime(), rates.value)
-  const formatMoney = (value: number) => `${CURRENCY_SYMBOLS[currency]}${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const rate = rates.value[currency] ?? 0
+  const hasRate = Number.isFinite(rate) && rate > 0
+  const priceCNY = hasRate && Number.isFinite(node.price) && node.price > 0 ? node.price / rate : 0
+  const formatMoney = (value: number) => `${CURRENCY_SYMBOLS.CNY}${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const hasPrice = Number.isFinite(node.price) && node.price > 0
   const hasCycle = Number.isFinite(node.billing_cycle) && node.billing_cycle > 0
   const expiry = Date.parse(node.expired_at)
   const hasExpiry = Number.isFinite(expiry)
-  const daysRemaining = hasExpiry ? getDaysUntilExpired(node.expired_at) : 0
+  const remainingDays = hasExpiry ? (expiry - now.value.getTime()) / 86400000 : 0
+  const remainingValue = remainingDays > 36500
+    ? priceCNY
+    : hasExpiry && hasCycle && remainingDays > 0
+      ? priceCNY * remainingDays / node.billing_cycle
+      : 0
+  const expiryText = hasExpiry ? getExpireText(node.expired_at) : '-'
+  const expiryParts = /^(\d+)\s+天$/.exec(expiryText)
 
   return [
     {
       label: '节点价格',
-      value: hasPrice ? formatMoney(node.price) : '免费',
-      unit: hasPrice && hasCycle ? `${currency}/${getBillingCycleText(node.billing_cycle)}` : undefined,
-      icon: 'icon-park-outline:wallet',
+      value: hasPrice ? `${formatMoney(priceCNY)} CNY` : formatMoney(0),
+      unit: hasPrice ? ` / ${getBillingCycleText(node.billing_cycle)}` : 'CNY',
+      icon: 'tabler:cash',
     },
     {
       label: '月均支出',
-      value: hasPrice && hasCycle && !finance.excluded ? formatMoney(finance.monthly * rate) : '—',
-      unit: hasPrice && hasCycle && !finance.excluded ? `${currency}/月` : undefined,
-      icon: 'icon-park-outline:calendar',
+      value: hasCycle ? `${formatMoney(priceCNY / node.billing_cycle * 30)} CNY` : '不适用',
+      unit: hasCycle ? ' / 月' : undefined,
+      icon: 'tabler:receipt-2',
     },
     {
       label: '剩余时间',
-      value: hasExpiry ? String(Math.max(0, daysRemaining)) : '—',
-      unit: hasExpiry ? '天' : undefined,
-      icon: 'icon-park-outline:time',
+      value: expiryParts?.[1] ?? expiryText,
+      unit: expiryParts ? '天' : undefined,
+      icon: 'tabler:calendar-dollar',
+      valueClass: hasExpiry ? getExpireTextClass(node.expired_at) : undefined,
     },
     {
       label: '剩余价值',
-      value: hasPrice && hasExpiry && !finance.excluded ? formatMoney(finance.remaining * rate) : '—',
-      unit: hasPrice && hasExpiry && !finance.excluded ? currency : undefined,
-      icon: 'icon-park-outline:money',
+      value: formatMoney(remainingValue),
+      unit: 'CNY',
+      icon: 'tabler:coins',
     },
   ]
 })
