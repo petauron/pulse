@@ -22,6 +22,10 @@ const showFailures = ref(true)
 const cutPeak = ref(false)
 const chartLayout = ref<'combined' | 'split'>('combined')
 const autoRefresh = ref(true)
+const combinedChartRef = ref<unknown>(null)
+const latencyChartRef = ref<unknown>(null)
+const failureChartRef = ref<unknown>(null)
+const exportError = ref('')
 const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
   const max = app.publicSettings?.ping_record_preserve_time ?? 168
@@ -293,6 +297,55 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
 const combinedOption = computed<EChartsOption>(() => chartOption('combined'))
 const latencyOption = computed<EChartsOption>(() => chartOption('latency'))
 const failureOption = computed<EChartsOption>(() => chartOption('failure'))
+
+function download(filename: string, href: string): void {
+  const link = document.createElement('a')
+  link.href = href
+  link.download = filename
+  document.body.append(link)
+  link.click()
+  link.remove()
+}
+
+const exportFilename = (extension: string) => `senulun-ping-${props.uuid.replace(/[^a-zA-Z0-9_-]/g, '_')}-${hours.value}h.${extension}`
+
+function exportCsv(): void {
+  if (!data.value || !selectedTasks.value.length)
+    return
+  const selected = selectedTasks.value
+  const headers = ['时间', ...selected.flatMap(task => [`${task.name} 延迟(ms)`, `${task.name} ${failureLabel(task.kind)}(%)`])]
+  const series = selected.map(task => ({
+    latency: new Map(taskChartData(task.id)),
+    failure: new Map(taskFailureData(task.id)),
+  }))
+  const times = [...new Set(data.value.chart.filter(point => selectedTaskIds.value.includes(point.task_id)).map(point => point.received_at_unix_ms))].sort((a, b) => a - b)
+  const escapeCsv = (value: string | number | null | undefined) => {
+    const text = value == null ? '' : String(value)
+    // Spreadsheet applications can execute formula-like fields, including task names in headers.
+    const safe = /^\s*[=+\-@]/.test(text) ? `'${text}` : text
+    return `"${safe.replaceAll('"', '""')}"`
+  }
+  const rows = times.map(time => [new Date(time).toISOString(), ...series.flatMap(task => [task.latency.get(time) ?? '', task.failure.get(time) ?? ''])])
+  const csv = `\uFEFF${[headers, ...rows].map(row => row.map(escapeCsv).join(',')).join('\r\n')}`
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+  download(exportFilename('csv'), url)
+  URL.revokeObjectURL(url)
+  exportError.value = ''
+}
+
+function exportPng(): void {
+  const target = chartLayout.value === 'combined'
+    ? combinedChartRef.value
+    : showDelay.value ? latencyChartRef.value : failureChartRef.value
+  const chart = target as { getDataURL?: (options: { type: 'png', pixelRatio: number, backgroundColor: string }) => string } | null
+  const url = chart?.getDataURL?.({ type: 'png', pixelRatio: 2, backgroundColor: app.isDark ? '#111827' : '#ffffff' })
+  if (!url) {
+    exportError.value = '图表尚未准备好，请稍后再试。'
+    return
+  }
+  download(exportFilename('png'), url)
+  exportError.value = ''
+}
 </script>
 
 <template>
@@ -429,20 +482,30 @@ const failureOption = computed<EChartsOption>(() => chartOption('failure'))
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">
             {{ loading ? '加载中…' : '立即刷新' }}
           </Button>
+          <div class="min-w-0 flex-1" />
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="!data.chart.length || !selectedTasks.length || (!showDelay && !showFailures)" @click="exportPng">
+            PNG
+          </Button>
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="!data.chart.length || !selectedTasks.length" @click="exportCsv">
+            CSV
+          </Button>
         </div>
+        <p v-if="exportError" role="alert" class="text-sm text-destructive">
+          {{ exportError }}
+        </p>
         <p v-if="data.chart_source_points > data.chart.length" class="text-sm text-muted-foreground">
           曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
         <template v-if="data.chart.length && (showDelay || showFailures)">
           <div v-if="chartLayout === 'combined'" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-            <VChart :key="app.resolvedThemeMode" :option="combinedOption" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
+            <VChart :key="app.resolvedThemeMode" ref="combinedChartRef" :option="combinedOption" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
           </div>
           <template v-else>
             <div v-if="showDelay" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-              <VChart :key="app.resolvedThemeMode" :option="latencyOption" autoresize style="height: 100%; width: 100%" aria-label="独立延迟曲线，纵轴为毫秒，长时间缺报为断点" />
+              <VChart :key="app.resolvedThemeMode" ref="latencyChartRef" :option="latencyOption" autoresize style="height: 100%; width: 100%" aria-label="独立延迟曲线，纵轴为毫秒，长时间缺报为断点" />
             </div>
             <div v-if="showFailures" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-              <VChart :key="app.resolvedThemeMode" :option="failureOption" autoresize style="height: 100%; width: 100%" aria-label="独立丢包或失败率曲线，纵轴为百分比，长时间缺报为断点" />
+              <VChart :key="app.resolvedThemeMode" ref="failureChartRef" :option="failureOption" autoresize style="height: 100%; width: 100%" aria-label="独立丢包或失败率曲线，纵轴为百分比，长时间缺报为断点" />
             </div>
           </template>
         </template>

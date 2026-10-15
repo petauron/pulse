@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 import { login } from './auth'
@@ -142,6 +143,19 @@ test('probe analysis switches tasks without changing the selected chart series',
   await chart.hover()
   await expect(chart.getByText('20 ms', { exact: true })).toBeVisible()
   await expect(chart.getByText('50.0%', { exact: true })).toBeVisible()
+  const csvPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'CSV', exact: true }).click()
+  const csvDownload = await csvPromise
+  expect(csvDownload.suggestedFilename()).toMatch(/^senulun-ping-[\w-]+-1h\.csv$/)
+  const csv = await readFile(await csvDownload.path(), 'utf8')
+  expect(csv).toContain('"e2e-probe 失败率(%)"')
+  expect(csv).toContain('"e2e-probe-2 丢包率(%)"')
+  expect(csv).toContain('"50"')
+  const pngPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'PNG', exact: true }).click()
+  const pngDownload = await pngPromise
+  expect(pngDownload.suggestedFilename()).toMatch(/^senulun-ping-[\w-]+-1h\.png$/)
+  expect((await readFile(await pngDownload.path())).subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
   const layout = page.getByRole('group', { name: '图表布局' })
   await expect(layout.getByRole('button', { name: '合图' })).toHaveAttribute('aria-pressed', 'true')
   await layout.getByRole('button', { name: '分图' }).click()
