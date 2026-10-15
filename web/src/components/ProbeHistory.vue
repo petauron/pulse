@@ -16,11 +16,14 @@ import '@/utils/echarts'
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
 const app = useAppStore()
 const { pickSurfaceClass } = useBackgroundSurface()
-const hours = ref(props.selectedHours ?? 1)
+const presetRanges = [1, 6, 12, 24, 72, 168]
+const configuredHours = app.publicSettings?.theme_settings?.pingChartDefaultHours
+const defaultHours = typeof configuredHours === 'number' && presetRanges.includes(configuredHours) ? configuredHours : 1
+const hours = ref(props.selectedHours ?? defaultHours)
 const showDelay = ref(true)
 const showFailures = ref(true)
 const cutPeak = ref(false)
-const chartLayout = ref<'combined' | 'split'>('combined')
+const chartLayout = ref<'combined' | 'split'>(app.publicSettings?.theme_settings?.pingChartLayout === 'split' ? 'split' : 'combined')
 const autoRefresh = ref(app.publicSettings?.theme_settings?.pingChartAutoRefresh !== false)
 const combinedChartRef = ref<unknown>(null)
 const latencyChartRef = ref<unknown>(null)
@@ -28,7 +31,6 @@ const failureChartRef = ref<unknown>(null)
 const exportError = ref('')
 const filenameUnsafeChars = /[^\w-]/g
 const spreadsheetFormulaPrefix = /^\s*[-=+@]/
-const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
   const max = app.publicSettings?.ping_record_preserve_time ?? 168
   const presets = presetRanges.filter(range => range <= max)
@@ -90,7 +92,7 @@ watch(() => props.selectedHours, (value) => {
 watch(availableRanges, (available) => {
   if (props.selectedHours === undefined && !available.includes(hours.value))
     hours.value = available.at(-1) ?? 1
-})
+}, { immediate: true })
 watch(() => [props.uuid, props.taskId, hours.value], () => {
   data.value = null
   void reload()

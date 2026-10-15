@@ -99,6 +99,46 @@ test('network quality offers the full retained range with an exact custom label'
   await expect(ranges.getByRole('button', { name: '100 天' })).toHaveAttribute('aria-pressed', 'true')
 })
 
+test('probe history honors Emerald chart defaults and retained range', async ({ page }) => {
+  await page.route('**/api/public', async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data.ping_record_preserve_time = 168
+    payload.data.theme_settings = {
+      ...payload.data.theme_settings,
+      pingChartDefaultHours: 72,
+      pingChartLayout: 'split',
+      pingChartAutoRefresh: false,
+    }
+    await route.fulfill({ response, json: payload })
+  })
+  const requests: string[] = []
+  await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
+    requests.push(route.request().url())
+    await route.fulfill({
+      json: {
+        tasks: [],
+        records: [],
+        chart: [],
+        summary: [],
+        chart_source_points: 0,
+        chart_bucket_ms: 3601,
+        range_start_unix_ms: Date.now() - 72 * 3_600_000,
+        range_end_unix_ms: Date.now(),
+      },
+    })
+  })
+  await login(page)
+  await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
+  const ranges = page.getByRole('tablist', { name: '探测历史时间范围' })
+  await expect(ranges.getByRole('tab')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '3 天', '7 天'])
+  await expect(ranges.getByRole('tab', { name: '3 天' })).toHaveAttribute('data-state', 'active')
+  await expect(page.getByRole('group', { name: '图表布局' }).getByRole('button', { name: '分图' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('button', { name: '自动刷新' })).toBeVisible()
+  await expect.poll(() => requests.length).toBe(1)
+  expect(requests[0]).toContain('hours=72')
+})
+
 test('probe analysis switches tasks without changing the selected chart series', async ({ page }, testInfo) => {
   await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
     await route.fulfill({
