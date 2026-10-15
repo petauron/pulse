@@ -194,7 +194,9 @@ pub fn operating_system() -> Option<String> {
 
 #[cfg(any(target_os = "linux", test))]
 fn parse_pretty_name(body: &str) -> Option<String> {
-    let raw = body.lines().find_map(|line| line.strip_prefix("PRETTY_NAME="))?;
+    let raw = body
+        .lines()
+        .find_map(|line| line.strip_prefix("PRETTY_NAME="))?;
     let value = if let Some(quoted) = raw
         .strip_prefix('"')
         .and_then(|value| value.strip_suffix('"'))

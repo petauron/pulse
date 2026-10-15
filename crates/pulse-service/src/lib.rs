@@ -389,7 +389,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/nodes/{node_id}/probes",
             get(management::probe_history),
         )
-        .route("/api/v1/probes/comparison", get(management::probe_comparison))
+        .route(
+            "/api/v1/probes/comparison",
+            get(management::probe_comparison),
+        )
         .merge(management::routes())
         .merge(ip_info::routes())
         .route("/api/rpc2", post(rpc_handler))

@@ -345,7 +345,8 @@ async fn run_probe(client: Client, task: ProbeTask) -> ProbeResult {
                         .next()
                         .ok_or("dns")?
                         .ip();
-                    let output = system_command::run(SystemCommand::Ping(address), deadline).await?;
+                    let output =
+                        system_command::run(SystemCommand::Ping(address), deadline).await?;
                     parse_ping_latency(&output)
                         .map(Some)
                         .ok_or("response_parse")

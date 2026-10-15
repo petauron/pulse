@@ -183,7 +183,7 @@ const option = computed<EChartsOption>(() => {
           <TabsList :class="pickSurfaceClass('w-max h-8 bg-background/60 rounded-md', 'w-max h-8 bg-background/50 backdrop-blur-xl rounded-md')" aria-label="探测历史时间范围">
             <TabsTrigger
               v-for="range in availableRanges" :key="range" :value="String(range)"
-              class="h-6.5 shrink-0 text-xs border-none data-[state=active]:text-emerald-600 shadow-none rounded-sm"
+              class="h-6.5 shrink-0 text-xs border-none data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-400 shadow-none rounded-sm"
             >
               {{ rangeLabel(range) }}
             </TabsTrigger>
@@ -191,10 +191,10 @@ const option = computed<EChartsOption>(() => {
         </div>
       </Tabs>
       <div class="flex items-center gap-2">
-        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="selectedTaskIds.length === tasks.length && 'bg-background !text-emerald-600'" @click="selectedTaskIds = tasks.map(task => task.id)">
+        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="selectedTaskIds.length === tasks.length && 'bg-background !text-emerald-700 dark:!text-emerald-400'" @click="selectedTaskIds = tasks.map(task => task.id)">
           全选
         </Button>
-        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="!selectedTaskIds.length && 'bg-background !text-emerald-600'" @click="selectedTaskIds = []">
+        <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="!selectedTaskIds.length && 'bg-background !text-emerald-700 dark:!text-emerald-400'" @click="selectedTaskIds = []">
           全不选
         </Button>
       </div>
@@ -214,7 +214,7 @@ const option = computed<EChartsOption>(() => {
           <button
             v-for="task in tasks" :key="task.id" type="button"
             class="flex min-h-11 items-center gap-3 rounded-md p-2 text-left transition-all bg-background/60 hover:bg-background hover:shadow-[0_0_0_1px] hover:shadow-emerald-600/10"
-            :class="!selectedTaskIds.includes(task.id) && 'opacity-50'"
+            :class="!selectedTaskIds.includes(task.id) && 'ring-1 ring-border'"
             :aria-pressed="selectedTaskIds.includes(task.id)" :aria-label="`${task.name}，平均延迟 ${latency(summaryByTask.get(task.id)?.avg_latency_ms)}，失败率 ${(summaryByTask.get(task.id)?.loss_percent ?? 0).toFixed(2)}%，${selectedTaskIds.includes(task.id) ? '已选中' : '未选中'}`"
             @click="toggleTask(task.id)"
           >
@@ -230,10 +230,10 @@ const option = computed<EChartsOption>(() => {
           </button>
         </div>
         <div class="flex flex-wrap items-center gap-2 py-2">
-          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showDelay && 'bg-background !text-emerald-600'" :aria-pressed="showDelay" @click="showDelay = !showDelay">
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showDelay && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showDelay" @click="showDelay = !showDelay">
             延迟
           </Button>
-          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-600'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
+          <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
             失败标记
           </Button>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :disabled="loading" @click="reload">

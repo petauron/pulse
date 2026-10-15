@@ -117,8 +117,12 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
         </button>
       </div>
     </div>
-    <p v-if="error" role="alert" class="text-sm text-destructive">{{ error }}</p>
-    <p v-if="loading && !summary.length" role="status" class="text-sm text-muted-foreground">正在读取探测汇总…</p>
+    <p v-if="error" role="alert" class="text-sm text-destructive">
+      {{ error }}
+    </p>
+    <p v-if="loading && !summary.length" role="status" class="text-sm text-muted-foreground">
+      正在读取探测汇总…
+    </p>
     <div v-if="comparisons.length" class="overflow-x-auto rounded-lg bg-background/60 p-3">
       <table class="w-full text-left text-sm">
         <caption class="sr-only">
@@ -158,7 +162,9 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
       <div v-if="hours === 1" class="max-w-lg rounded-lg bg-background/60 p-4">
         <NodeProbeSummary :probes="selected.probes?.filter(probe => probe.id === task?.id)" />
       </div>
-      <p class="text-xs text-muted-foreground">表格汇总按完整所选时间范围计算。失败率表示未成功的探测比例；TCP、HTTP 失败不等于 ICMP 丢包。</p>
+      <p class="text-xs text-muted-foreground">
+        表格汇总按完整所选时间范围计算。失败率表示未成功的探测比例；TCP、HTTP 失败不等于 ICMP 丢包。
+      </p>
       <ProbeHistory :key="selected.uuid" :uuid="selected.uuid" :kind="kind" :task-id="task?.id" :selected-hours="hours" />
     </template>
     <p v-else class="text-sm text-muted-foreground">

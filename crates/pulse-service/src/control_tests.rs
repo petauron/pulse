@@ -295,7 +295,9 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         storage.ingest_probes(&node.agent_token, &batch, now + 200, 7),
         Err(StorageError::RateLimited)
     ));
-    let history = storage.probe_history(&node.node_id, None, 1, now + 200).unwrap();
+    let history = storage
+        .probe_history(&node.node_id, None, 1, now + 200)
+        .unwrap();
     assert_eq!(history["summary"][0]["samples"], 2);
     assert_eq!(history["summary"][0]["loss_percent"], 0.0);
     assert!(history["tasks"][0].get("target").is_none());
@@ -314,10 +316,12 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
     assert_eq!(comparison[0]["samples"], 2);
     assert_eq!(comparison[0]["avg_latency_ms"], 1.0);
     assert!(comparison[0].get("target").is_none());
-    assert!(storage
-        .probe_comparison(&task.id, 1, now + 2 * 3_600_000)
-        .unwrap()
-        .is_empty());
+    assert!(
+        storage
+            .probe_comparison(&task.id, 1, now + 2 * 3_600_000)
+            .unwrap()
+            .is_empty()
+    );
     assert_eq!(
         storage
             .probe_comparison(&task.id, 3, now + 2 * 3_600_000)
@@ -329,10 +333,12 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         Err(StorageError::NotFound)
     ));
     storage.revoke_node(&node.node_id, now + 1000).unwrap();
-    assert!(storage
-        .probe_comparison(&task.id, 1, now + 1000)
-        .unwrap()
-        .is_empty());
+    assert!(
+        storage
+            .probe_comparison(&task.id, 1, now + 1000)
+            .unwrap()
+            .is_empty()
+    );
     assert!(matches!(
         storage.agent_runtime_config(&node.agent_token),
         Err(StorageError::Unauthorized)

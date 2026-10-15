@@ -11,8 +11,8 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useNodesStore } from '@/stores/nodes'
-import { formatDateTime } from '@/utils/helper'
 import { CURRENCY_SYMBOLS, normalizeCurrency } from '@/utils/financeHelper'
+import { formatDateTime } from '@/utils/helper'
 import { getTrafficUsed } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
@@ -50,6 +50,9 @@ interface MetricCard {
   valueClass?: string
 }
 
+const EXPIRES_IN_DAYS = /^(\d+)\s+天$/
+const LINUX_DISTRO = /^Linux \((.+)\)$/
+
 const metricCards = computed<MetricCard[]>(() => {
   if (!data.value)
     return []
@@ -71,7 +74,7 @@ const metricCards = computed<MetricCard[]>(() => {
       ? priceCNY * remainingDays / node.billing_cycle
       : 0
   const expiryText = hasExpiry ? getExpireText(node.expired_at) : '-'
-  const expiryParts = /^(\d+)\s+天$/.exec(expiryText)
+  const expiryParts = EXPIRES_IN_DAYS.exec(expiryText)
 
   return [
     {
@@ -117,7 +120,7 @@ function displayKernelVersion(kernel: string | undefined): string {
 function displayOperatingSystem(os: string | undefined): string {
   if (!os)
     return '-'
-  const linuxDistro = /^Linux \((.+)\)$/.exec(os)
+  const linuxDistro = LINUX_DISTRO.exec(os)
   return linuxDistro?.[1] ?? os
 }
 
