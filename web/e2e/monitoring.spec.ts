@@ -106,7 +106,7 @@ test('probe task information opens without changing the selected chart series', 
         chart: [{ task_id: 'e2e-probe', received_at_unix_ms: Date.now(), latency_ms: 20, failed_samples: 0, samples: 1 }],
         summary: [{ task_id: 'e2e-probe', samples: 4, loss_percent: 25, avg_latency_ms: 20, min_latency_ms: 10, max_latency_ms: 30, latest_latency_ms: 20, p50_latency_ms: 20, p99_latency_ms: 29, p99_p50_ratio: 0.45 }],
         chart_source_points: 1,
-        chart_bucket_ms: 3600,
+        chart_bucket_ms: 3601,
         range_start_unix_ms: Date.now() - 3_600_000,
         range_end_unix_ms: Date.now(),
       },
@@ -126,7 +126,7 @@ test('probe task information opens without changing the selected chart series', 
   const smoothing = page.getByRole('button', { name: '平滑峰值', exact: true })
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'true')
-  const chart = page.locator('[aria-label="探测延迟曲线，失败样本为断点，可显示失败标记"]')
+  const chart = page.locator('[aria-label="探测延迟曲线，长时间缺报为断点，可显示失败标记"]')
   await chart.hover()
   await expect(chart.getByText('20 ms', { exact: true })).toBeVisible()
   await smoothing.click()

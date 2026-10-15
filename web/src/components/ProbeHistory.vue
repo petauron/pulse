@@ -10,7 +10,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
-import { cutPeakValues } from '@/utils/recordHelper'
+import { probeChartSeries } from '@/utils/probeChart'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
@@ -165,11 +165,9 @@ function toggleTask(id: string): void {
 
 function taskChartData(id: string): Array<[number, number | null]> {
   const records = (data.value?.chart ?? []).filter(record => record.task_id === id)
-  if (!cutPeak.value)
-    return records.map((record): [number, number | null] => [record.received_at_unix_ms, record.latency_ms])
-
-  const smoothed = cutPeakValues(records.map(record => ({ latency: record.latency_ms })), ['latency'])
-  return smoothed.map((point, index): [number, number | null] => [records[index]!.received_at_unix_ms, typeof point.latency === 'number' ? point.latency : null])
+  if (!data.value)
+    return []
+  return probeChartSeries(records, data.value.range_start_unix_ms, data.value.range_end_unix_ms, data.value.chart_bucket_ms, cutPeak.value)
 }
 
 const option = computed<EChartsOption>(() => {
@@ -234,7 +232,7 @@ const option = computed<EChartsOption>(() => {
             animation: false,
             label: { show: false },
             lineStyle: { color: taskColor(task.id), width: 1, opacity: 0.55 },
-            data: (data.value?.chart ?? []).filter(record => record.task_id === task.id && record.failed_samples > 0).map(record => ({ xAxis: record.received_at_unix_ms })),
+            data: (data.value?.chart ?? []).filter(record => record.task_id === task.id && record.failed_samples > 0).slice(0, 200).map(record => ({ xAxis: record.received_at_unix_ms })),
           }
         : undefined,
     })),
@@ -357,7 +355,7 @@ const option = computed<EChartsOption>(() => {
           曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
         <div v-if="data.chart.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，失败样本为断点，可显示失败标记" />
+          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟曲线，长时间缺报为断点，可显示失败标记" />
         </div>
         <p v-else class="text-sm text-muted-foreground">
           此时间范围暂无上报样本。
