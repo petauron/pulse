@@ -234,16 +234,18 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
         itemStyle: { color: taskColor(task.id) },
         connectNulls: false,
         data: taskChartData(task.id),
-        markLine: index === 0 ? {
-          silent: true,
-          symbol: ['none', 'none'] as [string, string],
-          label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
-          lineStyle: { width: 1, type: 'dashed' as const, opacity: 0.65 },
-          data: [
-            { name: '延迟警告', yAxis: chartThresholds.value.latencyWarning, lineStyle: { color: '#FACC15' } },
-            { name: '延迟严重', yAxis: chartThresholds.value.latencyCritical, lineStyle: { color: '#F43F5E' } },
-          ],
-        } : undefined,
+        markLine: index === 0
+          ? {
+              silent: true,
+              symbol: ['none', 'none'] as [string, string],
+              label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
+              lineStyle: { width: 1, type: 'dashed' as const, opacity: 0.65 },
+              data: [
+                { name: '延迟警告', yAxis: chartThresholds.value.latencyWarning, lineStyle: { color: '#FACC15' } },
+                { name: '延迟严重', yAxis: chartThresholds.value.latencyCritical, lineStyle: { color: '#F43F5E' } },
+              ],
+            }
+          : undefined,
         markPoint: {
           symbolSize: 28,
           label: { fontSize: 9, formatter: '峰值' },
@@ -267,16 +269,18 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
           itemStyle: { color: taskColor(task.id) },
           connectNulls: false,
           data: points,
-          markLine: index === 0 ? {
-            silent: true,
-            symbol: ['none', 'none'] as [string, string],
-            label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
-            lineStyle: { width: 1, type: 'dotted' as const, opacity: 0.65 },
-            data: [
-              { name: `${failureMetricLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: '#FACC15' } },
-              { name: `${failureMetricLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: '#F43F5E' } },
-            ],
-          } : undefined,
+          markLine: index === 0
+            ? {
+                silent: true,
+                symbol: ['none', 'none'] as [string, string],
+                label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
+                lineStyle: { width: 1, type: 'dotted' as const, opacity: 0.65 },
+                data: [
+                  { name: `${failureMetricLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: '#FACC15' } },
+                  { name: `${failureMetricLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: '#F43F5E' } },
+                ],
+              }
+            : undefined,
         }
       })
     : []
@@ -321,10 +325,12 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
       formatter: chartTooltip,
     },
     legend: { type: 'scroll', bottom: showZoom.value ? 24 : 0, itemWidth: 12, itemHeight: 8, itemGap: 14, icon: 'roundRect', textStyle: { fontSize: 10, color: secondary } },
-    dataZoom: showZoom.value ? [
-      { type: 'inside', start: 0, end: 100 },
-      { type: 'slider', height: 14, bottom: 0, borderColor: 'transparent', fillerColor: app.isDark ? 'rgba(52,211,153,.16)' : 'rgba(5,150,105,.12)', backgroundColor: grid, showDetail: false },
-    ] : [{ type: 'inside', start: 0, end: 100 }],
+    dataZoom: showZoom.value
+      ? [
+          { type: 'inside', start: 0, end: 100 },
+          { type: 'slider', height: 14, bottom: 0, borderColor: 'transparent', fillerColor: app.isDark ? 'rgba(52,211,153,.16)' : 'rgba(5,150,105,.12)', backgroundColor: grid, showDetail: false },
+        ]
+      : [{ type: 'inside', start: 0, end: 100 }],
     grid: { left: 56, right: mode === 'combined' ? 66 : 24, top: 30, bottom: showZoom.value ? 72 : 52 },
     xAxis: {
       type: 'time',
