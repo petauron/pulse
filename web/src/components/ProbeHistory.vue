@@ -20,6 +20,7 @@ const hours = ref(props.selectedHours ?? 1)
 const showDelay = ref(true)
 const showFailures = ref(true)
 const cutPeak = ref(false)
+const chartLayout = ref<'combined' | 'split'>('combined')
 const autoRefresh = ref(true)
 const presetRanges = [1, 6, 12, 24, 168, 720, 1440, 2160]
 const availableRanges = computed(() => {
@@ -194,13 +195,13 @@ function taskFailureData(id: string): Array<[number, number | null]> {
 const failureLabel = (kind: ProbeHistory['tasks'][number]['kind']) => kind === 'icmp' ? '丢包率' : '失败率'
 const failureMetricLabel = computed(() => tasks.value.every(task => task.kind === 'icmp') ? '丢包率' : tasks.value.every(task => task.kind !== 'icmp') ? '失败率' : '丢包 / 失败率')
 
-const option = computed<EChartsOption>(() => {
+function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   const style = getComputedStyle(document.documentElement)
   const foreground = style.getPropertyValue('--foreground').trim()
   const secondary = app.isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.55)'
   const border = app.isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)'
   const grid = app.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
-  const latencySeries = showDelay.value
+  const latencySeries = showDelay.value && mode !== 'failure'
     ? selectedTasks.value.map(task => ({
         id: `${task.id}:latency`,
         name: task.name,
@@ -215,14 +216,14 @@ const option = computed<EChartsOption>(() => {
         data: taskChartData(task.id),
       }))
     : []
-  const failureSeries = showFailures.value
+  const failureSeries = showFailures.value && mode !== 'latency'
     ? selectedTasks.value.map((task) => {
         const points = taskFailureData(task.id)
         return {
           id: `${task.id}:failure-rate`,
           name: `${task.name} · ${failureLabel(task.kind)}`,
           type: 'line' as const,
-          yAxisIndex: 1,
+          yAxisIndex: mode === 'combined' ? 1 : 0,
           showSymbol: points.length === 1,
           symbolSize: 4,
           step: 'end' as const,
@@ -233,6 +234,28 @@ const option = computed<EChartsOption>(() => {
         }
       })
     : []
+  const latencyAxis = {
+    type: 'value' as const,
+    name: '延迟 (ms)',
+    min: 0,
+    nameTextStyle: { color: secondary },
+    axisLabel: { fontSize: 11, color: secondary },
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: { lineStyle: { color: grid, type: 'dashed' as const } },
+  }
+  const failureAxis = {
+    type: 'value' as const,
+    name: `${failureMetricLabel.value} (%)`,
+    min: 0,
+    max: 100,
+    position: mode === 'combined' ? 'right' as const : 'left' as const,
+    nameTextStyle: { color: secondary },
+    axisLabel: { fontSize: 11, color: secondary, formatter: '{value}%' },
+    axisLine: { show: false },
+    axisTick: { show: false },
+    splitLine: { show: mode === 'failure', lineStyle: { color: grid, type: 'dashed' as const } },
+  }
   return {
     darkMode: app.isDark,
     animation: false,
@@ -252,7 +275,7 @@ const option = computed<EChartsOption>(() => {
       formatter: chartTooltip,
     },
     legend: { type: 'scroll', bottom: 0, itemWidth: 12, itemHeight: 12, itemGap: 16, icon: 'roundRect', textStyle: { fontSize: 11, color: secondary } },
-    grid: { left: 56, right: 66, top: 30, bottom: 52 },
+    grid: { left: 56, right: mode === 'combined' ? 66 : 24, top: 30, bottom: 52 },
     xAxis: {
       type: 'time',
       min: data.value?.range_start_unix_ms,
@@ -262,32 +285,14 @@ const option = computed<EChartsOption>(() => {
       axisTick: { show: false },
       splitLine: { show: false },
     },
-    yAxis: [
-      {
-        type: 'value',
-        name: '延迟 (ms)',
-        min: 0,
-        nameTextStyle: { color: secondary },
-        axisLabel: { fontSize: 11, color: secondary },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { lineStyle: { color: grid, type: 'dashed' } },
-      },
-      {
-        type: 'value',
-        name: `${failureMetricLabel.value} (%)`,
-        min: 0,
-        max: 100,
-        nameTextStyle: { color: secondary },
-        axisLabel: { fontSize: 11, color: secondary, formatter: '{value}%' },
-        axisLine: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false },
-      },
-    ],
+    yAxis: mode === 'combined' ? [latencyAxis, failureAxis] : [mode === 'latency' ? latencyAxis : failureAxis],
     series: [...latencySeries, ...failureSeries],
   }
-})
+}
+
+const combinedOption = computed<EChartsOption>(() => chartOption('combined'))
+const latencyOption = computed<EChartsOption>(() => chartOption('latency'))
+const failureOption = computed<EChartsOption>(() => chartOption('failure'))
 </script>
 
 <template>
@@ -410,6 +415,14 @@ const option = computed<EChartsOption>(() => {
               </button>
             </DataTooltip>
           </div>
+          <div role="group" aria-label="图表布局" class="flex items-center gap-1">
+            <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="chartLayout === 'combined' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'combined'" @click="chartLayout = 'combined'">
+              合图
+            </Button>
+            <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="chartLayout === 'split' && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="chartLayout === 'split'" @click="chartLayout = 'split'">
+              分图
+            </Button>
+          </div>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" @click="toggleAutoRefresh">
             {{ autoRefresh ? '暂停刷新' : '自动刷新' }}
           </Button>
@@ -420,14 +433,27 @@ const option = computed<EChartsOption>(() => {
         <p v-if="data.chart_source_points > data.chart.length" class="text-sm text-muted-foreground">
           曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
         </p>
-        <div v-if="data.chart.length" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-          <VChart :key="app.resolvedThemeMode" :option="option" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
-        </div>
-        <p v-else class="text-sm text-muted-foreground">
+        <template v-if="data.chart.length && (showDelay || showFailures)">
+          <div v-if="chartLayout === 'combined'" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+            <VChart :key="app.resolvedThemeMode" :option="combinedOption" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点" />
+          </div>
+          <template v-else>
+            <div v-if="showDelay" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+              <VChart :key="app.resolvedThemeMode" :option="latencyOption" autoresize style="height: 100%; width: 100%" aria-label="独立延迟曲线，纵轴为毫秒，长时间缺报为断点" />
+            </div>
+            <div v-if="showFailures" class="h-80 rounded-md p-4" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
+              <VChart :key="app.resolvedThemeMode" :option="failureOption" autoresize style="height: 100%; width: 100%" aria-label="独立丢包或失败率曲线，纵轴为百分比，长时间缺报为断点" />
+            </div>
+          </template>
+        </template>
+        <p v-else-if="!data.chart.length" class="text-sm text-muted-foreground">
           此时间范围暂无上报样本。
         </p>
+        <p v-else class="text-sm text-muted-foreground">
+          请选择要显示的曲线。
+        </p>
         <p class="text-xs text-muted-foreground">
-          右轴是每个有样本时间桶的失败比例；较长缺报会断开，不计为 0%。TCP、HTTP 失败不等同于 ICMP 丢包。
+          百分比轴是每个有样本时间桶的失败比例；较长缺报会断开，不计为 0%。TCP、HTTP 失败不等同于 ICMP 丢包。
         </p>
         <details class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
