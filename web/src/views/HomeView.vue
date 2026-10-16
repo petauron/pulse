@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Empty } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import VisitorInfoCard from '@/components/VisitorInfoCard.vue'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
@@ -123,7 +122,6 @@ function getNodeItemTransitionStyle(index: number): Record<string, string> {
 </script>
 
 <template>
-  <VisitorInfoCard v-if="appStore.visitorInfoCardEnabled" />
   <div class="home-view">
     <div v-if="appStore.connectionError" class="alert px-4">
       <Alert

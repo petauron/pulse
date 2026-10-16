@@ -12,6 +12,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   })
 
   await login(page)
+  await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
   const card = page.getByRole('button', { name: '查看 e2e-node 节点详情' })
   await expect(card).toBeVisible({ timeout: 20_000 })
   await expect(page.getByTestId('node-card-grid')).toHaveClass(/auto-rows-fr/)
@@ -58,6 +59,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
 
   await row.press('Enter')
   await expect(page).toHaveURL(/\/instance\/[0-9a-f-]+$/)
+  await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
   await expect(page.getByText('e2e-node', { exact: true })).toBeVisible()
   await expect(page.getByText('在线', { exact: true })).toBeVisible()
   await expect(page.getByText('CPU', { exact: true }).first()).toBeVisible()
@@ -80,6 +82,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
 
 test('the first failed connection recovers without reloading the page', async ({ page }) => {
   await login(page, '/admin')
+  await expect(page.getByRole('button', { name: '访问者信息' })).toHaveCount(0)
   let failRequests = true
   await page.route('**/api/public', async (route) => {
     if (failRequests)
@@ -102,6 +105,7 @@ test('network quality offers the full retained range with an exact custom label'
     await route.fulfill({ response, json: payload })
   })
   await login(page, '/network-quality')
+  await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
   const ranges = page.getByRole('group', { name: '统计范围' })
   await expect(ranges.getByRole('button')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '7 天', '30 天', '60 天', '90 天', '100 天'])
   await ranges.getByRole('button', { name: '100 天' }).click()
