@@ -58,7 +58,7 @@ test('provenance fails closed outside the checked main workflow', () => {
   ]) assert.throws(() => provenanceFor({ tag, sha: sourceSha }, { ...env, ...change }));
 });
 
-test('renamed repository binds new provenance and keeps stable distribution names', () => {
+test('renamed repository binds new provenance and distribution names', () => {
   const repository = 'petauron/senulun';
   const renamed = { ...env, GITHUB_REPOSITORY: repository,
     GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/release.yml@refs/heads/main` };
@@ -67,7 +67,7 @@ test('renamed repository binds new provenance and keeps stable distribution name
   assert.ok(proof.buildDefinition.resolvedDependencies.every((item) => item.uri.startsWith(`git+https://github.com/${repository}@`)));
   assert.equal(proof.runDetails.builder.id, `https://github.com/${renamed.GITHUB_WORKFLOW_REF}`);
   assert.throws(() => provenanceFor({ tag, sha: sourceSha }, {
-    ...renamed, GITHUB_WORKFLOW_REF: 'petauron/senulun/.github/workflows/release.yml@refs/heads/main',
+    ...renamed, GITHUB_WORKFLOW_REF: 'petauron/pulse/.github/workflows/release.yml@refs/heads/main',
   }));
   for (const file of ['Dockerfile', 'Dockerfile.release']) {
     assert.ok(readFileSync(file, 'utf8').includes(`https://github.com/${repository}`));
