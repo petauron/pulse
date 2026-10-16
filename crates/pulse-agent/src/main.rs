@@ -776,7 +776,7 @@ mod tests {
         assert!(parse_service_url("http://[::1]:8080").is_ok());
         assert!(parse_service_url("http://[::2]:8080").is_err());
         assert!(parse_service_url("http://[2001:db8::1]:8080").is_err());
-        assert!(parse_service_url("https://pulse.example.com").is_ok());
+        assert!(parse_service_url("https://senulun.example.com").is_ok());
     }
 
     #[tokio::test]

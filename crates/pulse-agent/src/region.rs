@@ -112,7 +112,7 @@ fn client_builder() -> reqwest::ClientBuilder {
         .connect_timeout(REQUEST_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
         .pool_max_idle_per_host(0)
-        .user_agent(concat!("pulse-agent/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("senulun-agent/", env!("CARGO_PKG_VERSION")))
 }
 
 async fn lookup(endpoint: &str) -> Result<String, &'static str> {

@@ -322,7 +322,7 @@ fn target_client() -> Result<Client, reqwest::Error> {
         .retry(reqwest::retry::never())
         .pool_max_idle_per_host(0)
         .timeout(Duration::from_secs(30))
-        .user_agent(concat!("pulse-probe/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("senulun-probe/", env!("CARGO_PKG_VERSION")))
         .build()
 }
 
