@@ -451,13 +451,20 @@ async fn run_tcp_probe(target: &str, timeout: Duration) -> Result<f64, &'static 
 fn parse_ping_latency(output: &[u8]) -> Option<f64> {
     let text = std::str::from_utf8(output).ok()?;
     for line in text.lines() {
-        if let Some((_, suffix)) = line
+        let value = line
             .split_once("time=")
-            .or_else(|| line.split_once("time<"))
-        {
+            .map(|(_, suffix)| (suffix, false))
+            .or_else(|| line.split_once("time<").map(|(_, suffix)| (suffix, true)));
+        if let Some((suffix, upper_bound)) = value {
             let value = suffix.split_whitespace().next()?.parse::<f64>().ok()?;
             if value.is_finite() && value >= 0.0 {
-                return Some(value);
+                // Komari records the integer millisecond RTT for each ICMP sample.
+                // "time<1" is a strict upper bound, so its integer RTT is zero.
+                return if upper_bound {
+                    (value == 1.0).then_some(0.0)
+                } else {
+                    Some(value.floor())
+                };
             }
         }
     }
@@ -536,9 +543,11 @@ mod tests {
     fn parses_only_finite_ping_times() {
         assert_eq!(
             parse_ping_latency(b"64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.123 ms\n"),
-            Some(0.123)
+            Some(0.0)
         );
-        assert_eq!(parse_ping_latency(b"time<1 ms"), Some(1.0));
+        assert_eq!(parse_ping_latency(b"time=143.987 ms"), Some(143.0));
+        assert_eq!(parse_ping_latency(b"time<1 ms"), Some(0.0));
+        assert_eq!(parse_ping_latency(b"time<2 ms"), None);
         assert_eq!(parse_ping_latency(b"time=NaN ms"), None);
         assert_eq!(parse_ping_latency(b"unrecognized output"), None);
     }

@@ -70,7 +70,9 @@ retry succeeds, the sample is a failure rather than a high-latency success.
 These TCP failures contribute to failure rate, not to average latency. Historical
 samples retain the measurement rule used when they were collected, so a window
 can contain both rules until its older samples age out. ICMP reports the system
-ping RTT.
+ping RTT as whole milliseconds, matching Komari's per-sample truncation. A
+`time<1 ms` result is recorded as 0 ms; other imprecise upper bounds are
+rejected rather than guessed.
 The detail page shows a time-bucketed chart spanning the requested window, with
 at most 1000 points per task and 12000 points per response. The latest 100 raw
 results remain available as a separate table. A selected probe task is filtered
