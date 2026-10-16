@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
 import { fetchProbeComparison } from '@/utils/admin'
+import { failureRateLabel } from '@/utils/probeLabels'
 
 const app = useAppStore()
 const store = useNodesStore()
@@ -142,7 +143,7 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
             </th><th class="p-2">
               平均延迟
             </th><th class="p-2">
-              {{ kind === 'icmp' ? '丢包率' : '失败率' }}
+              {{ failureRateLabel(kind) }}
             </th><th class="p-2">
               样本
             </th>
@@ -170,7 +171,7 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
         <NodeProbeSummary :probes="selected.probes?.filter(probe => probe.id === task?.id)" />
       </div>
       <p class="text-xs text-muted-foreground">
-        表格汇总按完整所选时间范围计算。失败率表示未成功的探测比例；TCP、HTTP 失败不等于 ICMP 丢包。
+        表格汇总按完整所选时间范围计算。TCP 的“丢包率”表示连接失败比例，HTTP 的失败率表示请求失败比例；只有 ICMP 是实际丢包。
       </p>
       <ProbeHistory :key="selected.uuid" :uuid="selected.uuid" :kind="kind" :task-id="task?.id" :selected-hours="hours" />
     </template>

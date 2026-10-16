@@ -129,6 +129,7 @@ test('network quality offers the full retained range with an exact custom label'
   })
   await login(page, '/network-quality')
   await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
+  await expect(page.getByRole('columnheader', { name: '丢包率' })).toBeVisible()
   const ranges = page.getByRole('group', { name: '统计范围' })
   await expect(ranges.getByRole('button')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '7 天', '30 天', '60 天', '90 天', '100 天'])
   await ranges.getByRole('button', { name: '100 天' }).click()
