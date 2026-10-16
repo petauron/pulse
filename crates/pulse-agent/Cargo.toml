@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[[bin]]
+name = "senulun-agent"
+path = "src/main.rs"
+
 [dependencies]
 pulse-protocol = { path = "../pulse-protocol" }
 reqwest.workspace = true

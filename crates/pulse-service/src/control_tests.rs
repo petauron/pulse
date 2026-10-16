@@ -185,7 +185,7 @@ use uuid::Uuid;
 
 fn fixture() -> (TempDir, Storage, pulse_protocol::EnrollmentResponse) {
     let directory = tempfile::tempdir().unwrap();
-    let storage = Storage::open(&directory.path().join("pulse.db"), 64 * 1024 * 1024).unwrap();
+    let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
     let now = unix_time_ms().unwrap();
     let token = storage.create_enrollment(600, now).unwrap();
     let credentials = storage
@@ -652,7 +652,7 @@ fn dashboard_probe_theme_limits_match_retention_and_eight_rows() {
 #[test]
 fn migration_from_released_schema_creates_backup_and_privacy_default() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("pulse.db");
+    let path = directory.path().join("senulun.db");
     // Build the complete released v2 baseline with the same historical migration.
     let mut db = rusqlite::Connection::open(&path).unwrap();
     crate::storage::create_schema_v2(&mut db).unwrap();

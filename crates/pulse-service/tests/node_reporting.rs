@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 #[test]
 fn reporting_cli_authenticates_stdin_without_returning_secrets() {
     let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("pulse.db");
+    let path = directory.path().join("senulun.db");
     let administration = Administration::open(&path, 64 * 1024 * 1024).unwrap();
     let node_id = "11111111-1111-4111-8111-111111111111";
     let old_token = "test-original-credential-never-publish";
@@ -29,8 +29,8 @@ fn reporting_cli_authenticates_stdin_without_returning_secrets() {
         "short".to_owned(),
         "x".repeat(1024),
     ] {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_pulse-service"))
-            .env("PULSE_DATABASE_PATH", &path)
+        let mut child = Command::new(env!("CARGO_BIN_EXE_senulun-service"))
+            .env("SENULUN_DATABASE_PATH", &path)
             .args(["node", "reporting", node_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

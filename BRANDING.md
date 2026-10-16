@@ -1,46 +1,44 @@
-# Senulun product identity and upgrade
+# Senulun runtime identity cutover
 
-Senulun is the new product name of Pulse. It is the same service and collector,
-not a fresh deployment. The rename updates the dashboard, default site title,
-messages and documentation.
+Senulun is the successor name for Pulse. The public name changed first; this
+release changes the executable, environment, service and state identities;
+the independent catalog changes its application IDs in a separate publication.
+It is **not** an in-place binary replacement for a running Pulse
+installation. Do not start it against the old data directory or credentials.
 
-## Permanent machine contracts
+## New runtime contract
 
-Keep the existing `pulse-service` / `pulse-agent` executables, `PULSE_*`
-environment keys, systemd unit/user names, `/etc/pulse` and `/var/lib/pulse`
-paths, database and credential files, catalog IDs `pulse` / `pulse-agent`,
-protocol fields and release asset names. These are stable
-installation identities, not compatibility aliases. There is no parallel
-Senulun binary, dual environment lookup or fallback implementation.
+- Binaries: `senulun-service` and `senulun-agent`.
+- Environment variables: `SENULUN_*` only. Old `PULSE_*` variables are not
+  accepted as fallback configuration.
+- Service data: `/var/lib/senulun`, with `senulun.db` and
+  `senulun.metrics.db`.
+- Agent state: `/var/lib/senulun-agent`; standalone default state is
+  `$XDG_STATE_HOME/senulun`.
+- Standalone systemd units: `senulun-service.service` and
+  `senulun-agent.service`; Vastora uses its own managed unit names.
+- Release archives: `senulun-<tag>-linux-<arch>.tar.gz`.
 
-Do not delete or re-enroll collectors to change branding. Keep node IDs, agent
-credentials, administrator credentials, sessions, probe history, traffic totals,
-alert settings, storage identities, OAuth redirect URLs and mounted volumes.
-Existing TOTP registrations remain usable; only newly generated enrollment
-labels use Senulun.
+The monitoring wire protocol and database schema retain their existing
+versioning. Changing filesystem names must not create a new monitoring node,
+administrator account or authentication credential.
 
-## Forward-only data migration
+## Existing installations
 
-Control schema 5 changes only `monitoring_settings.data.site_name` when its
-exact value is `Pulse`. Custom titles (including titles containing that word)
-are retained. Both control and metrics databases are backed up before upgrading
-an existing schema-4 store. A missing/mismatched pair or backup/migration error
-blocks startup. Never run an older service on the migrated database; recovery
-requires the matched pre-upgrade backup pair while the service is stopped.
-Fresh installations follow the same migration path and default to Senulun.
+Stop both old processes before copying their data. Back up the matched control
+and metrics SQLite files, Agent credentials and configuration, then verify
+their digests. Move a verified copy to the new protected paths, preserve file
+permissions and node identity, and start only the new units. Never run old and
+new writers against the same database or credential file. Check node count,
+pairing, traffic totals and health before retiring old units or storage. Keep
+the old stopped resources as recoverable evidence until acceptance.
 
-## Release boundary
+Vastora-managed installations require a separate, explicitly invoked
+maintenance migration. Merely refreshing the signed application catalog does
+not perform the cutover. A failed copy, ownership check or health check must
+leave the instance blocked; do not repair it by re-enrolling the Agent or
+silently reinstalling the Service.
 
-The canonical source repository is `petauron/senulun`. Future releases publish
-the Service image to `ghcr.io/petauron/senulun` and bind provenance to the new
-repository identity. The catalog source registry must use that same identity.
-Previously published `ghcr.io/petauron/pulse` images, archive names, tags and
-attestations remain immutable; a repository rename does not re-sign old assets
-or upgrade installed applications. Do not accept an old signer as a fallback
-for a new-repository release.
-
-Use the existing Release Please version PR and checked immutable commit. Keep
-the `pulse` release component, Rust crate names and existing version history.
-After release, use the protected catalog publication and an explicitly approved
-Vastora managed upgrade. Preserve owned resources; never install a second app
-or replace live containers by hand. Source PRs do not deploy production.
+Historical release assets, image digests, signatures and signed catalog
+revisions remain immutable. An old `petauron/pulse` asset is never presented
+as if it were built and attested by `petauron/senulun`.

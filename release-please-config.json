@@ -4,7 +4,7 @@
     ".": {
       "release-type": "simple",
       "version-file": "version.txt",
-      "package-name": "pulse",
+      "package-name": "senulun",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "bump-minor-pre-major": true,

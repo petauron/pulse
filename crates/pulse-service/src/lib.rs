@@ -934,7 +934,7 @@ async fn version() -> Json<Value> {
 fn version_data() -> Value {
     json!({
         "version": env!("CARGO_PKG_VERSION"),
-        "hash": option_env!("PULSE_BUILD_GIT_HASH").unwrap_or("dev")
+        "hash": option_env!("SENULUN_BUILD_GIT_HASH").unwrap_or("dev")
     })
 }
 
@@ -1158,16 +1158,16 @@ fn current_time() -> Result<u64, ApiError> {
 
 fn validate_config(config: &ServiceConfig) -> Result<(), Box<dyn Error + Send + Sync>> {
     if !(1..=3_650).contains(&config.retention_days) {
-        return Err("PULSE_RETENTION_DAYS must be between 1 and 3650".into());
+        return Err("SENULUN_RETENTION_DAYS must be between 1 and 3650".into());
     }
     if !(10..=86_400).contains(&config.offline_after_seconds) {
-        return Err("PULSE_OFFLINE_AFTER_SECONDS must be between 10 and 86400".into());
+        return Err("SENULUN_OFFLINE_AFTER_SECONDS must be between 10 and 86400".into());
     }
     if !(1..=1_000).contains(&config.max_nodes) {
-        return Err("PULSE_MAX_NODES must be between 1 and 1000".into());
+        return Err("SENULUN_MAX_NODES must be between 1 and 1000".into());
     }
     if !(64 * 1024 * 1024..=1024_u64.pow(4)).contains(&config.max_database_bytes) {
-        return Err("PULSE_MAX_DATABASE_BYTES must be between 64 MiB and 1 TiB".into());
+        return Err("SENULUN_MAX_DATABASE_BYTES must be between 64 MiB and 1 TiB".into());
     }
     Ok(())
 }
@@ -1187,7 +1187,7 @@ mod tests {
 
     fn test_state() -> (TempDir, AppState) {
         let directory = tempfile::tempdir().expect("temporary directory");
-        let mut config = ServiceConfig::with_database(directory.path().join("pulse.db"));
+        let mut config = ServiceConfig::with_database(directory.path().join("senulun.db"));
         config.max_database_bytes = 64 * 1024 * 1024;
         let state = AppState::open(&config).expect("test state");
         (directory, state)
@@ -1396,7 +1396,7 @@ mod tests {
         assert_eq!(disabled["oauth_enable"], false);
         assert!(disabled["oauth_provider"].is_null());
         state.auth = auth::AuthState::new(
-            &directory.path().join("pulse.db"),
+            &directory.path().join("senulun.db"),
             AuthConfig {
                 github: Some(GithubOAuthConfig {
                     client_id: "test-client-id".to_owned(),

@@ -5,10 +5,10 @@ use std::{
 };
 
 fn command(path: &std::path::Path, arguments: &[&str], token: &str) -> Output {
-    let mut process = Command::new(env!("CARGO_BIN_EXE_pulse-agent"))
+    let mut process = Command::new(env!("CARGO_BIN_EXE_senulun-agent"))
         .args(arguments)
-        .env("PULSE_CREDENTIALS_PATH", path)
-        .env("PULSE_SERVICE_URL", "http://[::1]:8080")
+        .env("SENULUN_CREDENTIALS_PATH", path)
+        .env("SENULUN_SERVICE_URL", "http://[::1]:8080")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -10,12 +10,13 @@ const DEFAULT_MAX_DATABASE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt().compact().init();
-    let database_path =
-        PathBuf::from(env::var("PULSE_DATABASE_PATH").unwrap_or_else(|_| "pulse.db".to_owned()));
-    let max_database_bytes = parse_env("PULSE_MAX_DATABASE_BYTES", DEFAULT_MAX_DATABASE_BYTES)?;
+    let database_path = PathBuf::from(
+        env::var("SENULUN_DATABASE_PATH").unwrap_or_else(|_| "senulun.db".to_owned()),
+    );
+    let max_database_bytes = parse_env("SENULUN_MAX_DATABASE_BYTES", DEFAULT_MAX_DATABASE_BYTES)?;
     let arguments: Vec<String> = env::args().skip(1).collect();
     if arguments.as_slice() == ["--version"] {
-        println!("pulse-service {}", env!("CARGO_PKG_VERSION"));
+        println!("senulun-service {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
     if arguments.as_slice() == ["--help"] || arguments.as_slice() == ["-h"] {
@@ -29,22 +30,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         return run_admin(&arguments, &database_path, max_database_bytes);
     }
 
-    let listen_address: SocketAddr = env::var("PULSE_LISTEN")
+    let listen_address: SocketAddr = env::var("SENULUN_LISTEN")
         .unwrap_or_else(|_| DEFAULT_LISTEN_ADDRESS.to_owned())
         .parse()?;
-    let allow_public = env::var("PULSE_ALLOW_PUBLIC_LISTEN").as_deref() == Ok("true");
+    let allow_public = env::var("SENULUN_ALLOW_PUBLIC_LISTEN").as_deref() == Ok("true");
     if !listen_address.ip().is_loopback() && !allow_public {
         return Err(
-            "non-loopback PULSE_LISTEN requires PULSE_ALLOW_PUBLIC_LISTEN=true; put TLS and access control in front of Senulun"
+            "non-loopback SENULUN_LISTEN requires SENULUN_ALLOW_PUBLIC_LISTEN=true; put TLS and access control in front of Senulun"
                 .into(),
         );
     }
 
     let mut config = ServiceConfig::with_database(database_path);
-    config.retention_days = parse_env("PULSE_RETENTION_DAYS", config.retention_days)?;
-    config.offline_after_seconds =
-        parse_env("PULSE_OFFLINE_AFTER_SECONDS", config.offline_after_seconds)?;
-    config.max_nodes = parse_env("PULSE_MAX_NODES", config.max_nodes)?;
+    config.retention_days = parse_env("SENULUN_RETENTION_DAYS", config.retention_days)?;
+    config.offline_after_seconds = parse_env(
+        "SENULUN_OFFLINE_AFTER_SECONDS",
+        config.offline_after_seconds,
+    )?;
+    config.max_nodes = parse_env("SENULUN_MAX_NODES", config.max_nodes)?;
     config.max_database_bytes = max_database_bytes;
     config.auth = pulse_service::AuthConfig::from_env()?;
     let state = AppState::open(&config)?;
@@ -174,7 +177,7 @@ fn run_admin(
 }
 
 fn usage() -> &'static str {
-    "usage: pulse-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node reporting ID (credential on stdin) | node correct-traffic ID (JSON on stdin) | node revoke ID | node delete ID | audit [LIMIT] | backup]"
+    "usage: senulun-service [--version | serve | enrollment create [--ttl-seconds N] | enrollment inspect ID | enrollment revoke ID | node rotate ID | node reporting ID (credential on stdin) | node correct-traffic ID (JSON on stdin) | node revoke ID | node delete ID | audit [LIMIT] | backup]"
 }
 
 async fn shutdown_signal() {

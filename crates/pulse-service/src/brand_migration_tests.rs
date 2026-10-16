@@ -6,7 +6,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 fn schema_four_fixture(directory: &Path, title: &str) -> PathBuf {
-    let path = directory.join("pulse.db");
+    let path = directory.join("senulun.db");
     let storage = Storage::open(&path, 64 * 1024 * 1024).unwrap();
     let db = storage.connection().unwrap();
     // Schema 5 only updates one setting. The schema-4 shape is identical.
@@ -89,8 +89,8 @@ fn brand_migration_backs_up_pair_and_preserves_custom_titles_and_identity() {
             serde_json::from_slice(&std::fs::read(backups[0].join("manifest.json")).unwrap())
                 .unwrap();
         assert_eq!(manifest["control_schema"], 4);
-        assert!(backups[0].join("pulse.metrics.db").is_file());
-        let original = Connection::open(backups[0].join("pulse.db")).unwrap();
+        assert!(backups[0].join("senulun.metrics.db").is_file());
+        let original = Connection::open(backups[0].join("senulun.db")).unwrap();
         assert_eq!(
             original
                 .query_row(
@@ -141,7 +141,7 @@ fn brand_migration_failure_leaves_old_schema_and_title() {
 fn brand_migration_rejects_missing_metrics_without_replacing_it() {
     let directory = tempfile::tempdir().unwrap();
     let path = schema_four_fixture(directory.path(), "Pulse");
-    let metrics = directory.path().join("pulse.metrics.db");
+    let metrics = directory.path().join("senulun.metrics.db");
     std::fs::rename(&metrics, directory.path().join("saved.metrics.db")).unwrap();
     assert!(Storage::open(&path, 64 * 1024 * 1024).is_err());
     assert!(!metrics.exists());

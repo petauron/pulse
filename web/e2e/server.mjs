@@ -9,17 +9,17 @@ import { testPassword, testUsername } from './credentials.mjs'
 const webDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repository = resolve(webDirectory, '..')
 const binarySuffix = process.platform === 'win32' ? '.exe' : ''
-const serviceBinary = join(repository, 'target', 'debug', `pulse-service${binarySuffix}`)
-const agentBinary = join(repository, 'target', 'debug', `pulse-agent${binarySuffix}`)
+const serviceBinary = join(repository, 'target', 'debug', `senulun-service${binarySuffix}`)
+const agentBinary = join(repository, 'target', 'debug', `senulun-agent${binarySuffix}`)
 const stateDirectory = mkdtempSync(join(tmpdir(), 'pulse-e2e-'))
-const databasePath = join(stateDirectory, 'pulse.db')
+const databasePath = join(stateDirectory, 'senulun.db')
 const tokenPath = join(stateDirectory, 'enrollment-token')
 const credentialsPath = join(stateDirectory, 'agent-credentials.json')
 const serviceUrl = 'http://127.0.0.1:18080/'
 const baseEnvironment = {
   ...process.env,
   PATH: `${dirname(serviceBinary)}${delimiter}${process.env.PATH ?? ''}`,
-  PULSE_DATABASE_PATH: databasePath,
+  SENULUN_DATABASE_PATH: databasePath,
 }
 
 const enrollment = spawnSync(
@@ -40,12 +40,12 @@ const children = [
     cwd: repository,
     env: {
       ...baseEnvironment,
-      PULSE_LISTEN: '127.0.0.1:18080',
-      PULSE_PUBLIC_URL: 'http://127.0.0.1:18080',
-      PULSE_RETENTION_DAYS: '7',
-      PULSE_OFFLINE_AFTER_SECONDS: '20',
-      PULSE_MAX_NODES: '10',
-      PULSE_MAX_DATABASE_BYTES: '67108864',
+      SENULUN_LISTEN: '127.0.0.1:18080',
+      SENULUN_PUBLIC_URL: 'http://127.0.0.1:18080',
+      SENULUN_RETENTION_DAYS: '7',
+      SENULUN_OFFLINE_AFTER_SECONDS: '20',
+      SENULUN_MAX_NODES: '10',
+      SENULUN_MAX_DATABASE_BYTES: '67108864',
     },
     stdio: 'inherit',
   }),
@@ -56,14 +56,14 @@ function startAgent() {
     cwd: repository,
     env: {
       ...process.env,
-      PULSE_SERVICE_URL: serviceUrl,
-      PULSE_ENROLLMENT_TOKEN_FILE: tokenPath,
-      PULSE_CREDENTIALS_PATH: credentialsPath,
-      PULSE_NODE_NAME: 'e2e-node',
-      PULSE_NODE_REGION: 'SG',
-      PULSE_NODE_GROUP: 'e2e',
-      PULSE_INTERVAL_SECONDS: '5',
-      PULSE_GEOIP_PROVIDER: 'disabled',
+      SENULUN_SERVICE_URL: serviceUrl,
+      SENULUN_ENROLLMENT_TOKEN_FILE: tokenPath,
+      SENULUN_CREDENTIALS_PATH: credentialsPath,
+      SENULUN_NODE_NAME: 'e2e-node',
+      SENULUN_NODE_REGION: 'SG',
+      SENULUN_NODE_GROUP: 'e2e',
+      SENULUN_INTERVAL_SECONDS: '5',
+      SENULUN_GEOIP_PROVIDER: 'disabled',
     },
     stdio: 'inherit',
   })

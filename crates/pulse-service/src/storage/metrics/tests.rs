@@ -6,7 +6,7 @@ use tempfile::{TempDir, tempdir};
 
 fn legacy_store() -> (TempDir, PathBuf, Connection) {
     let directory = tempdir().unwrap();
-    let control = directory.path().join("pulse.db");
+    let control = directory.path().join("senulun.db");
     prepare_database_path(&control).unwrap();
     let mut db = Connection::open(&control).unwrap();
     super::super::create_schema_v2(&mut db).unwrap();
@@ -307,11 +307,11 @@ fn backup_contains_a_restorable_pair_and_manifest() {
         .unwrap();
     let target = backup(&mut db, &control).unwrap();
     assert!(target.join("manifest.json").is_file());
-    let restored = Connection::open(target.join("pulse.db")).unwrap();
+    let restored = Connection::open(target.join("senulun.db")).unwrap();
     restored
         .execute(
             "ATTACH DATABASE ?1 AS metrics",
-            [target.join("pulse.metrics.db").to_str().unwrap()],
+            [target.join("senulun.metrics.db").to_str().unwrap()],
         )
         .unwrap();
     validate_pair(&restored).unwrap();
@@ -460,11 +460,11 @@ fn paired_backup_reserves_external_writers_consistently() {
     ready.recv_timeout(Duration::from_secs(5)).unwrap();
     let target = backup(&mut db, &control).unwrap();
     writer.join().unwrap();
-    let restored = Connection::open(target.join("pulse.db")).unwrap();
+    let restored = Connection::open(target.join("senulun.db")).unwrap();
     restored
         .execute(
             "ATTACH DATABASE ?1 AS metrics",
-            [target.join("pulse.metrics.db").to_str().unwrap()],
+            [target.join("senulun.metrics.db").to_str().unwrap()],
         )
         .unwrap();
     let values: (i64,i64) = restored.query_row(

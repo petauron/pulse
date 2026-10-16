@@ -17,7 +17,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  PULSE_BUILD_GIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
+  SENULUN_BUILD_GIT_HASH: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   web:
@@ -222,22 +222,22 @@ jobs:
           npm run build
       - name: Build and verify release binaries on Debian 12
         env:
-          PULSE_BUILD_TARGET: x86_64-unknown-linux-gnu
+          SENULUN_BUILD_TARGET: x86_64-unknown-linux-gnu
         run: sh scripts/build-linux-release.sh
       - name: Verify release image packaging
         run: |
           mkdir -p image/amd64/web
-          install -m 0755 target/release/pulse-service target/release/pulse-agent image/amd64/
+          install -m 0755 target/release/senulun-service target/release/senulun-agent image/amd64/
           install -m 0644 LICENSE NOTICE RUST_THIRD_PARTY_LICENSES.html RUST_STDLIB_LICENSES.html image/amd64/
           install -m 0644 web/THIRD_PARTY_NOTICES.md web/LICENSE.* web/dist/THIRD_PARTY_LICENSES.md image/amd64/web/
-          docker build --file Dockerfile.release --build-arg "PULSE_BUILD_GIT_HASH=$PULSE_BUILD_GIT_HASH" --tag pulse-ci image
+          docker build --file Dockerfile.release --build-arg "SENULUN_BUILD_GIT_HASH=$SENULUN_BUILD_GIT_HASH" --tag senulun-ci image
       - name: Verify runtime identity and health
         run: |
-          container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 pulse-ci)
+          container_id=$(docker run --detach --publish 127.0.0.1:18081:8080 senulun-ci)
           trap 'docker rm --force "$container_id" >/dev/null' EXIT
           test "$(docker inspect --format '{{.Config.User}}' "$container_id")" = "65532:65532"
-          docker exec "$container_id" pulse-service --version
-          docker exec "$container_id" pulse-agent --version
+          docker exec "$container_id" senulun-service --version
+          docker exec "$container_id" senulun-agent --version
           for _ in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18081/healthz >/dev/null; then
               exit 0

@@ -50,26 +50,26 @@ struct AgentConfig {
 impl AgentConfig {
     async fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let service_url = parse_service_url(
-            &env::var("PULSE_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
+            &env::var("SENULUN_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
         )?;
-        let interval_seconds = env::var("PULSE_INTERVAL_SECONDS")
+        let interval_seconds = env::var("SENULUN_INTERVAL_SECONDS")
             .map_or(Ok(DEFAULT_INTERVAL_SECONDS), |value| value.parse::<u64>())?;
         if !(MIN_INTERVAL_SECONDS..=MAX_INTERVAL_SECONDS).contains(&interval_seconds) {
             return Err(format!(
-                "PULSE_INTERVAL_SECONDS must be between {MIN_INTERVAL_SECONDS} and {MAX_INTERVAL_SECONDS}"
+                "SENULUN_INTERVAL_SECONDS must be between {MIN_INTERVAL_SECONDS} and {MAX_INTERVAL_SECONDS}"
             )
             .into());
         }
-        let credentials_path = match env::var_os("PULSE_CREDENTIALS_PATH") {
+        let credentials_path = match env::var_os("SENULUN_CREDENTIALS_PATH") {
             Some(path) => PathBuf::from(path),
             None => default_credentials_path()?,
         };
 
-        let enrollment_token = env::var("PULSE_ENROLLMENT_TOKEN").ok();
-        let enrollment_token_file = env::var_os("PULSE_ENROLLMENT_TOKEN_FILE").map(PathBuf::from);
+        let enrollment_token = env::var("SENULUN_ENROLLMENT_TOKEN").ok();
+        let enrollment_token_file = env::var_os("SENULUN_ENROLLMENT_TOKEN_FILE").map(PathBuf::from);
         if enrollment_token.is_some() && enrollment_token_file.is_some() {
             return Err(
-                "set only one of PULSE_ENROLLMENT_TOKEN and PULSE_ENROLLMENT_TOKEN_FILE".into(),
+                "set only one of SENULUN_ENROLLMENT_TOKEN and SENULUN_ENROLLMENT_TOKEN_FILE".into(),
             );
         }
 
@@ -78,29 +78,29 @@ impl AgentConfig {
             credentials_path,
             enrollment_token,
             enrollment_token_file,
-            node_name: env::var("PULSE_NODE_NAME")
+            node_name: env::var("SENULUN_NODE_NAME")
                 .ok()
                 .filter(|name| !name.trim().is_empty())
                 .or_else(System::host_name)
                 .unwrap_or_else(|| "unnamed-node".to_owned()),
-            region: env::var("PULSE_NODE_REGION").unwrap_or_default(),
+            region: env::var("SENULUN_NODE_REGION").unwrap_or_default(),
             geoip_provider: region::Provider::parse(
-                &env::var("PULSE_GEOIP_PROVIDER").unwrap_or_default(),
+                &env::var("SENULUN_GEOIP_PROVIDER").unwrap_or_default(),
             )?,
-            group: env::var("PULSE_NODE_GROUP").unwrap_or_default(),
-            virtualization: env::var("PULSE_NODE_VIRTUALIZATION").unwrap_or_default(),
+            group: env::var("SENULUN_NODE_GROUP").unwrap_or_default(),
+            virtualization: env::var("SENULUN_NODE_VIRTUALIZATION").unwrap_or_default(),
             interval: Duration::from_secs(interval_seconds),
-            disk_mount_points: parse_allowlist("PULSE_DISK_MOUNT_POINTS")?,
-            network_interfaces: parse_allowlist("PULSE_NETWORK_INTERFACES")?,
-            extended_metrics: parse_enabled("PULSE_EXTENDED_METRICS")?,
-            gpu_metrics: parse_enabled("PULSE_GPU_METRICS")?,
+            disk_mount_points: parse_allowlist("SENULUN_DISK_MOUNT_POINTS")?,
+            network_interfaces: parse_allowlist("SENULUN_NETWORK_INTERFACES")?,
+            extended_metrics: parse_enabled("SENULUN_EXTENDED_METRICS")?,
+            gpu_metrics: parse_enabled("SENULUN_GPU_METRICS")?,
         };
-        validate_local_text("PULSE_NODE_NAME", &config.node_name, 1, 128)?;
-        validate_local_text("PULSE_NODE_REGION", &config.region, 0, 16)?;
-        validate_local_text("PULSE_NODE_GROUP", &config.group, 0, 128)?;
-        validate_local_text("PULSE_NODE_VIRTUALIZATION", &config.virtualization, 0, 64)?;
+        validate_local_text("SENULUN_NODE_NAME", &config.node_name, 1, 128)?;
+        validate_local_text("SENULUN_NODE_REGION", &config.region, 0, 16)?;
+        validate_local_text("SENULUN_NODE_GROUP", &config.group, 0, 128)?;
+        validate_local_text("SENULUN_NODE_VIRTUALIZATION", &config.virtualization, 0, 64)?;
         if config.virtualization.trim().is_empty()
-            && parse_enabled("PULSE_AUTODETECT_VIRTUALIZATION")?
+            && parse_enabled("SENULUN_AUTODETECT_VIRTUALIZATION")?
         {
             config.virtualization = extended_metrics::detect_virtualization()
                 .await
@@ -255,7 +255,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .pool_max_idle_per_host(1)
-        .user_agent(concat!("pulse-agent/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("senulun-agent/", env!("CARGO_PKG_VERSION")))
         .build()?;
     let credentials = load_or_enroll(&client, &config).await?;
     let region = region::RegionResolver::start(&config.region, config.geoip_provider);
@@ -333,7 +333,7 @@ async fn load_or_enroll(
         (None, Some(path)) => read_secret_file(path, "enrollment token")?,
         (None, None) => {
             return Err(
-                "PULSE_ENROLLMENT_TOKEN or PULSE_ENROLLMENT_TOKEN_FILE is required for first enrollment"
+                "SENULUN_ENROLLMENT_TOKEN or SENULUN_ENROLLMENT_TOKEN_FILE is required for first enrollment"
                     .into(),
             );
         }
@@ -372,7 +372,7 @@ async fn load_or_enroll(
     persist_credentials(credential_file, &config.credentials_path, &credentials, false)
         .map_err(|error| {
             format!(
-                "enrollment succeeded for node {}; credential storage failed: {error}. Stop the Agent, rotate this node's token on the Service, then restore it with pulse-agent credentials import NODE_ID (token on stdin)",
+                "enrollment succeeded for node {}; credential storage failed: {error}. Stop the Agent, rotate this node's token on the Service, then restore it with senulun-agent credentials import NODE_ID (token on stdin)",
                 credentials.node_id
             )
         })?;
@@ -482,7 +482,7 @@ fn parse_service_url(value: &str) -> Result<Url, Box<dyn Error + Send + Sync>> {
         || url.fragment().is_some()
     {
         return Err(
-            "PULSE_SERVICE_URL must not include credentials, a query, or a fragment".into(),
+            "SENULUN_SERVICE_URL must not include credentials, a query, or a fragment".into(),
         );
     }
     if url.scheme() != "https" {
@@ -494,7 +494,7 @@ fn parse_service_url(value: &str) -> Result<Url, Box<dyn Error + Send + Sync>> {
                     .is_ok_and(|address| address.is_loopback())
         });
         if url.scheme() != "http" || !loopback {
-            return Err("remote PULSE_SERVICE_URL values must use HTTPS".into());
+            return Err("remote SENULUN_SERVICE_URL values must use HTTPS".into());
         }
     }
     if !url.path().ends_with('/') {
@@ -505,10 +505,10 @@ fn parse_service_url(value: &str) -> Result<Url, Box<dyn Error + Send + Sync>> {
 
 fn default_credentials_path() -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
     if let Some(state_home) = env::var_os("XDG_STATE_HOME") {
-        return Ok(PathBuf::from(state_home).join("pulse/agent-credentials.json"));
+        return Ok(PathBuf::from(state_home).join("senulun/agent-credentials.json"));
     }
-    let home = env::var_os("HOME").ok_or("HOME is not set; configure PULSE_CREDENTIALS_PATH")?;
-    Ok(PathBuf::from(home).join(".local/state/pulse/agent-credentials.json"))
+    let home = env::var_os("HOME").ok_or("HOME is not set; configure SENULUN_CREDENTIALS_PATH")?;
+    Ok(PathBuf::from(home).join(".local/state/senulun/agent-credentials.json"))
 }
 
 fn run_credentials_command() -> Result<bool, Box<dyn Error + Send + Sync>> {
@@ -517,7 +517,7 @@ fn run_credentials_command() -> Result<bool, Box<dyn Error + Send + Sync>> {
         return Ok(false);
     }
     if arguments.as_slice() == ["--version"] {
-        println!("pulse-agent {}", env!("CARGO_PKG_VERSION"));
+        println!("senulun-agent {}", env!("CARGO_PKG_VERSION"));
         return Ok(true);
     }
     if arguments.as_slice() == ["--help"] || arguments.as_slice() == ["-h"] {
@@ -532,7 +532,7 @@ fn run_credentials_command() -> Result<bool, Box<dyn Error + Send + Sync>> {
         _ => return Err(agent_usage().into()),
     };
 
-    let credentials_path = env::var_os("PULSE_CREDENTIALS_PATH")
+    let credentials_path = env::var_os("SENULUN_CREDENTIALS_PATH")
         .map(PathBuf::from)
         .map_or_else(default_credentials_path, Ok)?;
     let overwrite = import_node.is_none();
@@ -543,7 +543,7 @@ fn run_credentials_command() -> Result<bool, Box<dyn Error + Send + Sync>> {
         AgentCredentials {
             protocol_version: PROTOCOL_VERSION,
             service_url: parse_service_url(
-                &env::var("PULSE_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
+                &env::var("SENULUN_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
             )?
             .to_string(),
             node_id,
@@ -568,7 +568,7 @@ fn run_credentials_command() -> Result<bool, Box<dyn Error + Send + Sync>> {
 }
 
 fn agent_usage() -> &'static str {
-    "usage: pulse-agent [--version | credentials replace | credentials import NODE_ID]"
+    "usage: senulun-agent [--version | credentials replace | credentials import NODE_ID]"
 }
 
 fn prepare_credentials_file(path: &Path) -> Result<NamedTempFile, Box<dyn Error + Send + Sync>> {
@@ -776,7 +776,7 @@ mod tests {
         assert!(parse_service_url("http://[::1]:8080").is_ok());
         assert!(parse_service_url("http://[::2]:8080").is_err());
         assert!(parse_service_url("http://[2001:db8::1]:8080").is_err());
-        assert!(parse_service_url("https://pulse.example.com").is_ok());
+        assert!(parse_service_url("https://senulun.example.com").is_ok());
     }
 
     #[tokio::test]

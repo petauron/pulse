@@ -191,21 +191,21 @@ jobs:
       - name: Build embedded Web assets
         working-directory: web
         env:
-          PULSE_BUILD_GIT_HASH: ${{ needs.prepare.outputs.release_sha }}
+          SENULUN_BUILD_GIT_HASH: ${{ needs.prepare.outputs.release_sha }}
         run: |
           npm ci
           npm run build
       - name: Build and verify native release binaries on Debian 12
         env:
-          PULSE_BUILD_GIT_HASH: ${{ needs.prepare.outputs.release_sha }}
-          PULSE_BUILD_TARGET: ${{ matrix.target }}
+          SENULUN_BUILD_GIT_HASH: ${{ needs.prepare.outputs.release_sha }}
+          SENULUN_BUILD_TARGET: ${{ matrix.target }}
         run: sh scripts/build-linux-release.sh
       - name: Stage release archive
         env:
-          ARCHIVE_NAME: pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}
+          ARCHIVE_NAME: senulun-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}
         run: |
           install -d "release/$ARCHIVE_NAME/deploy" "release/$ARCHIVE_NAME/docs" "release/$ARCHIVE_NAME/web" "release/$ARCHIVE_NAME/compat/luminaplus"
-          install -m 0755 target/release/pulse-service target/release/pulse-agent "release/$ARCHIVE_NAME/"
+          install -m 0755 target/release/senulun-service target/release/senulun-agent "release/$ARCHIVE_NAME/"
           install -m 0755 deploy/*.sh "release/$ARCHIVE_NAME/deploy/"
           install -m 0644 deploy/*.service deploy/*.env.example "release/$ARCHIVE_NAME/deploy/"
           install -m 0644 deploy/docker-compose.yml "release/$ARCHIVE_NAME/deploy/"
@@ -221,9 +221,9 @@ jobs:
       - name: Generate SPDX SBOM
         uses: anchore/sbom-action@006b7ce8314066bdf1765b4500370d40fa6917a3 # v0.24.2
         with:
-          path: release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}
+          path: release/senulun-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}
           format: spdx-json
-          output-file: release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}.spdx.json
+          output-file: release/senulun-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.arch }}.spdx.json
           upload-artifact: false
           upload-release-assets: false
       - name: Stage native assets in the release draft
@@ -233,8 +233,8 @@ jobs:
         run: |
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           gh release upload "$RELEASE_TAG" \
-            "release/pulse-$RELEASE_TAG-linux-$ARCH.tar.gz" \
-            "release/pulse-$RELEASE_TAG-linux-$ARCH.spdx.json" --clobber
+            "release/senulun-$RELEASE_TAG-linux-$ARCH.tar.gz" \
+            "release/senulun-$RELEASE_TAG-linux-$ARCH.spdx.json" --clobber
 
   container:
     env:
@@ -273,11 +273,11 @@ jobs:
           mkdir -p release
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           gh release download "$RELEASE_TAG" --dir release \
-            --pattern "pulse-$RELEASE_TAG-linux-$ARCH.tar.gz"
+            --pattern "senulun-$RELEASE_TAG-linux-$ARCH.tar.gz"
       - name: Prepare image contents
         run: |
           mkdir -p image/${{ matrix.arch }}
-          tar -xzf release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.archive_arch }}.tar.gz --strip-components=1 -C image/${{ matrix.arch }}
+          tar -xzf release/senulun-${{ needs.prepare.outputs.release_tag }}-linux-${{ matrix.archive_arch }}.tar.gz --strip-components=1 -C image/${{ matrix.arch }}
       - name: Build image without publishing
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
@@ -287,7 +287,7 @@ jobs:
           push: false
           cache-from: type=gha,scope=release-container-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=release-container-${{ matrix.arch }}
-          build-args: PULSE_BUILD_GIT_HASH=${{ needs.prepare.outputs.release_sha }}
+          build-args: SENULUN_BUILD_GIT_HASH=${{ needs.prepare.outputs.release_sha }}
 
   publish:
     env:
@@ -316,20 +316,20 @@ jobs:
           mkdir -p release
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
           gh release download "$RELEASE_TAG" --dir release \
-            --pattern "pulse-$RELEASE_TAG-linux-*.tar.gz" \
-            --pattern "pulse-$RELEASE_TAG-linux-*.spdx.json"
+            --pattern "senulun-$RELEASE_TAG-linux-*.tar.gz" \
+            --pattern "senulun-$RELEASE_TAG-linux-*.spdx.json"
       - name: Prepare both native image contents
         run: |
           mkdir -p image/amd64 image/arm64
-          tar -xzf release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-x86_64.tar.gz --strip-components=1 -C image/amd64
-          tar -xzf release/pulse-${{ needs.prepare.outputs.release_tag }}-linux-aarch64.tar.gz --strip-components=1 -C image/arm64
+          tar -xzf release/senulun-${{ needs.prepare.outputs.release_tag }}-linux-x86_64.tar.gz --strip-components=1 -C image/amd64
+          tar -xzf release/senulun-${{ needs.prepare.outputs.release_tag }}-linux-aarch64.tar.gz --strip-components=1 -C image/arm64
       - name: Stage adapted theme package and license
         run: |
           install -m 0644 compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip release/
           install -m 0644 compat/luminaplus/LICENSE release/LICENSE.LuminaPlus
       - name: Create checksums
         working-directory: release
-        run: sha256sum pulse-*.tar.gz pulse-*.spdx.json LuminaPlus-v1.3.5-pulse.zip LICENSE.LuminaPlus > SHA256SUMS
+        run: sha256sum senulun-*.tar.gz senulun-*.spdx.json LuminaPlus-v1.3.5-pulse.zip LICENSE.LuminaPlus > SHA256SUMS
       - name: Bind provenance to this publication attempt
         id: provenance
         env:
@@ -380,7 +380,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ needs.prepare.outputs.release_tag }}
             ghcr.io/${{ github.repository }}:sha-${{ needs.prepare.outputs.release_sha }}
-          build-args: PULSE_BUILD_GIT_HASH=${{ needs.prepare.outputs.release_sha }}
+          build-args: SENULUN_BUILD_GIT_HASH=${{ needs.prepare.outputs.release_sha }}
       - name: Attest container provenance
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
