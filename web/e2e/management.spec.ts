@@ -66,6 +66,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
   let taskId = ''
   try {
     await page.getByLabel('名称', { exact: true }).fill(name)
+    await page.getByLabel('显示顺序', { exact: true }).fill('-1')
     await page.getByRole('combobox', { name: '类型', exact: true }).selectOption('http')
     await page.getByLabel('目标', { exact: true }).fill('http://127.0.0.1:18080/healthz')
     await page.getByLabel('间隔（秒）', { exact: true }).fill('5')
@@ -76,6 +77,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     expect((await saved).ok()).toBe(true)
     const state = await (await page.request.get('/api/admin/state')).json()
     taskId = state.probes.find((task: { name: string }) => task.name === name).id
+    expect(state.probes.find((task: { id: string }) => task.id === taskId).weight).toBe(-1)
     await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible()
     await expect.poll(async () => {
       const response = await page.request.get(`/api/v1/nodes/${id}/probes?hours=1`)

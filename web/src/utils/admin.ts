@@ -33,6 +33,7 @@ export interface ManagedNode {
 export interface ProbeTask {
   id: string
   name: string
+  weight: number
   kind: 'icmp' | 'tcp' | 'http'
   target: string
   interval_seconds: number

@@ -259,6 +259,7 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "local test".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "127.0.0.1:8080".into(),
         interval_seconds: 5,
@@ -357,6 +358,7 @@ fn probe_history_statistics_cover_samples_outside_chart_limit() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "percentiles".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "127.0.0.1:8080".into(),
         interval_seconds: 5,
@@ -438,6 +440,7 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "carrier".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "private-probe.example:80".into(),
         interval_seconds: 30,
@@ -494,12 +497,81 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
 }
 
 #[test]
+fn probe_tasks_keep_creation_order_across_admin_public_and_dashboard_views() {
+    let (_dir, storage, node) = fixture();
+    let mut first = ProbeDefinition {
+        id: String::new(),
+        name: "z-first".into(),
+        weight: 0,
+        kind: ProbeKind::Tcp,
+        target: "127.0.0.1:8080".into(),
+        interval_seconds: 60,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut first).unwrap();
+    let mut legacy = serde_json::to_value(&first).unwrap();
+    legacy.as_object_mut().unwrap().remove("weight");
+    let restored: ProbeDefinition = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.weight, 0);
+    let mut second = ProbeDefinition {
+        id: String::new(),
+        name: "a-second".into(),
+        ..first.clone()
+    };
+    storage.save_probe(&mut second).unwrap();
+
+    let admin = storage.admin_state().unwrap();
+    assert_eq!(admin["probes"][0]["id"], first.id);
+    assert_eq!(admin["probes"][1]["id"], second.id);
+    let public = storage.public_ping_tasks().unwrap();
+    assert_eq!(public[0]["id"], first.id);
+    assert_eq!(public[1]["id"], second.id);
+
+    let db = storage.connection().unwrap();
+    let tasks = crate::control::dashboard_probe_tasks(&db).unwrap();
+    let preview = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &tasks,
+        unix_time_ms().unwrap(),
+        &crate::control::DashboardProbeConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(preview[0]["id"], first.id);
+    assert_eq!(preview[1]["id"], second.id);
+    drop(db);
+
+    second.weight = 100_001;
+    assert!(storage.save_probe(&mut second).is_err());
+    second.weight = -1;
+    storage.save_probe(&mut second).unwrap();
+    let admin = storage.admin_state().unwrap();
+    assert_eq!(admin["probes"][0]["id"], second.id);
+    let public = storage.public_ping_tasks().unwrap();
+    assert_eq!(public[0]["id"], second.id);
+    let db = storage.connection().unwrap();
+    let tasks = crate::control::dashboard_probe_tasks(&db).unwrap();
+    let preview = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &tasks,
+        unix_time_ms().unwrap(),
+        &crate::control::DashboardProbeConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(preview[0]["id"], second.id);
+}
+
+#[test]
 fn dashboard_probe_preview_honors_history_task_selection_and_row_limit() {
     let (_dir, storage, node) = fixture();
     let now = unix_time_ms().unwrap();
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "carrier".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "private-probe.example:80".into(),
         interval_seconds: 30,
@@ -614,6 +686,7 @@ fn configuration_errors_cannot_create_arbitrary_probe_commands() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "invalid".into(),
+        weight: 0,
         kind: ProbeKind::Icmp,
         target: "-c 1 example.test".into(),
         interval_seconds: 5,
@@ -659,6 +732,7 @@ fn deleting_the_last_assigned_node_never_turns_a_task_into_global_monitoring() {
     let mut probe = ProbeDefinition {
         id: String::new(),
         name: "scoped".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "127.0.0.1:8080".into(),
         interval_seconds: 5,

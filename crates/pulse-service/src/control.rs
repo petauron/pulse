@@ -164,6 +164,8 @@ pub(crate) struct ProbeDefinition {
     #[serde(default)]
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub weight: i64,
     pub kind: ProbeKind,
     pub target: String,
     pub interval_seconds: u64,
@@ -260,6 +262,21 @@ fn list<T: DeserializeOwned>(
         row.get::<_, String>(0)
     })?;
     rows.map(|row| decode(&row?)).collect()
+}
+
+fn list_probe_tasks(db: &Connection) -> Result<Vec<ProbeDefinition>, StorageError> {
+    let mut statement = db.prepare("SELECT rowid,data FROM probe_tasks ORDER BY rowid LIMIT ?1")?;
+    let rows = statement.query_map([i64::try_from(MAX_CONFIG_ROWS).unwrap_or(128)], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut tasks = rows
+        .map(|row| {
+            let (rowid, data) = row?;
+            Ok((rowid, decode::<ProbeDefinition>(&data)?))
+        })
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    tasks.sort_by_key(|(rowid, task)| (task.weight, *rowid));
+    Ok(tasks.into_iter().map(|(_, task)| task).collect())
 }
 
 fn save<T: Serialize>(
@@ -390,7 +407,7 @@ impl Storage {
         let mut failure_query=db.prepare("SELECT happened_at_ms,subject FROM audit_events WHERE action='notification.failed' ORDER BY id DESC LIMIT 100")?;
         let failures=failure_query.query_map([],|r|Ok(json!({"happened_at_unix_ms":r.get::<_,i64>(0)?,"subject":r.get::<_,String>(1)?})))?.collect::<Result<Vec<_>,_>>()?;
         Ok(json!({"settings":settings,"nodes":nodes,
-            "probes":list::<ProbeDefinition>(&db,"probe_tasks",MAX_CONFIG_ROWS)?,
+            "probes":list_probe_tasks(&db)?,
             "channels":list::<Channel>(&db,"alert_channels",MAX_CHANNELS)?,
             "alert_rules":list::<AlertRule>(&db,"alert_rules",MAX_CONFIG_ROWS)?,
             "incidents":incidents(&db)?,"notification_failures":failures}))
@@ -508,6 +525,7 @@ impl Storage {
         if Uuid::parse_str(&task.id).is_err()
             || task.name.trim().is_empty()
             || !text(&task.name, 128)
+            || !(-100_000..=100_000).contains(&task.weight)
             || !text(&task.target, 2048)
             || !(5..=3600).contains(&task.interval_seconds)
             || !(1..=30).contains(&task.timeout_seconds)
@@ -518,7 +536,7 @@ impl Storage {
         validate_target(task.kind, &task.target)?;
         let db = self.connection()?;
         verify_nodes(&db, &task.node_ids)?;
-        let tasks = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?;
+        let tasks = list_probe_tasks(&db)?;
         // Empty node selection applies to every node; never silently truncate assignments.
         let mut nodes = HashSet::new();
         for t in tasks.iter().chain(std::iter::once(&*task)) {
@@ -647,7 +665,7 @@ impl Storage {
         let settings = self.settings()?;
         let db = self.connection()?;
         let id = authenticated_node(&db, token)?;
-        let probes = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let probes = list_probe_tasks(&db)?
             .into_iter()
             .filter(|t| t.enabled && (t.node_ids.is_empty() || t.node_ids.contains(&id)))
             .map(|t| ProbeTask {
@@ -680,7 +698,7 @@ impl Storage {
         let mut db = self.connection()?;
         let tx = db.transaction()?;
         let node = authenticated_node(&tx, token)?;
-        let tasks = list::<ProbeDefinition>(&tx, "probe_tasks", MAX_CONFIG_ROWS)?;
+        let tasks = list_probe_tasks(&tx)?;
         let pruned = self.prune_before_ingest(&tx, now, retention_days)?;
         for result in &batch.results {
             let task = tasks
@@ -744,7 +762,7 @@ impl Storage {
     pub(crate) fn public_ping_tasks(&self) -> Result<Vec<Value>, StorageError> {
         let db = self.connection()?;
         let mut tasks = Vec::new();
-        for task in list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)? {
+        for task in list_probe_tasks(&db)? {
             if !task.enabled {
                 continue;
             }
@@ -778,7 +796,7 @@ impl Storage {
         if !visible(&db, node)? {
             return Err(StorageError::NotFound);
         }
-        let tasks: Vec<_> = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let tasks: Vec<_> = list_probe_tasks(&db)?
             .into_iter()
             .filter(|t| {
                 t.enabled
@@ -886,7 +904,7 @@ impl Storage {
         now: u64,
     ) -> Result<Vec<Value>, StorageError> {
         let db = self.connection()?;
-        let task = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let task = list_probe_tasks(&db)?
             .into_iter()
             .find(|task| task.id == task_id && task.enabled)
             .ok_or(StorageError::NotFound)?;
@@ -999,7 +1017,7 @@ pub(crate) fn remove_node_assignments(
     tx: &Transaction<'_>,
     node: &str,
 ) -> Result<(), StorageError> {
-    for mut task in list::<ProbeDefinition>(tx, "probe_tasks", MAX_CONFIG_ROWS)? {
+    for mut task in list_probe_tasks(tx)? {
         if task.node_ids.iter().any(|id| id == node) {
             task.node_ids.retain(|id| id != node);
             // Empty means global; deleting the last explicit target must never widen scope.
@@ -1233,9 +1251,7 @@ pub(crate) fn dashboard_probes(
 }
 
 pub(crate) fn dashboard_probe_tasks(db: &Connection) -> Result<Vec<ProbeDefinition>, StorageError> {
-    let mut tasks = list::<ProbeDefinition>(db, "probe_tasks", MAX_CONFIG_ROWS)?;
-    tasks.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
-    Ok(tasks)
+    list_probe_tasks(db)
 }
 
 pub(crate) fn decorate_client(
