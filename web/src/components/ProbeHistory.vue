@@ -214,7 +214,9 @@ function taskFailureData(id: string): Array<[number, number | null]> {
 }
 
 const failureLabel = (kind: ProbeHistory['tasks'][number]['kind']) => kind === 'icmp' ? '丢包率' : '失败率'
-const failureMetricLabel = computed(() => tasks.value.every(task => task.kind === 'icmp') ? '丢包率' : tasks.value.every(task => task.kind !== 'icmp') ? '失败率' : '丢包 / 失败率')
+const mixedFailureKinds = computed(() => tasks.value.some(task => task.kind === 'icmp') && tasks.value.some(task => task.kind !== 'icmp'))
+const failureMetricLabel = computed(() => mixedFailureKinds.value ? '丢包率 / 失败率' : tasks.value[0]?.kind === 'icmp' ? '丢包率' : '失败率')
+const summaryTitle = computed(() => `延迟与${failureMetricLabel.value}汇总`)
 const showZoom = computed(() => app.publicSettings?.theme_settings?.pingChartShowZoom !== false)
 const chartThresholds = computed(() => {
   const settings = app.publicSettings?.theme_settings
@@ -599,12 +601,12 @@ function exportPng(): void {
         </p>
         <details class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
-            延迟与失败率汇总
+            {{ summaryTitle }}
           </summary>
           <div class="overflow-x-auto">
             <table class="w-full text-left text-sm">
               <caption class="sr-only">
-                所选时间范围的延迟与失败率汇总
+                所选时间范围的{{ summaryTitle }}
               </caption><thead>
                 <tr class="border-b">
                   <th class="p-2">
@@ -622,7 +624,7 @@ function exportPng(): void {
                   </th><th class="p-2">
                     波动率
                   </th><th class="p-2">
-                    {{ props.kind === 'icmp' ? '丢包率' : '失败率' }}
+                    {{ failureMetricLabel }}
                   </th>
                 </tr>
               </thead><tbody>
@@ -641,7 +643,8 @@ function exportPng(): void {
                     {{ latency(summaryByTask.get(task.id)?.p50_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.p95_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.p99_latency_ms) }}
                   </td><td class="p-2">
                     {{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}
-                  </td><td class="p-2">
+                  </td><td class="whitespace-nowrap p-2">
+                    <span v-if="mixedFailureKinds" class="text-muted-foreground">{{ failureLabel(task.kind) }} </span>
                     {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
                   </td>
                 </tr>
