@@ -189,7 +189,7 @@ test('probe analysis switches tasks without changing the selected chart series',
   await expect(taskColors.nth(0)).toHaveCSS('background-color', 'rgb(18, 52, 86)')
   await expect(taskColors.nth(1)).toHaveCSS('background-color', 'rgb(78, 205, 196)')
   await expect(analysis.getByRole('button', { name: '分析 e2e-probe', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  await expect(analysis).toContainText('27ms')
+  await expect(analysis).toContainText('27 ms')
   await expect(analysis).toContainText('P99')
   await expect(analysis).toContainText('0.45')
   const series = analysis.getByRole('button', { name: '隐藏 e2e-probe 曲线' })
