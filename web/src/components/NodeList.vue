@@ -228,7 +228,7 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                   >
                     <div class="truncate">
                       <template v-for="(tag, tagIndex) in getPriceTags(node, appStore.lang, 'list')" :key="tagIndex">
-                        <span v-if="node.online || tagIndex > 0" class="mx-1">·</span>
+                        <span class="mx-1">·</span>
                         <span :class="tag.highlight ? getRemainingTimeTagClass(node) : ''">{{ tag.text }}</span>
                       </template>
                     </div>
