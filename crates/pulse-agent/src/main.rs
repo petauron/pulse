@@ -709,8 +709,18 @@ mod tests {
     #[test]
     fn network_interface_defaults_match_komari_without_blocking_an_explicit_allowlist() {
         for name in [
-            "br0", "cni0", "docker0", "podman0", "flannel.1", "lo", "veth123", "virbr0",
-            "vmbr0", "tap0", "fwbr0", "fwpr0",
+            "br0",
+            "cni0",
+            "docker0",
+            "podman0",
+            "flannel.1",
+            "lo",
+            "veth123",
+            "virbr0",
+            "vmbr0",
+            "tap0",
+            "fwbr0",
+            "fwpr0",
         ] {
             assert!(!include_network_interface(name, None), "{name}");
         }
