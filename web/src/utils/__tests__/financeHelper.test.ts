@@ -1,15 +1,31 @@
 import { describe, expect, it } from 'vitest'
-import { REFERENCE_EXCHANGE_RATES, summarizeNodeValue } from '../financeHelper'
+import { normalizeCurrency, REFERENCE_EXCHANGE_RATES, summarizeNodeValue } from '../financeHelper'
 
 const now = Date.parse('2026-10-01T00:00:00Z')
 const paid = { price: 30, billing_cycle: 30, currency: 'CNY', expired_at: '2026-10-16T00:00:00Z', tags: '' }
 
 describe('node value summary', () => {
+  it('resolves unambiguous currency symbols without guessing ambiguous ones', () => {
+    expect(normalizeCurrency('RM')).toBe('MYR')
+    expect(normalizeCurrency('R$')).toBe('BRL')
+    expect(normalizeCurrency('₩')).toBe('KRW')
+    expect(normalizeCurrency('$')).toBe('USD')
+    expect(normalizeCurrency('¥')).toBe('CNY')
+  })
+
   it('converts mixed currencies before aggregating unused days and monthly cost', () => {
     const summary = summarizeNodeValue([paid, { ...paid, price: 30 * REFERENCE_EXCHANGE_RATES.USD, currency: 'USD' }], now)
     expect(summary.total).toBeCloseTo(60)
     expect(summary.monthly).toBeCloseTo(60)
     expect(summary.remaining).toBeCloseTo(30)
+  })
+
+  it('includes nodes priced with a unique currency symbol', () => {
+    const summary = summarizeNodeValue([{ ...paid, price: 30 * REFERENCE_EXCHANGE_RATES.MYR, currency: 'RM' }], now)
+    expect(summary.total).toBeCloseTo(30)
+    expect(summary.monthly).toBeCloseTo(30)
+    expect(summary.remaining).toBeCloseTo(15)
+    expect(summary.excluded).toBe(0)
   })
 
   it('counts expired plans as zero remaining and excludes free-tagged plans', () => {
