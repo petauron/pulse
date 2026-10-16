@@ -59,6 +59,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   await expect(page.getByText('e2e-node', { exact: true })).toBeVisible()
   await expect(page.getByText('在线', { exact: true })).toBeVisible()
   await expect(page.getByText('CPU', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('tab', { name: '4 小时', exact: true })).toBeVisible()
   await expect(page.getByText(/查看最近 .* 个采样点的数据表/)).toBeVisible({ timeout: 20_000 })
 
   const accessibility = await new AxeBuilder({ page }).analyze()
@@ -103,6 +104,11 @@ test('network quality offers the full retained range with an exact custom label'
   await expect(ranges.getByRole('button')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '7 天', '30 天', '60 天', '90 天', '100 天'])
   await ranges.getByRole('button', { name: '100 天' }).click()
   await expect(ranges.getByRole('button', { name: '100 天' })).toHaveAttribute('aria-pressed', 'true')
+
+  await page.goto('/')
+  await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
+  await expect(page.getByRole('tab', { name: '4 小时', exact: true })).toBeVisible()
+  await expect(page.getByRole('tab', { name: '100 天', exact: true })).toBeVisible()
 })
 
 test('probe history honors Emerald chart defaults and retained range', async ({ page }) => {

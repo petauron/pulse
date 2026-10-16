@@ -104,15 +104,12 @@ const baseTooltipConfig = computed(() => ({
 const chartMargin = { top: 30, right: 24, bottom: 32, left: 56 }
 const chartMarginWithLegend = { top: 30, right: 24, bottom: 52, left: 56 }
 
-// Service 完整覆盖所选时间窗并有界降采样；UI 最多展示 90 天以控制浏览器内存。
+// 与 Emerald 保持相同的常用时间档位；最长历史按 Service 实际保留期展示。
 const presetViews = [
-  { label: '1 小时', hours: 1 },
-  { label: '6 小时', hours: 6 },
+  { label: '4 小时', hours: 4 },
   { label: '1 天', hours: 24 },
   { label: '7 天', hours: 168 },
   { label: '30 天', hours: 720 },
-  { label: '60 天', hours: 1440 },
-  { label: '90 天', hours: 2160 },
 ]
 
 // 可用视图列表
@@ -124,6 +121,13 @@ const availableViews = computed(() => {
     if (maxHours >= v.hours) {
       views.push({ label: v.label, hours: v.hours })
     }
+  }
+
+  if (maxHours > 0 && !presetViews.some(view => view.hours === maxHours)) {
+    const label = maxHours % 24 === 0
+      ? `${maxHours / 24} 天`
+      : `${maxHours} 小时`
+    views.push({ label, hours: maxHours })
   }
 
   return views
