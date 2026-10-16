@@ -791,6 +791,7 @@ impl Storage {
                 "name": task.name,
                 "type": task.kind,
                 "interval": task.interval_seconds,
+                "weight": task.weight,
                 "clients": clients,
                 "default_on": task.node_ids.is_empty()
             }));

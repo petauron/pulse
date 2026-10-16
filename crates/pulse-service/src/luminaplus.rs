@@ -32,7 +32,7 @@ fn compat_task(raw: &Value, admin: bool) -> Option<Value> {
         "clients": raw.get("clients").or_else(|| raw.get("node_ids")).cloned().unwrap_or(json!([])),
         "default_on": raw.get("default_on").cloned().unwrap_or(json!(false)),
         "loss": 0,
-        "weight": 0,
+        "weight": raw.get("weight").cloned().unwrap_or(json!(0)),
         "target": ""
     });
     if admin {
@@ -234,10 +234,11 @@ mod tests {
 
     #[test]
     fn task_mapping_matches_luminaplus_schema() {
-        let source = json!({"id":"5df0b95a-1d1b-4911-9b9e-a1d274adab41","name":"Test","type":"icmp","interval":60});
+        let source = json!({"id":"5df0b95a-1d1b-4911-9b9e-a1d274adab41","name":"Test","type":"icmp","interval":60,"weight":-3});
         let mapped = compat_tasks(&[source], false).unwrap();
         assert!(mapped[0]["id"].is_number());
         assert_eq!(mapped[0]["name"], "Test");
         assert_eq!(mapped[0]["clients"], json!([]));
+        assert_eq!(mapped[0]["weight"], -3);
     }
 }

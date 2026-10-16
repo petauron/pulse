@@ -551,6 +551,7 @@ fn probe_tasks_keep_creation_order_across_admin_public_and_dashboard_views() {
     assert_eq!(admin["probes"][0]["id"], second.id);
     let public = storage.public_ping_tasks().unwrap();
     assert_eq!(public[0]["id"], second.id);
+    assert_eq!(public[0]["weight"], -1);
     let db = storage.connection().unwrap();
     let tasks = crate::control::dashboard_probe_tasks(&db).unwrap();
     let preview = crate::control::dashboard_probes(
