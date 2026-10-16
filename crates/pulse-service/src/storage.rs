@@ -1495,7 +1495,8 @@ mod tests {
 
     fn enrolled_storage() -> (TempDir, Storage, EnrollmentResponse) {
         let directory = tempdir().unwrap();
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
         let enrollment = storage.create_enrollment(600, 10_000).unwrap();
         let credentials = storage
             .enroll(&request(), &hash_token(&enrollment.token), 10, 11_000)
@@ -1744,7 +1745,8 @@ mod tests {
     #[test]
     fn enrollment_inspection_retains_exact_association_without_credentials() {
         let directory = tempdir().unwrap();
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
         let first = storage.create_enrollment(60, 1_000).unwrap();
         let second = storage.create_enrollment(60, 1_000).unwrap();
         let original = storage
@@ -1830,7 +1832,8 @@ mod tests {
     #[test]
     fn enrollment_inspection_does_not_authorize_unused_or_missing_records() {
         let directory = tempdir().unwrap();
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
         let unused = storage.create_enrollment(60, 1_000).unwrap();
         let record = storage.inspect_enrollment(&unused.id).unwrap();
         assert!(record.node_id.is_none());
@@ -1854,7 +1857,8 @@ mod tests {
     #[test]
     fn enrollment_is_expiring_single_use_and_revocable() {
         let directory = tempdir().unwrap();
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
 
         let expired = storage.create_enrollment(60, 1_000).unwrap();
         assert!(matches!(

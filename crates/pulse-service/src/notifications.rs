@@ -682,7 +682,8 @@ mod tests {
 
     fn configured_storage() -> (tempfile::TempDir, Storage, String) {
         let directory = tempfile::tempdir().unwrap();
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
         let secret = storage.create_enrollment(600, 1000).unwrap();
         let enrolled = storage
             .enroll(
@@ -766,7 +767,8 @@ mod tests {
             .delivery_result(&delivery.id, false, 110_000)
             .unwrap();
         drop(storage);
-        let storage = Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
+        let storage =
+            Storage::open(&directory.path().join("senulun.db"), 64 * 1024 * 1024).unwrap();
         assert!(storage.pending_deliveries(114_999).unwrap().is_empty());
         for now in [115_000, 125_000, 145_000, 185_000] {
             let retry = storage.pending_deliveries(now).unwrap().pop().unwrap();

@@ -10,8 +10,9 @@ const DEFAULT_MAX_DATABASE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing_subscriber::fmt().compact().init();
-    let database_path =
-        PathBuf::from(env::var("SENULUN_DATABASE_PATH").unwrap_or_else(|_| "senulun.db".to_owned()));
+    let database_path = PathBuf::from(
+        env::var("SENULUN_DATABASE_PATH").unwrap_or_else(|_| "senulun.db".to_owned()),
+    );
     let max_database_bytes = parse_env("SENULUN_MAX_DATABASE_BYTES", DEFAULT_MAX_DATABASE_BYTES)?;
     let arguments: Vec<String> = env::args().skip(1).collect();
     if arguments.as_slice() == ["--version"] {
@@ -42,8 +43,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let mut config = ServiceConfig::with_database(database_path);
     config.retention_days = parse_env("SENULUN_RETENTION_DAYS", config.retention_days)?;
-    config.offline_after_seconds =
-        parse_env("SENULUN_OFFLINE_AFTER_SECONDS", config.offline_after_seconds)?;
+    config.offline_after_seconds = parse_env(
+        "SENULUN_OFFLINE_AFTER_SECONDS",
+        config.offline_after_seconds,
+    )?;
     config.max_nodes = parse_env("SENULUN_MAX_NODES", config.max_nodes)?;
     config.max_database_bytes = max_database_bytes;
     config.auth = pulse_service::AuthConfig::from_env()?;
