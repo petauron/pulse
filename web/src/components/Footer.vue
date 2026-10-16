@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { VersionInfo } from '@/utils/api'
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { DataTooltip } from '@/components/ui/data-tooltip'
+import VisitorInfoCard from '@/components/VisitorInfoCard.vue'
 import { useAppStore } from '@/stores/app'
 import { getSharedApi } from '@/utils/api'
 
 const appStore = useAppStore()
+const route = useRoute()
 const api = getSharedApi()
 
 const buildVersion = __BUILD_VERSION__
@@ -27,9 +30,12 @@ const formattedServerVersion = computed(() => serverVersion.value?.version ?? nu
 const showIcp = computed(() => appStore.icpEnabled && appStore.icpNumber)
 const showPolice = computed(() => appStore.policeEnabled && appStore.policeNumber)
 const showFiling = computed(() => showIcp.value || showPolice.value)
+const showVisitorInfo = computed(() => appStore.visitorInfoCardEnabled
+  && (route.name === 'home' || route.name === 'instance-detail' || route.name === 'network-quality'))
 </script>
 
 <template>
+  <VisitorInfoCard v-if="showVisitorInfo" />
   <footer class="w-full sm:flex-row sm:gap-4 max-w-[1280px] mx-auto p-4">
     <div class="flex flex-row items-center justify-between  text-xs text-muted-foreground">
       <div class="flex gap-1 items-center">

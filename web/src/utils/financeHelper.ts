@@ -55,11 +55,41 @@ const EXPLICIT_CURRENCY_ALIASES: Record<string, CurrencyCode> = {
   'JP¥': 'JPY',
 }
 
+const symbolCounts = Object.values(CURRENCY_SYMBOL_CONFIG).reduce<Record<string, number>>((counts, symbol) => {
+  const key = symbol.toUpperCase()
+  counts[key] = (counts[key] ?? 0) + 1
+  return counts
+}, {})
+
+const UNIQUE_CURRENCY_SYMBOL_ALIASES = Object.fromEntries(
+  Object.entries(CURRENCY_SYMBOL_CONFIG)
+    .filter(([, symbol]) => symbolCounts[symbol.toUpperCase()] === 1)
+    .map(([code, symbol]) => [symbol.toUpperCase(), code as CurrencyCode]),
+) as Record<string, CurrencyCode>
+
 export function normalizeCurrency(currency: string | null | undefined): CurrencyCode {
   const value = String(currency || 'CNY').trim().toUpperCase()
   if (value in CURRENCY_SYMBOL_CONFIG)
     return value as CurrencyCode
-  return EXPLICIT_CURRENCY_ALIASES[value] || 'CNY'
+  return EXPLICIT_CURRENCY_ALIASES[value] || UNIQUE_CURRENCY_SYMBOL_ALIASES[value] || 'CNY'
+}
+
+const financeCurrencyStorageKey = 'fin_currency'
+
+export function getStoredFinanceCurrency(): CurrencyCode {
+  try {
+    return normalizeCurrency(localStorage.getItem(financeCurrencyStorageKey))
+  }
+  catch {
+    return 'CNY'
+  }
+}
+
+export function setStoredFinanceCurrency(currency: CurrencyCode): void {
+  try {
+    localStorage.setItem(financeCurrencyStorageKey, currency)
+  }
+  catch { /* The selection still works when browser storage is unavailable. */ }
 }
 
 // Emerald-Cazi bundled reference rates: units per CNY, not live market quotes.
@@ -148,7 +178,7 @@ export function summarizeNodeValue(nodes: PricedNode[], now = Date.now(), rates:
     if (!Number.isFinite(node.price) || node.price <= 0 || node.tags?.includes('白嫖中'))
       continue
     const rawCurrency = String(node.currency || 'CNY').trim().toUpperCase()
-    if (!(rawCurrency in CURRENCY_SYMBOLS) && !(rawCurrency in EXPLICIT_CURRENCY_ALIASES)) {
+    if (!(rawCurrency in CURRENCY_SYMBOLS) && !(rawCurrency in EXPLICIT_CURRENCY_ALIASES) && !(rawCurrency in UNIQUE_CURRENCY_SYMBOL_ALIASES)) {
       excluded++
       continue
     }

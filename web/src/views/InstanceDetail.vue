@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
+import { useNow } from '@vueuse/core'
 import { computed, defineAsyncComponent, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Badge } from '@/components/ui/badge'
@@ -7,12 +8,15 @@ import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
 import { Empty } from '@/components/ui/empty'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
+import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useNodesStore } from '@/stores/nodes'
+import { CURRENCY_SYMBOLS, getStoredFinanceCurrency, normalizeCurrency } from '@/utils/financeHelper'
 import { formatDateTime } from '@/utils/helper'
 import { getTrafficUsed } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
+import { getBillingCycleText, getExpireText, getExpireTextClass } from '@/utils/tagHelper'
 
 const LoadChart = defineAsyncComponent(() => import('@/components/LoadChart.vue'))
 const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistory.vue'))
@@ -23,6 +27,9 @@ const router = useRouter()
 const { pickSurfaceClass } = useBackgroundSurface()
 const nodesStore = useNodesStore()
 const { formatBytes, formatBytesPerSecond, formatUptime } = useNodeFormatters()
+const { rates } = useExchangeRates()
+const now = useNow({ interval: 60000 })
+const selectedCurrency = getStoredFinanceCurrency()
 
 onMounted(() => {
   window.scrollTo({ top: 0, behavior: 'instant' })
@@ -44,50 +51,101 @@ interface MetricCard {
   valueClass?: string
 }
 
+const EXPIRES_IN_DAYS = /^(\d+)\s+天$/
+const LINUX_DISTRO = /^Linux \((.+)\)$/
+
 const metricCards = computed<MetricCard[]>(() => {
   if (!data.value)
     return []
 
-  const memoryPercent = data.value.mem_total > 0 ? data.value.ram / data.value.mem_total * 100 : 0
-  const diskPercent = data.value.disk_total > 0 ? data.value.disk / data.value.disk_total * 100 : 0
+  const node = data.value
+  const currency = normalizeCurrency(node.currency)
+  const rate = rates.value[currency] ?? 0
+  const hasRate = Number.isFinite(rate) && rate > 0
+  const priceCNY = hasRate && Number.isFinite(node.price) && node.price > 0 ? node.price / rate : 0
+  const displayCurrency = rates.value[selectedCurrency] ? selectedCurrency : 'CNY'
+  const displayRate = rates.value[displayCurrency] ?? 1
+  const formatMoney = (valueCNY: number) => {
+    const amount = valueCNY * displayRate
+    const compact = Math.abs(amount) >= 100000
+    const value = new Intl.NumberFormat('zh-CN', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: compact ? 0 : 2,
+      notation: compact ? 'compact' : 'standard',
+    }).format(amount)
+    return `${CURRENCY_SYMBOLS[displayCurrency]}${value}`
+  }
+  const hasPrice = Number.isFinite(node.price) && node.price > 0
+  const hasCycle = Number.isFinite(node.billing_cycle) && node.billing_cycle > 0
+  const expiry = Date.parse(node.expired_at)
+  const hasExpiry = Number.isFinite(expiry)
+  const remainingDays = hasExpiry ? (expiry - now.value.getTime()) / 86400000 : 0
+  const remainingValue = remainingDays > 36500
+    ? priceCNY
+    : hasExpiry && hasCycle && remainingDays > 0
+      ? priceCNY * remainingDays / node.billing_cycle
+      : 0
+  const expiryText = hasExpiry ? getExpireText(node.expired_at) : '-'
+  const expiryParts = EXPIRES_IN_DAYS.exec(expiryText)
 
   return [
     {
-      label: 'CPU 使用率',
-      value: data.value.cpu.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:cpu',
+      label: '节点价格',
+      value: hasPrice ? `${formatMoney(priceCNY)} ${displayCurrency}` : formatMoney(0),
+      unit: hasPrice ? ` / ${getBillingCycleText(node.billing_cycle)}` : displayCurrency,
+      icon: 'tabler:cash',
     },
     {
-      label: '内存使用率',
-      value: memoryPercent.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:memory',
+      label: '月均支出',
+      value: hasCycle ? `${formatMoney(priceCNY / node.billing_cycle * 30)} ${displayCurrency}` : '不适用',
+      unit: hasCycle ? ' / 月' : undefined,
+      icon: 'tabler:receipt-2',
     },
     {
-      label: '硬盘使用率',
-      value: diskPercent.toFixed(1),
-      unit: '%',
-      icon: 'icon-park-outline:hard-disk',
+      label: '剩余时间',
+      value: expiryParts?.[1] ?? expiryText,
+      unit: expiryParts ? '天' : undefined,
+      icon: 'tabler:calendar-dollar',
+      valueClass: hasExpiry ? getExpireTextClass(node.expired_at) : undefined,
     },
     {
-      label: '1 分钟负载',
-      value: data.value.load.toFixed(2),
-      icon: 'icon-park-outline:dashboard-one',
+      label: '剩余价值',
+      value: formatMoney(remainingValue),
+      unit: displayCurrency,
+      icon: 'tabler:coins',
     },
   ]
 })
 
+function displayArchitecture(arch: string | undefined): string {
+  if (!arch)
+    return '-'
+  return arch === 'x86_64' ? 'amd64' : arch
+}
+
+function displayKernelVersion(kernel: string | undefined): string {
+  if (!kernel)
+    return '-'
+  return kernel.startsWith('Linux ') ? kernel.slice(6) : kernel
+}
+
+function displayOperatingSystem(os: string | undefined): string {
+  if (!os)
+    return '-'
+  const linuxDistro = LINUX_DISTRO.exec(os)
+  return linuxDistro?.[1] ?? os
+}
+
 const hardwareInfo = computed<InfoItem[]>(() => [
   { label: 'CPU', value: data.value ? `${data.value.cpu_name} (x${data.value.cpu_cores})` : '-', icon: 'icon-park-outline:cpu' },
-  { label: '架构', value: data.value?.arch ?? '-', icon: 'icon-park-outline:application-two' },
-  { label: '虚拟化', value: data.value?.virtualization ?? '-', icon: 'icon-park-outline:server' },
+  { label: '架构', value: displayArchitecture(data.value?.arch), icon: 'icon-park-outline:application-two' },
+  { label: '虚拟化', value: data.value?.virtualization || '未知', icon: 'icon-park-outline:server' },
   { label: 'GPU', value: data.value?.gpu_name || '-', icon: 'icon-park-outline:video-one' },
 ])
 
 const systemInfo = computed<InfoItem[]>(() => [
-  { label: '操作系统', value: data.value?.os ?? '-', icon: 'icon-park-outline:computer' },
-  { label: '内核版本', value: data.value?.kernel_version ?? '-', icon: 'icon-park-outline:code' },
+  { label: '操作系统', value: displayOperatingSystem(data.value?.os), icon: 'icon-park-outline:computer' },
+  { label: '内核版本', value: displayKernelVersion(data.value?.kernel_version), icon: 'icon-park-outline:code' },
   { label: '运行时间', value: formatUptime(data.value?.uptime ?? 0, 'minute'), icon: 'icon-park-outline:timer' },
   { label: '最后上报', value: formatDateTime(data.value?.time), icon: 'icon-park-outline:time' },
 ])

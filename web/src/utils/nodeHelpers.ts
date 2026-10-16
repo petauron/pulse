@@ -1,4 +1,5 @@
 import type { NodeData, TrafficLimitType } from '@/stores/nodes'
+import type { NodeProbe } from '@/utils/rpc'
 import { formatDateTime } from '@/utils/helper'
 import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireTextClass, parseTags } from '@/utils/tagHelper'
 
@@ -82,4 +83,33 @@ export function getMemPercentage(node: NodeData): number {
 
 export function getDiskPercentage(node: NodeData): number {
   return (node.disk ?? 0) / (node.disk_total || 1) * 100
+}
+
+const probeToneKeys = ['pingExcellentColor', 'pingGoodColor', 'pingModerateColor', 'pingWarningColor', 'pingCriticalColor'] as const
+const probeToneDefaults = ['#5EEAA6', '#47B592', '#A3E635', '#FACC15', '#F43F5E'] as const
+const hexColor = /^#[0-9a-f]{6}$/i
+
+export function getProbeToneColor(metric: 'latency' | 'loss', value: number | null, settings?: Record<string, unknown> | null): string | undefined {
+  if (value === null)
+    return undefined
+  const limits = metric === 'latency' ? [60, 100, 160, 200] : [1, 3, 6, 9]
+  const index = limits.findIndex(limit => value <= limit)
+  const tone = index < 0 ? 4 : index
+  const configured = settings?.[probeToneKeys[tone]!]
+  return typeof configured === 'string' && hexColor.test(configured) ? configured.toUpperCase() : probeToneDefaults[tone]!
+}
+
+export function selectHomeProbes(probes: NodeProbe[], nodeUuid: string, settings?: Record<string, unknown> | null): Array<NodeProbe | null> {
+  const configuredCount = settings?.homePingRowCount
+  const rowCount = typeof configuredCount === 'number' && Number.isFinite(configuredCount)
+    ? Math.round(Math.min(8, Math.max(1, configuredCount)))
+    : 2
+  const configuredMap = settings?.homePingTasksByNode
+  const taskIds = configuredMap && typeof configuredMap === 'object' && !Array.isArray(configuredMap) && Object.hasOwn(configuredMap, nodeUuid)
+    ? (configuredMap as Record<string, unknown>)[nodeUuid]
+    : undefined
+  const selected = Array.isArray(taskIds)
+    ? Array.from(new Set(taskIds.filter(id => typeof id === 'string' || (typeof id === 'number' && Number.isInteger(id) && id >= 0)).map(String)), id => probes.find(task => task.id === id) ?? null)
+    : probes
+  return Array.from({ length: rowCount }, (_, index) => selected[index] ?? null)
 }

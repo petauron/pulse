@@ -33,7 +33,7 @@ The dashboard and administrative API are distinct authorization surfaces. Browse
 
 ## Web
 
-The Web interface is a Vue static client derived from Komari Emerald and embedded in the Service binary. Senulun supplies its read model through the versioned native API plus a narrow Emerald data adapter. The same components and visual tokens power login and administration. Node details show actual ICMP/TCP/HTTP results with a latest-1000 result limit and whole-requested-window summary, separately from downsampled host history. Missing metrics are unavailable, never synthesized measurements.
+The Web interface is a Vue static client derived from Komari Emerald and embedded in the Service binary. Senulun supplies its read model through the versioned native API plus a narrow Emerald data adapter. The same components and visual tokens power login and administration. Node details show bounded, time-bucketed ICMP/TCP/HTTP charts across the requested range, the latest 100 raw results, and a whole-requested-window summary, separately from downsampled host history. Missing metrics are unavailable, never synthesized measurements.
 
 ## Current data flow
 

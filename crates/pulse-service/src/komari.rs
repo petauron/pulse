@@ -3,7 +3,7 @@ use axum::{Json, extract::State};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::{ApiError, AppState, MAX_HISTORY_POINTS, current_time};
+use crate::{ApiError, AppState, MAX_HISTORY_POINTS, current_time, dashboard_probe_config};
 
 pub(crate) async fn nodes(
     State(state): State<AppState>,
@@ -11,8 +11,9 @@ pub(crate) async fn nodes(
 ) -> Result<Json<Value>, ApiError> {
     let offline_after = state.offline_after_seconds;
     let max_nodes = state.max_nodes;
+    let probe_config = dashboard_probe_config(&state);
     let dashboard = state
-        .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+        .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes, &probe_config))
         .await?;
     let clients = dashboard["clients"]
         .as_object()

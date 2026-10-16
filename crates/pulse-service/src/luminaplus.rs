@@ -32,7 +32,7 @@ fn compat_task(raw: &Value, admin: bool) -> Option<Value> {
         "clients": raw.get("clients").or_else(|| raw.get("node_ids")).cloned().unwrap_or(json!([])),
         "default_on": raw.get("default_on").cloned().unwrap_or(json!(false)),
         "loss": 0,
-        "weight": 0,
+        "weight": raw.get("weight").cloned().unwrap_or(json!(0)),
         "target": ""
     });
     if admin {
@@ -138,25 +138,31 @@ pub(crate) async fn ping_records_data(
     if task_id.is_some() && requested_task.is_none() {
         return Ok(json!({"count":0,"records":[],"tasks":tasks}));
     }
+    let task_uuid = if let Some(id) = task_id {
+        let raw_tasks = state.database(Storage::public_ping_tasks).await?;
+        raw_tasks.iter().find_map(|task| {
+            let uuid = task["id"].as_str()?;
+            (numeric_task_id(uuid) == Some(id)).then(|| uuid.to_owned())
+        })
+    } else {
+        None
+    };
+    if task_id.is_some() && task_uuid.is_none() {
+        return Err(ApiError::unavailable("probe task changed during request"));
+    }
     let hours = history_hours(hours, state.retention_days);
     let now = current_time()?;
     let (raw, mut summary) = if let Some(uuid) = uuid {
         let uuid = uuid.to_owned();
+        let task_uuid = task_uuid.clone();
         let result = state
-            .database(move |storage| storage.probe_history(&uuid, hours, now))
+            .database(move |storage| storage.probe_history(&uuid, task_uuid.as_deref(), hours, now))
             .await?;
         (
             result["records"].as_array().cloned().unwrap_or_default(),
             result["summary"].clone(),
         )
     } else {
-        let raw_tasks = state.database(Storage::public_ping_tasks).await?;
-        let task_uuid = task_id.and_then(|id| {
-            raw_tasks.iter().find_map(|task| {
-                let uuid = task["id"].as_str()?;
-                (numeric_task_id(uuid) == Some(id)).then(|| uuid.to_owned())
-            })
-        });
         let records = state
             .database(move |storage| storage.probe_overview(hours, now, task_uuid.as_deref()))
             .await?;
@@ -228,10 +234,11 @@ mod tests {
 
     #[test]
     fn task_mapping_matches_luminaplus_schema() {
-        let source = json!({"id":"5df0b95a-1d1b-4911-9b9e-a1d274adab41","name":"Test","type":"icmp","interval":60});
+        let source = json!({"id":"5df0b95a-1d1b-4911-9b9e-a1d274adab41","name":"Test","type":"icmp","interval":60,"weight":-3});
         let mapped = compat_tasks(&[source], false).unwrap();
         assert!(mapped[0]["id"].is_number());
         assert_eq!(mapped[0]["name"], "Test");
         assert_eq!(mapped[0]["clients"], json!([]));
+        assert_eq!(mapped[0]["weight"], -3);
     }
 }

@@ -1,4 +1,4 @@
-//! Only two fixed, locally selected programs. No shell, PATH search, arbitrary
+//! Only fixed, locally selected programs. No shell, PATH search, arbitrary
 //! executable, arguments, or Agent credentials ever reach a child process.
 
 use std::{net::IpAddr, path::Path, process::Stdio, time::Duration};
@@ -10,6 +10,7 @@ const MAX_OUTPUT_BYTES: usize = 16 * 1024;
 pub enum SystemCommand {
     Ping(IpAddr),
     NvidiaMetrics,
+    DetectVirt,
 }
 
 pub async fn run(command: SystemCommand, limit: Duration) -> Result<Vec<u8>, &'static str> {
@@ -22,6 +23,13 @@ pub async fn run(command: SystemCommand, limit: Duration) -> Result<Vec<u8>, &'s
                 "--format=csv,noheader,nounits",
             ]);
             command
+        }
+        SystemCommand::DetectVirt => {
+            let path = ["/usr/bin/systemd-detect-virt", "/bin/systemd-detect-virt"]
+                .into_iter()
+                .find(|path| Path::new(path).is_file())
+                .ok_or("unavailable")?;
+            Command::new(path)
         }
     };
     process

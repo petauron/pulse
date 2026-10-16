@@ -6,6 +6,7 @@ export interface SiteSettings {
   agent_interval_seconds: number
   ip_info_enabled?: boolean
   daily_exchange_rates?: boolean
+  earth_view_mode: 'earth' | 'earth-stop' | 'maps' | 'cards' | 'hide'
 }
 
 export interface ManagedNode {
@@ -33,6 +34,7 @@ export interface ManagedNode {
 export interface ProbeTask {
   id: string
   name: string
+  weight: number
   kind: 'icmp' | 'tcp' | 'http'
   target: string
   interval_seconds: number
@@ -93,9 +95,37 @@ export interface ProbeRecord {
 export interface ProbeHistory {
   tasks: Pick<ProbeTask, 'id' | 'name' | 'kind' | 'interval_seconds'>[]
   records: ProbeRecord[]
-  summary: { task_id: string, samples: number, loss_percent: number, avg_latency_ms: number | null }[]
-  limit: number
-  history_order: 'newest_first'
+  chart: {
+    task_id: string
+    received_at_unix_ms: number
+    latency_ms: number | null
+    failed_samples: number
+    samples: number
+  }[]
+  summary: {
+    task_id: string
+    samples: number
+    loss_percent: number
+    avg_latency_ms: number | null
+    min_latency_ms: number | null
+    max_latency_ms: number | null
+    latest_latency_ms: number | null
+    p50_latency_ms: number | null
+    p95_latency_ms: number | null
+    p99_latency_ms: number | null
+    p99_p50_ratio: number | null
+  }[]
+  chart_source_points: number
+  chart_bucket_ms: number
+  range_start_unix_ms: number
+  range_end_unix_ms: number
+}
+
+export interface ProbeComparison {
+  node_id: string
+  samples: number
+  loss_percent: number
+  avg_latency_ms: number | null
 }
 
 /** Do not send read-only counters or newly added admin-state fields as metadata. */
@@ -104,6 +134,12 @@ export function nodeMetadata(node: ManagedNode): ManagedNode {
   return { id, name, region, group, weight, hidden, tags, public_remark, ipv4: ipv4 ?? '', ipv6: ipv6 ?? '', price, currency, billing_cycle_days, expired_at_unix_ms, auto_renewal, traffic_limit_bytes, traffic_limit_type, traffic_reset_day }
 }
 
-export function fetchProbeHistory(id: string, hours: number, signal?: AbortSignal): Promise<ProbeHistory> {
-  return getSharedApi().get(`v1/nodes/${encodeURIComponent(id)}/probes?hours=${hours}`, signal)
+export function fetchProbeHistory(id: string, hours: number, taskId?: string, signal?: AbortSignal): Promise<ProbeHistory> {
+  const taskFilter = taskId ? `&task_id=${encodeURIComponent(taskId)}` : ''
+  return getSharedApi().get(`v1/nodes/${encodeURIComponent(id)}/probes?hours=${hours}${taskFilter}`, signal)
+}
+
+export async function fetchProbeComparison(taskId: string, hours: number, signal?: AbortSignal): Promise<ProbeComparison[]> {
+  const result = await getSharedApi().get<{ rows: ProbeComparison[] }>(`v1/probes/comparison?task_id=${encodeURIComponent(taskId)}&hours=${hours}`, signal)
+  return result.rows
 }

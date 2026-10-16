@@ -1,6 +1,6 @@
 //! Bounded monitoring configuration, probe history, asset metadata and alerts.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use pulse_protocol::{AgentRuntimeConfig, ProbeBatch, ProbeKind, ProbeTask, SystemSnapshot};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -14,8 +14,92 @@ use crate::storage::{Storage, StorageError, hash_token};
 const MAX_CONFIG_ROWS: usize = 128;
 const MAX_CHANNELS: usize = 16;
 const MAX_NODE_ASSIGNMENTS: usize = 10_000;
-const MAX_PROBE_HISTORY: usize = 1_000;
+const MAX_PROBE_RECENT: usize = 100;
+const MAX_PROBE_CHART_PER_TASK: usize = 1_000;
+const MAX_PROBE_CHART_TOTAL: usize = 12_000;
+const MAX_PROBE_STATS_SAMPLES: usize = 100_000;
 const MAX_INCIDENTS: usize = 1_000;
+
+#[derive(Clone)]
+pub(crate) struct DashboardProbeConfig {
+    pub hours: u32,
+    pub row_count: usize,
+    pub tasks_by_node: HashMap<String, Vec<String>>,
+}
+
+impl DashboardProbeConfig {
+    pub(crate) fn from_theme(settings: &Value, retention_days: u32) -> Self {
+        let hours = bounded_theme_integer(settings, "homePingHistoryHours", 1, 1, 168)
+            .min(retention_days.saturating_mul(24).max(1));
+        let row_count =
+            usize::try_from(bounded_theme_integer(settings, "homePingRowCount", 2, 1, 8))
+                .unwrap_or(2);
+        let mut tasks_by_node = HashMap::new();
+        if let Some(nodes) = settings["homePingTasksByNode"].as_object() {
+            for (node, task_ids) in nodes {
+                if Uuid::parse_str(node).is_err() {
+                    continue;
+                }
+                let Some(task_ids) = task_ids.as_array() else {
+                    continue;
+                };
+                let mut seen = HashSet::new();
+                let ids = task_ids
+                    .iter()
+                    .filter_map(|id| {
+                        id.as_str()
+                            .map(str::to_owned)
+                            .or_else(|| id.as_u64().map(|id| id.to_string()))
+                    })
+                    .filter(|id| !id.is_empty() && seen.insert(id.clone()))
+                    .take(8)
+                    .collect();
+                tasks_by_node.insert(node.clone(), ids);
+            }
+        }
+        Self {
+            hours,
+            row_count,
+            tasks_by_node,
+        }
+    }
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "finite theme value is clamped to the nonnegative u32 range before conversion"
+)]
+fn bounded_theme_integer(settings: &Value, key: &str, default: u32, min: u32, max: u32) -> u32 {
+    settings[key]
+        .as_f64()
+        .filter(|value| value.is_finite())
+        .map_or(default, |value| {
+            value.clamp(f64::from(min), f64::from(max)).round() as u32
+        })
+}
+
+impl Default for DashboardProbeConfig {
+    fn default() -> Self {
+        Self {
+            hours: 1,
+            row_count: 2,
+            tasks_by_node: HashMap::new(),
+        }
+    }
+}
+
+pub(crate) fn probe_percentile(sorted: &[f64], percentile: usize) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let rank = (sorted.len() - 1).checked_mul(percentile)?;
+    let lower = rank / 100;
+    let remainder = rank % 100;
+    let upper = lower + usize::from(remainder != 0);
+    let weight = f64::from(u32::try_from(remainder).ok()?) / 100.0;
+    Some(sorted[lower] + (sorted[upper] - sorted[lower]) * weight)
+}
 
 /// A current-cycle correction anchored to the provider-interface counters.
 #[derive(Deserialize)]
@@ -37,6 +121,18 @@ pub(crate) struct Settings {
     pub agent_interval_seconds: u64,
     pub ip_info_enabled: bool,
     pub daily_exchange_rates: bool,
+    pub earth_view_mode: EarthViewMode,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum EarthViewMode {
+    #[default]
+    Earth,
+    EarthStop,
+    Maps,
+    Cards,
+    Hide,
 }
 
 impl Default for Settings {
@@ -47,6 +143,7 @@ impl Default for Settings {
             agent_interval_seconds: 3,
             ip_info_enabled: false,
             daily_exchange_rates: false,
+            earth_view_mode: EarthViewMode::Earth,
         }
     }
 }
@@ -80,6 +177,8 @@ pub(crate) struct ProbeDefinition {
     #[serde(default)]
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub weight: i64,
     pub kind: ProbeKind,
     pub target: String,
     pub interval_seconds: u64,
@@ -176,6 +275,21 @@ fn list<T: DeserializeOwned>(
         row.get::<_, String>(0)
     })?;
     rows.map(|row| decode(&row?)).collect()
+}
+
+fn list_probe_tasks(db: &Connection) -> Result<Vec<ProbeDefinition>, StorageError> {
+    let mut statement = db.prepare("SELECT rowid,data FROM probe_tasks ORDER BY rowid LIMIT ?1")?;
+    let rows = statement.query_map([i64::try_from(MAX_CONFIG_ROWS).unwrap_or(128)], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut tasks = rows
+        .map(|row| {
+            let (rowid, data) = row?;
+            Ok((rowid, decode::<ProbeDefinition>(&data)?))
+        })
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    tasks.sort_by_key(|(rowid, task)| (task.weight, *rowid));
+    Ok(tasks.into_iter().map(|(_, task)| task).collect())
 }
 
 fn save<T: Serialize>(
@@ -306,7 +420,7 @@ impl Storage {
         let mut failure_query=db.prepare("SELECT happened_at_ms,subject FROM audit_events WHERE action='notification.failed' ORDER BY id DESC LIMIT 100")?;
         let failures=failure_query.query_map([],|r|Ok(json!({"happened_at_unix_ms":r.get::<_,i64>(0)?,"subject":r.get::<_,String>(1)?})))?.collect::<Result<Vec<_>,_>>()?;
         Ok(json!({"settings":settings,"nodes":nodes,
-            "probes":list::<ProbeDefinition>(&db,"probe_tasks",MAX_CONFIG_ROWS)?,
+            "probes":list_probe_tasks(&db)?,
             "channels":list::<Channel>(&db,"alert_channels",MAX_CHANNELS)?,
             "alert_rules":list::<AlertRule>(&db,"alert_rules",MAX_CONFIG_ROWS)?,
             "incidents":incidents(&db)?,"notification_failures":failures}))
@@ -424,6 +538,7 @@ impl Storage {
         if Uuid::parse_str(&task.id).is_err()
             || task.name.trim().is_empty()
             || !text(&task.name, 128)
+            || !(-100_000..=100_000).contains(&task.weight)
             || !text(&task.target, 2048)
             || !(5..=3600).contains(&task.interval_seconds)
             || !(1..=30).contains(&task.timeout_seconds)
@@ -434,7 +549,7 @@ impl Storage {
         validate_target(task.kind, &task.target)?;
         let db = self.connection()?;
         verify_nodes(&db, &task.node_ids)?;
-        let tasks = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?;
+        let tasks = list_probe_tasks(&db)?;
         // Empty node selection applies to every node; never silently truncate assignments.
         let mut nodes = HashSet::new();
         for t in tasks.iter().chain(std::iter::once(&*task)) {
@@ -563,7 +678,7 @@ impl Storage {
         let settings = self.settings()?;
         let db = self.connection()?;
         let id = authenticated_node(&db, token)?;
-        let probes = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let probes = list_probe_tasks(&db)?
             .into_iter()
             .filter(|t| t.enabled && (t.node_ids.is_empty() || t.node_ids.contains(&id)))
             .map(|t| ProbeTask {
@@ -596,7 +711,7 @@ impl Storage {
         let mut db = self.connection()?;
         let tx = db.transaction()?;
         let node = authenticated_node(&tx, token)?;
-        let tasks = list::<ProbeDefinition>(&tx, "probe_tasks", MAX_CONFIG_ROWS)?;
+        let tasks = list_probe_tasks(&tx)?;
         let pruned = self.prune_before_ingest(&tx, now, retention_days)?;
         for result in &batch.results {
             let task = tasks
@@ -660,7 +775,7 @@ impl Storage {
     pub(crate) fn public_ping_tasks(&self) -> Result<Vec<Value>, StorageError> {
         let db = self.connection()?;
         let mut tasks = Vec::new();
-        for task in list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)? {
+        for task in list_probe_tasks(&db)? {
             if !task.enabled {
                 continue;
             }
@@ -676,6 +791,7 @@ impl Storage {
                 "name": task.name,
                 "type": task.kind,
                 "interval": task.interval_seconds,
+                "weight": task.weight,
                 "clients": clients,
                 "default_on": task.node_ids.is_empty()
             }));
@@ -686,6 +802,7 @@ impl Storage {
     pub(crate) fn probe_history(
         &self,
         node: &str,
+        task_id: Option<&str>,
         hours: u32,
         now: u64,
     ) -> Result<Value, StorageError> {
@@ -693,20 +810,145 @@ impl Storage {
         if !visible(&db, node)? {
             return Err(StorageError::NotFound);
         }
-        let tasks: Vec<_> = list::<ProbeDefinition>(&db, "probe_tasks", MAX_CONFIG_ROWS)?
+        let tasks: Vec<_> = list_probe_tasks(&db)?
             .into_iter()
-            .filter(|t| t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node))
+            .filter(|t| {
+                t.enabled
+                    && (t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node))
+                    && task_id.is_none_or(|id| t.id == id)
+            })
             .collect();
-        let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
-        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 ORDER BY received_at_ms DESC,id DESC LIMIT ?3")?;
-        let records=statement.query_map(params![node,start,i64::try_from(MAX_PROBE_HISTORY).expect("probe history limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
-        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND task_id IN (SELECT id FROM probe_tasks) AND received_at_ms>=?2 GROUP BY task_id")?;
-        let summary=statement.query_map(params![node,start],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
+        if task_id.is_some() && tasks.is_empty() {
+            return Err(StorageError::NotFound);
+        }
+        let start_ms = now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000);
+        let start = integer(start_ms);
+        let end = integer(now);
+        let task_ids = json!(tasks.iter().map(|task| &task.id).collect::<Vec<_>>()).to_string();
+        let mut statement=db.prepare("SELECT task_id,collected_at_ms,received_at_ms,latency_ms,success,error FROM probe_results WHERE node_id=?1 AND received_at_ms BETWEEN ?2 AND ?3 AND task_id IN (SELECT value FROM json_each(?4)) ORDER BY received_at_ms DESC,id DESC LIMIT ?5")?;
+        let records=statement.query_map(params![node,start,end,task_ids,i64::try_from(MAX_PROBE_RECENT).expect("probe recent limit fits SQLite")],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"collected_at_unix_ms":row.get::<_,i64>(1)?,"received_at_unix_ms":row.get::<_,i64>(2)?,"latency_ms":row.get::<_,Option<f64>>(3)?,"success":row.get::<_,bool>(4)?,"error":row.get::<_,Option<String>>(5)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut statement=db.prepare("SELECT task_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms) FROM probe_results WHERE node_id=?1 AND received_at_ms BETWEEN ?2 AND ?3 AND task_id IN (SELECT value FROM json_each(?4)) GROUP BY task_id")?;
+        let mut summary=statement.query_map(params![node,start,end,task_ids],|row|Ok(json!({"task_id":row.get::<_,String>(0)?,"samples":row.get::<_,i64>(1)?,"loss_percent":row.get::<_,f64>(2)?,"avg_latency_ms":row.get::<_,Option<f64>>(3)?})))?.collect::<Result<Vec<_>,_>>()?;
+        let mut successful=db.prepare("SELECT latency_ms FROM probe_results WHERE node_id=?1 AND task_id=?2 AND received_at_ms BETWEEN ?3 AND ?4 AND success=1 AND latency_ms IS NOT NULL ORDER BY received_at_ms DESC,id DESC LIMIT ?5")?;
+        for item in &mut summary {
+            let id = item["task_id"]
+                .as_str()
+                .ok_or(StorageError::InvalidInput("invalid probe summary"))?;
+            // A node retains at most 100,000 probe rows. Bound the per-task read
+            // independently so corrupt or legacy data cannot exhaust memory.
+            let mut values = successful
+                .query_map(
+                    params![
+                        node,
+                        id,
+                        start,
+                        end,
+                        i64::try_from(MAX_PROBE_STATS_SAMPLES + 1)
+                            .expect("probe limit fits SQLite")
+                    ],
+                    |row| row.get::<_, f64>(0),
+                )?
+                .collect::<Result<Vec<_>, _>>()?;
+            if values.len() > MAX_PROBE_STATS_SAMPLES {
+                return Err(StorageError::InvalidInput(
+                    "probe statistics limit exceeded",
+                ));
+            }
+            let latest = values.first().copied();
+            values.sort_by(f64::total_cmp);
+            let p50 = probe_percentile(&values, 50);
+            let p95 = probe_percentile(&values, 95);
+            let p99 = probe_percentile(&values, 99);
+            let ratio = p50.zip(p99).and_then(|(median, high)| {
+                (median > 0.0 && high >= median).then(|| (high - median) / median.clamp(10.0, 50.0))
+            });
+            item["min_latency_ms"] = json!(values.first());
+            item["max_latency_ms"] = json!(values.last());
+            item["latest_latency_ms"] = json!(latest);
+            item["p50_latency_ms"] = json!(p50);
+            item["p95_latency_ms"] = json!(p95);
+            item["p99_latency_ms"] = json!(p99);
+            item["p99_p50_ratio"] = json!(ratio);
+        }
+        let points_per_task =
+            MAX_PROBE_CHART_PER_TASK.min(MAX_PROBE_CHART_TOTAL / tasks.len().max(1));
+        let bucket_ms = now
+            .saturating_sub(start_ms)
+            .saturating_add(1)
+            .div_ceil(u64::try_from(points_per_task).expect("probe chart point limit fits u64"))
+            .max(1);
+        let mut statement = db.prepare(
+            "SELECT task_id,MAX(received_at_ms),AVG(CASE WHEN success=1 THEN latency_ms END),
+                    SUM(CASE WHEN success=0 THEN 1 ELSE 0 END),COUNT(*)
+             FROM probe_results
+             WHERE node_id=?1 AND received_at_ms BETWEEN ?2 AND ?3
+                   AND task_id IN (SELECT value FROM json_each(?4))
+             GROUP BY task_id,(received_at_ms-?2)/?5
+             ORDER BY task_id,MAX(received_at_ms)",
+        )?;
+        let chart = statement
+            .query_map(
+                params![node, start, end, task_ids, integer(bucket_ms)],
+                |row| {
+                    Ok(json!({
+                        "task_id": row.get::<_, String>(0)?,
+                        "received_at_unix_ms": row.get::<_, i64>(1)?,
+                        "latency_ms": row.get::<_, Option<f64>>(2)?,
+                        "failed_samples": row.get::<_, i64>(3)?,
+                        "samples": row.get::<_, i64>(4)?
+                    }))
+                },
+            )?
+            .collect::<Result<Vec<_>, _>>()?;
+        let chart_source_points: u64 = summary
+            .iter()
+            .map(|item| item["samples"].as_u64().unwrap_or(0))
+            .sum();
         // Public readers need names/types, never private probe targets or node assignments.
         let tasks:Vec<_>=tasks.into_iter().map(|t|json!({"id":t.id,"name":t.name,"kind":t.kind,"interval_seconds":t.interval_seconds})).collect();
         Ok(
-            json!({"tasks":tasks,"records":records,"summary":summary,"limit":MAX_PROBE_HISTORY,"history_order":"newest_first"}),
+            json!({"tasks":tasks,"records":records,"chart":chart,"summary":summary,"chart_source_points":chart_source_points,"chart_bucket_ms":bucket_ms,"range_start_unix_ms":start_ms,"range_end_unix_ms":now}),
         )
+    }
+    /// Full-range per-node aggregates for one public probe task.
+    pub(crate) fn probe_comparison(
+        &self,
+        task_id: &str,
+        hours: u32,
+        now: u64,
+    ) -> Result<Vec<Value>, StorageError> {
+        let db = self.connection()?;
+        let task = list_probe_tasks(&db)?
+            .into_iter()
+            .find(|task| task.id == task_id && task.enabled)
+            .ok_or(StorageError::NotFound)?;
+        let assigned: HashSet<&str> = task.node_ids.iter().map(String::as_str).collect();
+        let start = integer(now.saturating_sub(u64::from(hours.clamp(1, 8760)) * 3_600_000));
+        let mut statement = db.prepare(
+            "SELECT node_id,count(*),sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),avg(latency_ms)
+             FROM probe_results WHERE task_id=?1 AND received_at_ms>=?2 GROUP BY node_id",
+        )?;
+        let rows = statement.query_map(params![task_id, start], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, f64>(2)?,
+                row.get::<_, Option<f64>>(3)?,
+            ))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            let (node, samples, loss, latency) = row?;
+            if (assigned.is_empty() || assigned.contains(node.as_str())) && visible(&db, &node)? {
+                result.push(json!({
+                    "node_id": node,
+                    "samples": samples,
+                    "loss_percent": loss,
+                    "avg_latency_ms": latency,
+                }));
+            }
+        }
+        Ok(result)
     }
     /// Bounded public cross-node probe history for Komari-style overview charts.
     pub(crate) fn probe_overview(
@@ -789,7 +1031,7 @@ pub(crate) fn remove_node_assignments(
     tx: &Transaction<'_>,
     node: &str,
 ) -> Result<(), StorageError> {
-    for mut task in list::<ProbeDefinition>(tx, "probe_tasks", MAX_CONFIG_ROWS)? {
+    for mut task in list_probe_tasks(tx)? {
         if task.node_ids.iter().any(|id| id == node) {
             task.node_ids.retain(|id| id != node);
             // Empty means global; deleting the last explicit target must never widen scope.
@@ -956,36 +1198,53 @@ fn period_usage(db: &Connection, node: &str) -> Result<(u64, u64), StorageError>
         .unwrap_or_default())
 }
 
-/// One-hour overview: at most three tasks and ten six-minute buckets per node.
-/// Reuses the dashboard poll with a bounded one-hour indexed range and ten output rows.
+/// Bounded ten-bucket overview for the theme-selected tasks and history range.
 pub(crate) fn dashboard_probes(
     db: &Connection,
     node: &str,
     tasks: &[ProbeDefinition],
     now: u64,
+    config: &DashboardProbeConfig,
 ) -> Result<Vec<Value>, StorageError> {
     let mut result = Vec::new();
+    let range_ms = u64::from(config.hours) * 3_600_000;
+    let start_ms = now.saturating_sub(range_ms);
+    let bucket_ms = range_ms.div_ceil(10).max(1);
     let mut statement = db.prepare_cached(
         "SELECT max(received_at_ms),avg(CASE WHEN success=1 THEN latency_ms END),
                 sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),count(*),
                 sum(CASE WHEN success=1 AND latency_ms IS NOT NULL THEN 1 ELSE 0 END),
-                (received_at_ms-?3-1)/360000
+                (received_at_ms-?3-1)/?5
          FROM probe_results
          WHERE node_id=?1 AND task_id=?2 AND received_at_ms>?3 AND received_at_ms<=?4
-         GROUP BY (received_at_ms-?3-1)/360000 ORDER BY max(received_at_ms) DESC LIMIT 10",
+         GROUP BY (received_at_ms-?3-1)/?5 ORDER BY max(received_at_ms) DESC LIMIT 10",
     )?;
-    for task in tasks
-        .iter()
-        .filter(|t| t.enabled && (t.node_ids.is_empty() || t.node_ids.iter().any(|id| id == node)))
-        .take(3)
-    {
+    let assigned = |task: &&ProbeDefinition| {
+        task.enabled && (task.node_ids.is_empty() || task.node_ids.iter().any(|id| id == node))
+    };
+    let available: Vec<_> = tasks.iter().filter(assigned).collect();
+    let selected: Vec<_> = if let Some(ids) = config.tasks_by_node.get(node) {
+        ids.iter()
+            .take(config.row_count)
+            .filter_map(|id| {
+                available
+                    .iter()
+                    .find(|task| task.id.as_str() == id)
+                    .copied()
+            })
+            .collect()
+    } else {
+        available.into_iter().take(config.row_count).collect()
+    };
+    for task in selected {
         let mut points = statement
             .query_map(
                 params![
                     node,
                     task.id,
-                    integer(now.saturating_sub(3_600_000)),
-                    integer(now)
+                    integer(start_ms),
+                    integer(now),
+                    integer(bucket_ms),
                 ],
                 |row| {
                     Ok(json!({
@@ -1006,9 +1265,7 @@ pub(crate) fn dashboard_probes(
 }
 
 pub(crate) fn dashboard_probe_tasks(db: &Connection) -> Result<Vec<ProbeDefinition>, StorageError> {
-    let mut tasks = list::<ProbeDefinition>(db, "probe_tasks", MAX_CONFIG_ROWS)?;
-    tasks.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
-    Ok(tasks)
+    list_probe_tasks(db)
 }
 
 pub(crate) fn decorate_client(

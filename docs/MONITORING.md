@@ -59,10 +59,28 @@ failure categories, not a fabricated zero latency.
 
 HTTP success requires a 2xx response whose complete body is received within the
 timeout and 64 KiB bound; redirects, error statuses and larger responses fail.
-HTTP latency includes DNS, connection, TLS and body transfer; TCP latency includes
-DNS and connection; ICMP reports the system ping RTT.
-The detail page shows the newest 1000 results and an aggregate for the requested
-window. Server receipt time controls ordering and retention; Agent collection time
+HTTP latency includes DNS, connection, TLS and body transfer. TCP follows Komari's
+measurement rule: resolve the hostname first, connect only to the first address,
+and report the TCP connect duration in whole milliseconds, excluding DNS time.
+Each TCP attempt uses at most three seconds (or the configured timeout, if lower).
+If the first connection takes over 1000 ms, retry up to three times. A retry
+over 1000 ms does not become a successful latency; a retry that drops by over
+800 ms is treated as a suspected retransmission failure. If no acceptable
+retry succeeds, the sample is a failure rather than a high-latency success.
+These TCP failures contribute to failure rate, not to average latency. Historical
+samples retain the measurement rule used when they were collected, so a window
+can contain both rules until its older samples age out. ICMP reports the system
+ping RTT as whole milliseconds, matching Komari's per-sample truncation. A
+`time<1 ms` result is recorded as 0 ms; other imprecise upper bounds are
+rejected rather than guessed.
+The detail page shows a time-bucketed chart spanning the requested window, with
+at most 1000 points per task and 12000 points per response. The latest 100 raw
+results remain available as a separate table. A selected probe task is filtered
+before aggregation; its summary and the cross-node comparison use all samples
+in the requested window. Empty chart buckets preserve long reporting gaps as
+breaks, while short gaps use bounded Emerald-style interpolation. Server receipt
+time controls ordering and retention;
+Agent collection time
 is diagnostic. Probe storage has a hard 100000-row per-node cap in addition to
 retention. Missing samples are not counted as received failures: node-offline
 alerts cover an absent Agent separately.
@@ -105,7 +123,11 @@ the Agent in a container does not turn container metrics into host metrics.
 AMD GPU metrics use readable sysfs fields; NVIDIA uses a fixed `nvidia-smi` command
 with bounded output/time. Hardware, drivers, permissions and hardened systemd
 device isolation may make GPU data unavailable. Missing capabilities produce
-null/N/A. Virtualization auto-detection is best-effort; explicit configuration wins.
+null/N/A. On Linux, the Agent reads the bounded `/etc/os-release` `PRETTY_NAME`
+for the exact distribution version and uses a fixed, two-second
+`systemd-detect-virt` invocation when installed; bounded local metadata remains
+the fallback. Virtualization auto-detection is best-effort, and explicit
+configuration wins. No shell or PATH lookup is used.
 
 Set `PULSE_EXTENDED_METRICS=disabled`, `PULSE_GPU_METRICS=disabled`, or
 `PULSE_AUTODETECT_VIRTUALIZATION=disabled` to disable the corresponding collection.

@@ -53,20 +53,15 @@ const customTags = computed(() => getCustomTags(props.node))
     @keydown.space.self.prevent="emit('click')"
   >
     <template #header>
-      <div class="flex gap-2 min-w-0 items-start">
-        <div class="mt-1.5 size-2 shrink-0 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
+      <div class="flex gap-2 min-w-0 items-center">
+        <div class="size-2 shrink-0 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
           <div
             class="animate-ping absolute inset-0 rounded-full opacity-50"
             :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']"
           />
         </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-md font-bold truncate" :title="props.node.name">
-            {{ props.node.name }}
-          </div>
-          <div class="mt-0.5 min-h-[14px] truncate text-[11px] font-normal leading-tight text-muted-foreground/75" :class="!props.node.public_remark && 'invisible'" :title="props.node.public_remark || ''">
-            {{ props.node.public_remark || '无公开备注' }}
-          </div>
+        <div class="text-md font-bold flex-1 min-w-0 truncate" :title="props.node.public_remark ? `${props.node.name}\n${props.node.public_remark}` : props.node.name">
+          {{ props.node.name }}
         </div>
       </div>
     </template>
@@ -145,7 +140,7 @@ const customTags = computed(() => getCustomTags(props.node))
             </div>
             <ProgressThin :percentage="trafficUsedPercentage" status="success" :height="4" />
             <DataTooltip placement="top" class="block">
-              <div class="whitespace-pre-wrap text-[11px] text-muted-foreground truncate">
+              <div class="text-[11px] text-muted-foreground truncate">
                 {{ formatBytes(trafficUsed) }} /
                 <template v-if="showTrafficProgress(props.node)">
                   {{ formatBytes(props.node.traffic_limit) }}
@@ -196,7 +191,7 @@ const customTags = computed(() => getCustomTags(props.node))
                 </div>
               </div>
             </div>
-            <div class="flex items-center justify-between">
+            <div v-if="priceTags.length" class="flex items-center justify-between">
               <span class="truncate">
                 在线
               </span>
@@ -205,7 +200,7 @@ const customTags = computed(() => getCustomTags(props.node))
                 {{ props.node.uptime > 0 ? formatUptime(props.node.uptime) : '' }}
               </span>
             </div>
-            <div v-if="priceTags.length" class="flex items-center justify-between">
+            <div class="flex items-center justify-between">
               <span class="truncate">费用</span>
               <div class="border-t-2 border-dotted border-gray-500/10 mx-2 flex-1" />
               <DataTooltip placement="left" :content="expiredDate" content-class="whitespace-nowrap right-0 mr-0">
@@ -237,5 +232,6 @@ const customTags = computed(() => getCustomTags(props.node))
 <style scoped>
 .node-card {
   position: relative;
+  overflow: hidden;
 }
 </style>

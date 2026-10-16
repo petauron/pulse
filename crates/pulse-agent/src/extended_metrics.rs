@@ -177,6 +177,46 @@ fn small_file(path: impl AsRef<Path>) -> Option<String> {
     Some(body.trim().to_owned())
 }
 
+/// Read the distribution's exact advertised version, including point releases.
+/// Unsupported os-release escaping falls back to sysinfo rather than displaying it literally.
+pub fn operating_system() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        small_file("/etc/os-release")
+            .and_then(|body| parse_pretty_name(&body))
+            .or_else(|| small_file("/usr/lib/os-release").and_then(|body| parse_pretty_name(&body)))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_pretty_name(body: &str) -> Option<String> {
+    let raw = body
+        .lines()
+        .find_map(|line| line.strip_prefix("PRETTY_NAME="))?;
+    let value = if let Some(quoted) = raw
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+    {
+        quoted
+    } else if raw.contains(char::is_whitespace) || raw.contains('"') {
+        return None;
+    } else {
+        raw
+    };
+    if value.is_empty()
+        || value.len() > 128
+        || value.contains('\\')
+        || value.chars().any(char::is_control)
+    {
+        return None;
+    }
+    Some(value.to_owned())
+}
+
 fn finite_range(value: &str, minimum: f32, maximum: f32) -> Option<f32> {
     value
         .trim()
@@ -261,9 +301,32 @@ fn parse_nvidia_metrics(body: &[u8]) -> Option<Vec<GpuSnapshot>> {
     (!devices.is_empty()).then_some(devices)
 }
 
-/// A handful of bounded Linux metadata reads; explicit local configuration wins.
+/// Prefer systemd's established detector, then bounded Linux metadata reads.
 /// Empty means unknown. We never label an unrecognized machine as bare metal.
-pub fn detect_virtualization() -> Option<String> {
+pub async fn detect_virtualization() -> Option<String> {
+    if let Ok(body) = system_command::run(SystemCommand::DetectVirt, Duration::from_secs(2)).await
+        && let Some(value) = parse_detect_virt(&body)
+    {
+        return Some(value);
+    }
+    detect_virtualization_from_metadata()
+}
+
+fn parse_detect_virt(body: &[u8]) -> Option<String> {
+    let value = std::str::from_utf8(body).ok()?.trim();
+    if value.is_empty()
+        || value == "none"
+        || value.len() > 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return None;
+    }
+    Some(value.to_owned())
+}
+
+fn detect_virtualization_from_metadata() -> Option<String> {
     #[cfg(target_os = "linux")]
     {
         for (path, label) in [("/.dockerenv", "docker"), ("/run/.containerenv", "podman")] {
@@ -366,6 +429,24 @@ mod tests {
             virtualization_from_metadata("Virtual Machine Microsoft Corporation"),
             Some("hyper-v".to_owned())
         );
+    }
+
+    #[test]
+    fn fixed_virtualization_detector_output_is_validated() {
+        assert_eq!(parse_detect_virt(b"kvm\n"), Some("kvm".to_owned()));
+        assert_eq!(parse_detect_virt(b"none\n"), None);
+        assert_eq!(parse_detect_virt(b"kvm; command\n"), None);
+        assert_eq!(parse_detect_virt(b"\xff"), None);
+    }
+
+    #[test]
+    fn os_release_uses_exact_pretty_name_without_interpreting_shell_content() {
+        assert_eq!(
+            parse_pretty_name("NAME=Ubuntu\nPRETTY_NAME=\"Ubuntu 24.04.4 LTS\"\n"),
+            Some("Ubuntu 24.04.4 LTS".to_owned())
+        );
+        assert_eq!(parse_pretty_name("PRETTY_NAME=\"bad\\x20value\""), None);
+        assert_eq!(parse_pretty_name("PRETTY_NAME=\"bad\nline\""), None);
     }
 
     #[test]

@@ -48,7 +48,7 @@ struct AgentConfig {
 }
 
 impl AgentConfig {
-    fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
+    async fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
         let service_url = parse_service_url(
             &env::var("PULSE_SERVICE_URL").unwrap_or_else(|_| DEFAULT_SERVICE_URL.to_owned()),
         )?;
@@ -102,7 +102,9 @@ impl AgentConfig {
         if config.virtualization.trim().is_empty()
             && parse_enabled("PULSE_AUTODETECT_VIRTUALIZATION")?
         {
-            config.virtualization = extended_metrics::detect_virtualization().unwrap_or_default();
+            config.virtualization = extended_metrics::detect_virtualization()
+                .await
+                .unwrap_or_default();
         }
         Ok(config)
     }
@@ -122,6 +124,7 @@ struct Collector {
     disks: Disks,
     networks: Networks,
     last_network_refresh: Instant,
+    operating_system: String,
 }
 
 impl Collector {
@@ -137,6 +140,10 @@ impl Collector {
             disks: Disks::new_with_refreshed_list(),
             networks: Networks::new_with_refreshed_list(),
             last_network_refresh: Instant::now(),
+            operating_system: extended_metrics::operating_system()
+                .or_else(System::long_os_version)
+                .filter(|name| name.len() <= 128)
+                .unwrap_or_else(|| "Unknown".to_owned()),
         }
     }
 
@@ -155,7 +162,7 @@ impl Collector {
 
         let mut seen_disks = HashSet::new();
         let mut disk_total_bytes = 0_u64;
-        let mut disk_available_bytes = 0_u64;
+        let mut disk_used_bytes = 0_u64;
         for disk in self.disks.list() {
             let mount_point = disk.mount_point().to_string_lossy();
             if config
@@ -165,26 +172,22 @@ impl Collector {
             {
                 continue;
             }
-            let identity = (
-                disk.name().to_string_lossy().into_owned(),
-                disk.total_space(),
-            );
-            if disk.total_space() == 0 || !seen_disks.insert(identity) {
+            let Some((total_bytes, used_bytes)) = disk_usage(disk) else {
+                continue;
+            };
+            let identity = (disk.name().to_string_lossy().into_owned(), total_bytes);
+            if total_bytes == 0 || !seen_disks.insert(identity) {
                 continue;
             }
-            disk_total_bytes = disk_total_bytes.saturating_add(disk.total_space());
-            disk_available_bytes = disk_available_bytes.saturating_add(disk.available_space());
+            disk_total_bytes = disk_total_bytes.saturating_add(total_bytes);
+            disk_used_bytes = disk_used_bytes.saturating_add(used_bytes);
         }
         let mut network_received = 0_u64;
         let mut network_transmitted = 0_u64;
         let mut network_total_received = 0_u64;
         let mut network_total_transmitted = 0_u64;
         for (name, network) in self.networks.list() {
-            let selected = config.network_interfaces.as_ref().map_or_else(
-                || !is_loopback_interface(name),
-                |allowed| allowed.contains(name),
-            );
-            if !selected {
+            if !include_network_interface(name, config.network_interfaces.as_ref()) {
                 continue;
             }
             network_received = network_received.saturating_add(network.received());
@@ -209,7 +212,7 @@ impl Collector {
             collected_at_unix_ms: collected_at.as_millis().try_into()?,
             host_name: Some(config.node_name.clone()),
             agent_version: env!("CARGO_PKG_VERSION").to_owned(),
-            operating_system: System::long_os_version().unwrap_or_else(|| "Unknown".to_owned()),
+            operating_system: self.operating_system.clone(),
             kernel_version: System::kernel_long_version(),
             architecture: System::cpu_arch(),
             cpu_name,
@@ -227,7 +230,7 @@ impl Collector {
             swap_total_bytes: self.system.total_swap(),
             swap_used_bytes: self.system.used_swap(),
             disk_total_bytes,
-            disk_used_bytes: disk_total_bytes.saturating_sub(disk_available_bytes),
+            disk_used_bytes,
             network_receive_bytes_per_second: rate_per_second(network_received, elapsed),
             network_transmit_bytes_per_second: rate_per_second(network_transmitted, elapsed),
             network_total_received_bytes: network_total_received,
@@ -246,7 +249,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if run_credentials_command()? {
         return Ok(());
     }
-    let config = AgentConfig::from_env()?;
+    let config = AgentConfig::from_env().await?;
     let client = Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(5))
@@ -675,8 +678,50 @@ fn validate_local_text(
     Ok(())
 }
 
-fn is_loopback_interface(name: &str) -> bool {
-    name == "lo" || name == "lo0" || name.starts_with("lo:")
+fn include_network_interface(name: &str, allowed: Option<&HashSet<String>>) -> bool {
+    allowed.map_or_else(
+        || {
+            // Match Komari's default: virtual bridges and container links must
+            // not double-count provider-facing traffic. An explicit allowlist
+            // still overrides the default for intentional custom monitoring.
+            const EXCLUDED_PREFIXES: [&str; 12] = [
+                "br", "cni", "docker", "podman", "flannel", "lo", "veth", "virbr", "vmbr", "tap",
+                "fwbr", "fwpr",
+            ];
+            !EXCLUDED_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
+        },
+        |allowed| allowed.contains(name),
+    )
+}
+
+#[cfg(unix)]
+fn disk_usage(disk: &sysinfo::Disk) -> Option<(u64, u64)> {
+    // Komari counts allocated blocks as used; blocks reserved for the
+    // filesystem are not ordinary-user available space, but are not used.
+    let stats = rustix::fs::statvfs(disk.mount_point()).ok()?;
+    Some(disk_usage_from_blocks(
+        stats.f_blocks,
+        stats.f_bfree,
+        stats.f_frsize,
+    ))
+}
+
+#[cfg(not(unix))]
+fn disk_usage(disk: &sysinfo::Disk) -> Option<(u64, u64)> {
+    let total = disk.total_space();
+    Some((total, total.saturating_sub(disk.available_space())))
+}
+
+#[cfg(unix)]
+fn disk_usage_from_blocks(blocks: u64, free_blocks: u64, block_size: u64) -> (u64, u64) {
+    (
+        blocks.saturating_mul(block_size),
+        blocks
+            .saturating_sub(free_blocks)
+            .saturating_mul(block_size),
+    )
 }
 
 fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
@@ -688,6 +733,41 @@ fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn disk_used_excludes_reserved_but_unallocated_blocks() {
+        // 100 total blocks, 20 free blocks, only 15 available to an
+        // unprivileged user: Komari reports 80 used, not 85.
+        assert_eq!(disk_usage_from_blocks(100, 20, 4), (400, 320));
+        assert_eq!(disk_usage_from_blocks(1, 2, 4), (4, 0));
+    }
+
+    #[test]
+    fn network_interface_defaults_match_komari_without_blocking_an_explicit_allowlist() {
+        for name in [
+            "br0",
+            "cni0",
+            "docker0",
+            "podman0",
+            "flannel.1",
+            "lo",
+            "veth123",
+            "virbr0",
+            "vmbr0",
+            "tap0",
+            "fwbr0",
+            "fwpr0",
+        ] {
+            assert!(!include_network_interface(name, None), "{name}");
+        }
+        for name in ["eth0", "ens3", "enp1s0", "wlan0"] {
+            assert!(include_network_interface(name, None), "{name}");
+        }
+        let allowed = HashSet::from(["veth123".to_owned()]);
+        assert!(include_network_interface("veth123", Some(&allowed)));
+        assert!(!include_network_interface("eth0", Some(&allowed)));
+    }
 
     #[test]
     fn remote_plain_http_is_rejected() {

@@ -48,7 +48,7 @@ const columns: ColumnConfig[] = [
   { key: 'disk', label: '硬盘', width: '100px', sortable: true },
   { key: 'traffic', label: '流量', width: '100px', sortable: true },
   { key: 'rate', label: '速率', width: '80px', sortable: true },
-  { key: 'networks', label: '三网', width: '120px', sortable: false },
+  { key: 'networks', label: '三网', width: '136px', sortable: false },
 ]
 
 const sortKey = ref<string>('')
@@ -228,7 +228,7 @@ function getRowTransitionStyle(index: number): Record<string, string> {
                   >
                     <div class="truncate">
                       <template v-for="(tag, tagIndex) in getPriceTags(node, appStore.lang, 'list')" :key="tagIndex">
-                        <span v-if="node.online || tagIndex > 0" class="mx-1">·</span>
+                        <span class="mx-1">·</span>
                         <span :class="tag.highlight ? getRemainingTimeTagClass(node) : ''">{{ tag.text }}</span>
                       </template>
                     </div>

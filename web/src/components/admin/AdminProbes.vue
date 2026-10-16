@@ -10,7 +10,7 @@ import { useAdminAction } from '@/composables/useAdminAction'
 import { getSharedApi } from '@/utils/api'
 
 const props = defineProps<{ probes: ProbeTask[], nodes: ManagedNode[], refresh: () => Promise<void> }>()
-const blank = (): ProbeTask => ({ id: '', name: '', kind: 'icmp', target: '', interval_seconds: 60, timeout_seconds: 5, enabled: true, node_ids: [] })
+const blank = (): ProbeTask => ({ id: '', name: '', weight: 0, kind: 'icmp', target: '', interval_seconds: 60, timeout_seconds: 5, enabled: true, node_ids: [] })
 const draft = ref(blank())
 const removing = ref<ProbeTask | null>(null)
 const visibleNodes = computed(() => props.nodes.filter(node => !node.hidden && !node.disabled))
@@ -57,7 +57,7 @@ async function remove(): Promise<void> {
             <p class="font-medium">
               {{ task.name }} <span class="text-sm text-muted-foreground">{{ task.enabled ? '启用' : '停用' }}</span>
             </p><p class="break-all text-sm text-muted-foreground">
-              {{ task.kind.toUpperCase() }} · {{ task.target }} · 每 {{ task.interval_seconds }} 秒
+              {{ task.kind.toUpperCase() }} · {{ task.target }} · 每 {{ task.interval_seconds }} 秒 · 顺序 {{ task.weight }}
             </p>
           </div><div class="flex gap-2">
             <Button variant="outline" :disabled="busy" @click="draft = { ...task, node_ids: [...task.node_ids] }">
@@ -73,12 +73,14 @@ async function remove(): Promise<void> {
       <form class="space-y-4" :aria-busy="busy" @submit.prevent="save">
         <fieldset :disabled="busy" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label class="grid gap-2 text-sm">名称<Input v-model="draft.name" required maxlength="128" /></label>
+          <label class="grid gap-2 text-sm">显示顺序<Input v-model.number="draft.weight" type="number" min="-100000" max="100000" step="1" required /></label>
           <label class="grid gap-2 text-sm">类型<select v-model="draft.kind" class="h-11 rounded-md border border-input bg-background px-3 focus-visible:ring-2 focus-visible:ring-ring"><option value="icmp">ICMP</option><option value="tcp">TCP</option><option value="http">HTTP / HTTPS</option></select></label>
           <label class="grid gap-2 text-sm">目标<Input v-model="draft.target" :placeholder="draft.kind === 'http' ? 'https://example.com' : draft.kind === 'tcp' ? 'example.com:443' : 'example.com'" maxlength="2048" required /></label>
           <label class="grid gap-2 text-sm">间隔（秒）<Input v-model="draft.interval_seconds" type="number" min="5" max="3600" required /></label>
           <label class="grid gap-2 text-sm">超时（秒）<Input v-model="draft.timeout_seconds" type="number" min="1" :max="Math.min(30, draft.interval_seconds)" required /></label>
           <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="draft.enabled" type="checkbox" class="size-4 accent-primary">启用任务</label>
         </fieldset>
+        <p class="text-xs text-muted-foreground">显示顺序越小越靠前；相同数值按创建顺序排列，探测任务本身不受影响。</p>
         <fieldset :disabled="busy" class="space-y-2">
           <legend class="mb-2 text-sm font-medium">
             执行节点

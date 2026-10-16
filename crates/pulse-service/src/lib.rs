@@ -389,6 +389,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/nodes/{node_id}/probes",
             get(management::probe_history),
         )
+        .route(
+            "/api/v1/probes/comparison",
+            get(management::probe_comparison),
+        )
         .merge(management::routes())
         .merge(ip_info::routes())
         .route("/api/rpc2", post(rpc_handler))
@@ -441,6 +445,7 @@ async fn request_guard(
         || path == "/api/rpc2"
         || path == "/api/v1/nodes"
         || path.starts_with("/api/v1/nodes/")
+        || path == "/api/v1/probes/comparison"
         || path.starts_with("/api/records/");
     let protected = protected
         || path == "/api/nodes"
@@ -718,8 +723,11 @@ async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, Api
         "common:getNodes" | "public:getNodesInformation" | "common:getNodesLatestStatus" => {
             let offline_after = state.offline_after_seconds;
             let max_nodes = state.max_nodes;
+            let probe_config = dashboard_probe_config(state);
             let dashboard = state
-                .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+                .database(move |storage| {
+                    storage.emerald_dashboard(offline_after, max_nodes, &probe_config)
+                })
                 .await?;
             let key = if request.method == "common:getNodesLatestStatus" {
                 "statuses"
@@ -763,8 +771,11 @@ async fn rpc_result(state: &AppState, request: &RpcRequest) -> Result<Value, Api
         "common:getDashboard" => {
             let offline_after = state.offline_after_seconds;
             let max_nodes = state.max_nodes;
+            let probe_config = dashboard_probe_config(state);
             state
-                .database(move |storage| storage.emerald_dashboard(offline_after, max_nodes))
+                .database(move |storage| {
+                    storage.emerald_dashboard(offline_after, max_nodes, &probe_config)
+                })
                 .await
         }
         "common:getNodeRecentStatus" | "common:getRecords" => {
@@ -848,7 +859,7 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
             "dataUpdateInterval": settings.agent_interval_seconds,
             "rpcTransportMode": "http",
             "defaultViewMode": "card",
-            "earthViewMode": "earth",
+            "earthViewMode": settings.earth_view_mode,
             "visitorInfoCardEnabled": true,
             "dailyExchangeRates": settings.daily_exchange_rates,
             "hideAdminEntryWhenLoggedOut": false,
@@ -1137,6 +1148,10 @@ fn history_hours(requested: Option<u32>, retention_days: u32) -> u32 {
         .clamp(1, retention_days.saturating_mul(24).max(1))
 }
 
+pub(crate) fn dashboard_probe_config(state: &AppState) -> control::DashboardProbeConfig {
+    control::DashboardProbeConfig::from_theme(&state.themes.settings(), state.retention_days)
+}
+
 fn current_time() -> Result<u64, ApiError> {
     unix_time_ms().map_err(map_storage_error)
 }
@@ -1408,6 +1423,7 @@ mod tests {
             "/api/records/ping?uuid=00000000-0000-0000-0000-000000000000",
             "/api/records/load?uuid=00000000-0000-0000-0000-000000000000",
             "/api/v1/nodes/00000000-0000-0000-0000-000000000000/probes",
+            "/api/v1/probes/comparison?task_id=example&hours=1",
             "/api/admin/state",
         ] {
             let response = router(state.clone())

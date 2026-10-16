@@ -57,15 +57,33 @@ test('public mode still hides hidden nodes and never exposes administrator write
   }
 })
 
+test('administrator can switch the Emerald header to the bundled map', async ({ page }) => {
+  await login(page, '/admin?section=site')
+  const original = await (await page.request.get('/api/admin/state')).json()
+  try {
+    await page.getByLabel('首页头部展示模式').selectOption('maps')
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect(page.getByRole('status').filter({ hasText: '已保存' })).toBeVisible()
+    const updated = await (await page.request.get('/api/admin/state')).json()
+    expect(updated.settings.earth_view_mode).toBe('maps')
+    await page.goto('/')
+    await expect(page.getByTestId('earth-map').locator('canvas')).toBeVisible()
+  }
+  finally {
+    await mutation(page.request, '/api/admin/settings', original.settings)
+  }
+})
+
 test('probe CRUD executes on the local Agent and exposes real result history', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   await login(page, '/admin?section=probes')
   const id = await waitForNode(page.request)
   await page.getByRole('button', { name: '刷新', exact: true }).first().click()
-  const name = `e2e-health-${testInfo.project.name}`
+  const name = `e2e-health-${testInfo.project.name}-${testInfo.retry}`
   let taskId = ''
   try {
     await page.getByLabel('名称', { exact: true }).fill(name)
+    await page.getByLabel('显示顺序', { exact: true }).fill('-1')
     await page.getByRole('combobox', { name: '类型', exact: true }).selectOption('http')
     await page.getByLabel('目标', { exact: true }).fill('http://127.0.0.1:18080/healthz')
     await page.getByLabel('间隔（秒）', { exact: true }).fill('5')
@@ -76,15 +94,34 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     expect((await saved).ok()).toBe(true)
     const state = await (await page.request.get('/api/admin/state')).json()
     taskId = state.probes.find((task: { name: string }) => task.name === name).id
+    expect(state.probes.find((task: { id: string }) => task.id === taskId).weight).toBe(-1)
     await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible()
     await expect.poll(async () => {
       const response = await page.request.get(`/api/v1/nodes/${id}/probes?hours=1`)
       return (await response.json()).records.some((record: { task_id: string, success: boolean, latency_ms: number }) => record.task_id === taskId && record.success && record.latency_ms >= 0)
     }, { timeout: 60_000 }).toBe(true)
     await page.goto('/')
-    const preview = page.getByLabel('最近 1 小时的平均延迟与失败率，每格 6 分钟')
+    const preview = page.getByLabel(/^最近 .+的平均延迟与探测结果，每格约 \d+ 分钟$/)
     await expect(preview).toContainText(name)
     await expect(preview).toContainText('ms')
+    await expect(preview).toContainText('失败')
+    const latencyPanel = page.getByRole('button', { name: `e2e-node ${name} 延迟` })
+    await expect(latencyPanel).toHaveAttribute('title', new RegExp(`${name} · 最近 1 小时平均延迟 \\d+ ms`))
+    await expect(page.getByRole('button', { name: `e2e-node ${name} 失败率` })).toHaveAttribute('title', new RegExp(`${name} · 最近 1 小时平均失败率 [\\d.]+%`))
+    await latencyPanel.focus()
+    await latencyPanel.press('Enter')
+    await expect(page.getByRole('dialog', { name: 'e2e-node 延迟 / 失败率' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: `e2e-node ${name} 失败率` }).click()
+    await expect(page.getByRole('dialog', { name: 'e2e-node 延迟 / 失败率' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: '列表视图' }).click()
+    const listProbe = page.getByRole('button', { name: 'e2e-node 延迟 / 失败率详情' })
+    await expect(listProbe.locator('[data-probe-metric="latency"] > *')).toHaveCount(10)
+    await expect(listProbe.locator('[data-probe-metric="loss"] > *')).toHaveCount(10)
+    await listProbe.click()
+    await expect(page.getByRole('dialog', { name: 'e2e-node 延迟 / 失败率' })).toBeVisible()
+    await page.keyboard.press('Escape')
     await page.goto(`/instance/${id}`)
     await expect(page.getByLabel('探测历史时间范围').getByRole('tab', { name: '1 小时', exact: true })).toHaveAttribute('data-state', 'active')
     await page.getByText('延迟与失败率汇总', { exact: true }).click()

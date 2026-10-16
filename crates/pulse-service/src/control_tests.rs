@@ -1,5 +1,5 @@
 use crate::{
-    control::{NodeOptions, ProbeDefinition},
+    control::{NodeOptions, ProbeDefinition, probe_percentile},
     storage::{Storage, StorageError, unix_time_ms},
 };
 
@@ -229,7 +229,9 @@ fn hidden_metadata_applies_to_all_public_read_models() {
         .unwrap();
     assert_eq!(storage.native_nodes(0, 100, 90).unwrap().0, 0);
     assert!(
-        storage.emerald_dashboard(90, 100).unwrap()["clients"]
+        storage
+            .emerald_dashboard(90, 100, &crate::control::DashboardProbeConfig::default())
+            .unwrap()["clients"]
             .as_object()
             .unwrap()
             .is_empty()
@@ -239,7 +241,7 @@ fn hidden_metadata_applies_to_all_public_read_models() {
         Err(StorageError::NotFound)
     ));
     assert!(matches!(
-        storage.probe_history(&node.node_id, 1, unix_time_ms().unwrap()),
+        storage.probe_history(&node.node_id, None, 1, unix_time_ms().unwrap()),
         Err(StorageError::NotFound)
     ));
     assert_eq!(
@@ -257,6 +259,7 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "local test".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "127.0.0.1:8080".into(),
         interval_seconds: 5,
@@ -295,11 +298,50 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
         storage.ingest_probes(&node.agent_token, &batch, now + 200, 7),
         Err(StorageError::RateLimited)
     ));
-    let history = storage.probe_history(&node.node_id, 1, now + 200).unwrap();
+    let history = storage
+        .probe_history(&node.node_id, None, 1, now + 200)
+        .unwrap();
     assert_eq!(history["summary"][0]["samples"], 2);
     assert_eq!(history["summary"][0]["loss_percent"], 0.0);
     assert!(history["tasks"][0].get("target").is_none());
+    let selected = storage
+        .probe_history(&node.node_id, Some(&task.id), 1, now + 200)
+        .unwrap();
+    assert_eq!(selected["records"].as_array().unwrap().len(), 2);
+    assert_eq!(selected["summary"][0]["samples"], 2);
+    assert!(matches!(
+        storage.probe_history(&node.node_id, Some("unknown"), 1, now + 200),
+        Err(StorageError::NotFound)
+    ));
+    let comparison = storage.probe_comparison(&task.id, 1, now + 200).unwrap();
+    assert_eq!(comparison.len(), 1);
+    assert_eq!(comparison[0]["node_id"], node.node_id);
+    assert_eq!(comparison[0]["samples"], 2);
+    assert_eq!(comparison[0]["avg_latency_ms"], 1.0);
+    assert!(comparison[0].get("target").is_none());
+    assert!(
+        storage
+            .probe_comparison(&task.id, 1, now + 2 * 3_600_000)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        storage
+            .probe_comparison(&task.id, 3, now + 2 * 3_600_000)
+            .unwrap()[0]["samples"],
+        2
+    );
+    assert!(matches!(
+        storage.probe_comparison("unknown", 1, now + 200),
+        Err(StorageError::NotFound)
+    ));
     storage.revoke_node(&node.node_id, now + 1000).unwrap();
+    assert!(
+        storage
+            .probe_comparison(&task.id, 1, now + 1000)
+            .unwrap()
+            .is_empty()
+    );
     assert!(matches!(
         storage.agent_runtime_config(&node.agent_token),
         Err(StorageError::Unauthorized)
@@ -311,12 +353,94 @@ fn probes_are_assigned_idempotent_bounded_and_revocable() {
 }
 
 #[test]
+fn probe_history_statistics_cover_samples_outside_chart_limit() {
+    let (_dir, storage, node) = fixture();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "percentiles".into(),
+        weight: 0,
+        kind: ProbeKind::Tcp,
+        target: "127.0.0.1:8080".into(),
+        interval_seconds: 5,
+        timeout_seconds: 1,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let now = unix_time_ms().unwrap();
+    {
+        let mut db = storage.connection().unwrap();
+        let tx = db.transaction().unwrap();
+        for index in 0..1_002 {
+            let latency = if index == 0 {
+                Some(1_000.0)
+            } else if index == 1 {
+                None
+            } else {
+                Some(10.0)
+            };
+            tx.execute(
+                "INSERT INTO metrics.probe_results (node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success,error) VALUES (?1,?2,?3,?4,?4,?5,?6,NULL)",
+                rusqlite::params![node.node_id, task.id, index.to_string(), i64::try_from(now).unwrap() - 3_003 + index * 3, latency, latency.is_some()],
+            ).unwrap();
+        }
+        tx.commit().unwrap();
+    }
+    let history = storage.probe_history(&node.node_id, None, 1, now).unwrap();
+    let summary = &history["summary"][0];
+    let recent = history["records"].as_array().unwrap();
+    let chart = history["chart"].as_array().unwrap();
+    assert_eq!(recent.len(), 100);
+    assert!(chart.len() <= 1_000);
+    assert_eq!(history["chart_source_points"], 1_002);
+    assert!(history["chart_bucket_ms"].as_u64().unwrap() > 1);
+    assert_eq!(history["range_end_unix_ms"], now);
+    assert!(
+        chart[0]["received_at_unix_ms"].as_i64().unwrap()
+            < recent[99]["received_at_unix_ms"].as_i64().unwrap()
+    );
+    assert_eq!(
+        chart
+            .iter()
+            .map(|point| point["samples"].as_u64().unwrap())
+            .sum::<u64>(),
+        1_002
+    );
+    assert_eq!(
+        chart
+            .iter()
+            .map(|point| point["failed_samples"].as_u64().unwrap())
+            .sum::<u64>(),
+        1
+    );
+    assert_eq!(summary["samples"], 1_002);
+    assert_eq!(summary["min_latency_ms"], 10.0);
+    assert_eq!(summary["max_latency_ms"], 1_000.0);
+    assert_eq!(summary["latest_latency_ms"], 10.0);
+    assert_eq!(summary["p50_latency_ms"], 10.0);
+    assert_eq!(summary["p95_latency_ms"], 10.0);
+    assert_eq!(summary["p99_latency_ms"], 10.0);
+    assert_eq!(summary["p99_p50_ratio"], 0.0);
+    assert!((summary["loss_percent"].as_f64().unwrap() - 100.0 / 1_002.0).abs() < 0.001);
+}
+
+#[test]
+fn probe_percentile_interpolates_and_preserves_empty_sample_state() {
+    assert_eq!(probe_percentile(&[], 50), None);
+    assert_eq!(probe_percentile(&[10.0], 99), Some(10.0));
+    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 50), Some(25.0));
+    assert_eq!(probe_percentile(&[10.0, 20.0, 30.0, 40.0], 95), Some(38.5));
+    assert!((probe_percentile(&[10.0, 20.0, 30.0, 40.0], 99).unwrap() - 39.7).abs() < 1e-9);
+}
+
+#[test]
 fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     let (_dir, storage, node) = fixture();
     let now = unix_time_ms().unwrap();
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "carrier".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "private-probe.example:80".into(),
         interval_seconds: 30,
@@ -341,7 +465,12 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
         ).unwrap();
     }
     let tasks = vec![task.clone(); 5];
-    let preview = crate::control::dashboard_probes(&db, &node.node_id, &tasks, now).unwrap();
+    let config = crate::control::DashboardProbeConfig {
+        row_count: 3,
+        ..Default::default()
+    };
+    let preview =
+        crate::control::dashboard_probes(&db, &node.node_id, &tasks, now, &config).unwrap();
     assert_eq!(preview.len(), 3);
     assert_eq!(preview[0]["points"].as_array().unwrap().len(), 1);
     assert_eq!(preview[0]["kind"], "tcp");
@@ -354,16 +483,169 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     assert!(preview[0].get("node_ids").is_none());
     task.enabled = false;
     assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now)
+        crate::control::dashboard_probes(&db, &node.node_id, &[task.clone()], now, &config)
             .unwrap()
             .is_empty()
     );
     task.enabled = true;
     task.node_ids = vec!["another-node".into()];
     assert!(
-        crate::control::dashboard_probes(&db, &node.node_id, &[task], now)
+        crate::control::dashboard_probes(&db, &node.node_id, &[task], now, &config)
             .unwrap()
             .is_empty()
+    );
+}
+
+#[test]
+fn probe_tasks_keep_creation_order_across_admin_public_and_dashboard_views() {
+    let (_dir, storage, node) = fixture();
+    let mut first = ProbeDefinition {
+        id: String::new(),
+        name: "z-first".into(),
+        weight: 0,
+        kind: ProbeKind::Tcp,
+        target: "127.0.0.1:8080".into(),
+        interval_seconds: 60,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut first).unwrap();
+    let mut legacy = serde_json::to_value(&first).unwrap();
+    legacy.as_object_mut().unwrap().remove("weight");
+    let restored: ProbeDefinition = serde_json::from_value(legacy).unwrap();
+    assert_eq!(restored.weight, 0);
+    let mut second = ProbeDefinition {
+        id: String::new(),
+        name: "a-second".into(),
+        ..first.clone()
+    };
+    storage.save_probe(&mut second).unwrap();
+
+    let admin = storage.admin_state().unwrap();
+    assert_eq!(admin["probes"][0]["id"], first.id);
+    assert_eq!(admin["probes"][1]["id"], second.id);
+    let public = storage.public_ping_tasks().unwrap();
+    assert_eq!(public[0]["id"], first.id);
+    assert_eq!(public[1]["id"], second.id);
+
+    let db = storage.connection().unwrap();
+    let tasks = crate::control::dashboard_probe_tasks(&db).unwrap();
+    let preview = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &tasks,
+        unix_time_ms().unwrap(),
+        &crate::control::DashboardProbeConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(preview[0]["id"], first.id);
+    assert_eq!(preview[1]["id"], second.id);
+    drop(db);
+
+    second.weight = 100_001;
+    assert!(storage.save_probe(&mut second).is_err());
+    second.weight = -1;
+    storage.save_probe(&mut second).unwrap();
+    let admin = storage.admin_state().unwrap();
+    assert_eq!(admin["probes"][0]["id"], second.id);
+    let public = storage.public_ping_tasks().unwrap();
+    assert_eq!(public[0]["id"], second.id);
+    assert_eq!(public[0]["weight"], -1);
+    let db = storage.connection().unwrap();
+    let tasks = crate::control::dashboard_probe_tasks(&db).unwrap();
+    let preview = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &tasks,
+        unix_time_ms().unwrap(),
+        &crate::control::DashboardProbeConfig::default(),
+    )
+    .unwrap();
+    assert_eq!(preview[0]["id"], second.id);
+}
+
+#[test]
+fn dashboard_probe_preview_honors_history_task_selection_and_row_limit() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "carrier".into(),
+        weight: 0,
+        kind: ProbeKind::Tcp,
+        target: "private-probe.example:80".into(),
+        interval_seconds: 30,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let db = storage.connection().unwrap();
+    db.execute(
+        "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success) VALUES(?1,?2,'older',?3,?3,30,1)",
+        rusqlite::params![node.node_id, task.id, i64::try_from(now - 5_400_000).unwrap()],
+    ).unwrap();
+    let other = ProbeDefinition {
+        id: uuid::Uuid::new_v4().to_string(),
+        name: "other".into(),
+        ..task.clone()
+    };
+    let configured = crate::control::DashboardProbeConfig {
+        hours: 2,
+        row_count: 2,
+        tasks_by_node: std::collections::HashMap::from([(
+            node.node_id.clone(),
+            vec![other.id.clone(), task.id.clone()],
+        )]),
+    };
+    let custom = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &[task.clone(), other.clone()],
+        now,
+        &configured,
+    )
+    .unwrap();
+    assert_eq!(custom.len(), 2);
+    assert_eq!(custom[0]["id"], other.id);
+    assert_eq!(custom[1]["id"], task.id);
+    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 1);
+    assert_eq!(custom[1]["points"][0]["bucket"], 2);
+    assert_eq!(custom[1]["points"][0]["latency"], 30.0);
+    let eight_tasks = (0..8)
+        .map(|index| ProbeDefinition {
+            id: uuid::Uuid::new_v4().to_string(),
+            name: format!("task-{index}"),
+            ..task.clone()
+        })
+        .collect::<Vec<_>>();
+    let eight_rows = crate::control::DashboardProbeConfig {
+        row_count: 8,
+        ..Default::default()
+    };
+    assert_eq!(
+        crate::control::dashboard_probes(&db, &node.node_id, &eight_tasks, now, &eight_rows)
+            .unwrap()
+            .len(),
+        8
+    );
+}
+
+#[test]
+fn dashboard_probe_theme_limits_match_retention_and_eight_rows() {
+    let node = uuid::Uuid::new_v4().to_string();
+    let settings = serde_json::json!({
+        "homePingHistoryHours": 168,
+        "homePingRowCount": 99,
+        "homePingTasksByNode": { (node.clone()): ["task-8", "task-8", "task-1"] }
+    });
+    let config = crate::control::DashboardProbeConfig::from_theme(&settings, 1);
+    assert_eq!(config.hours, 24);
+    assert_eq!(config.row_count, 8);
+    assert_eq!(
+        config.tasks_by_node[&node],
+        vec!["task-8".to_owned(), "task-1".to_owned()]
     );
 }
 
@@ -405,6 +687,7 @@ fn configuration_errors_cannot_create_arbitrary_probe_commands() {
     let mut task = ProbeDefinition {
         id: String::new(),
         name: "invalid".into(),
+        weight: 0,
         kind: ProbeKind::Icmp,
         target: "-c 1 example.test".into(),
         interval_seconds: 5,
@@ -422,6 +705,36 @@ fn configuration_errors_cannot_create_arbitrary_probe_commands() {
 }
 
 #[test]
+fn emerald_header_mode_defaults_for_existing_settings_and_rejects_unknown_modes() {
+    let old_settings = serde_json::json!({
+        "site_name": "Senulun",
+        "private_site": true,
+        "agent_interval_seconds": 3
+    });
+    let settings: crate::control::Settings = serde_json::from_value(old_settings).unwrap();
+    assert_eq!(
+        serde_json::to_value(settings.earth_view_mode).unwrap(),
+        serde_json::json!("earth")
+    );
+    for mode in ["earth", "earth-stop", "maps", "cards", "hide"] {
+        let settings: crate::control::Settings = serde_json::from_value(serde_json::json!({
+            "earth_view_mode": mode
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(settings.earth_view_mode).unwrap(),
+            serde_json::json!(mode)
+        );
+    }
+    assert!(
+        serde_json::from_value::<crate::control::Settings>(serde_json::json!({
+            "earth_view_mode": "unsupported"
+        }))
+        .is_err()
+    );
+}
+
+#[test]
 fn slow_reporting_extends_the_offline_window_consistently() {
     let (_dir, storage, _node) = fixture();
     storage
@@ -431,6 +744,7 @@ fn slow_reporting_extends_the_offline_window_consistently() {
             agent_interval_seconds: 300,
             ip_info_enabled: false,
             daily_exchange_rates: false,
+            earth_view_mode: crate::control::EarthViewMode::Earth,
         })
         .unwrap();
     let db = storage.connection().unwrap();
@@ -450,6 +764,7 @@ fn deleting_the_last_assigned_node_never_turns_a_task_into_global_monitoring() {
     let mut probe = ProbeDefinition {
         id: String::new(),
         name: "scoped".into(),
+        weight: 0,
         kind: ProbeKind::Tcp,
         target: "127.0.0.1:8080".into(),
         interval_seconds: 5,

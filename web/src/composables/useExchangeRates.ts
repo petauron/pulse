@@ -1,5 +1,6 @@
 import type { CurrencyCode } from '@/utils/financeHelper'
 import { useNow } from '@vueuse/core'
+import dayjs from 'dayjs'
 import { computed, onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { CURRENCY_SYMBOLS, REFERENCE_EXCHANGE_RATES } from '@/utils/financeHelper'
@@ -25,7 +26,7 @@ export function useExchangeRates() {
   const date = shallowRef('')
   const live = computed(() => Boolean(date.value))
   const clock = useNow({ interval: 60000 })
-  const day = computed(() => clock.value.toISOString().slice(0, 10))
+  const day = computed(() => dayjs(clock.value).format('YYYY-MM-DD'))
   let controller: AbortController | undefined
   watch(() => [app.publicSettings?.theme_settings?.dailyExchangeRates, day.value] as const, async ([enabled, today]) => {
     controller?.abort()
