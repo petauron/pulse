@@ -51,15 +51,15 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
 </script>
 
 <template>
-  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" :aria-label="`最近 ${historyLabel}的平均延迟与失败率，每格约 ${historyHours * 6} 分钟`">
+  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" :aria-label="`最近 ${historyLabel}的平均延迟与丢包（TCP/HTTP 为探测失败率），每格约 ${historyHours * 6} 分钟`">
     <div v-for="row in rows" :key="row.id" class="grid h-8 grid-cols-[minmax(64px,0.75fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2">
       <DataTooltip placement="top" :content="row.name" class="min-w-0" content-class="min-w-24">
         <span class="block truncate font-medium text-foreground/75">{{ row.name }}</span>
         <span v-if="row.stale" class="sr-only">暂无数据</span>
       </DataTooltip>
-      <div v-for="metric in metrics" :key="metric" role="group" class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left" :aria-label="`${row.name} ${metric === 'latency' ? '延迟' : (row.kind === 'icmp' ? '丢包率' : '失败率')} ${row.stale ? '暂无数据' : row[metric]}`">
+      <div v-for="metric in metrics" :key="metric" role="group" class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left" :aria-label="`${row.name} ${metric === 'latency' ? '延迟' : row.kind === 'icmp' ? '丢包率' : '丢包（TCP/HTTP 探测失败率）'} ${row.stale ? '暂无数据' : row[metric]}`">
         <div class="relative flex items-center justify-between leading-none">
-          <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : (row.kind === 'icmp' ? '丢包' : '失败') }}</span>
+          <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : '丢包' }}</span>
           <div class="mx-1 flex-1 border-t-2 border-dotted border-gray-500/10" />
           <span class="shrink-0 font-medium tabular-nums text-foreground/85">{{ row.stale ? '—' : row[metric] }}</span>
         </div>
@@ -79,7 +79,7 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
     <span v-if="!rows.length" class="text-muted-foreground">未配置探测</span>
   </div>
   <div v-else class="flex h-8 w-full flex-col justify-center gap-px overflow-hidden" aria-label="探测延迟概览，点击查看详情">
-    <div v-for="row in rows" :key="row.id" class="grid h-[3px] shrink-0 grid-cols-10 gap-px" :title="`${row.name} · 延迟 ${row.latency} · 失败率 ${row.loss}`">
+    <div v-for="row in rows" :key="row.id" class="grid h-[3px] shrink-0 grid-cols-10 gap-px" :title="`${row.name} · 延迟 ${row.latency} · 丢包 ${row.loss}${row.kind === 'icmp' ? '' : '（探测失败率）'}`">
       <span v-for="(point, i) in row.points" :key="i" class="h-full bg-muted-foreground/15" :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor('latency', point.latency, app.publicSettings?.theme_settings) }" />
     </div>
     <span v-if="!rows.length" class="text-[11px] text-muted-foreground">未配置探测</span>
