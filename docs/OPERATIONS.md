@@ -45,6 +45,10 @@ sudo systemctl start senulun-service
 ```
 
 The installer creates a dedicated account and mode-0700 state directory, records the previous binary, installs a hardened unit, and enables it without starting an unconfigured first installation. An update restarts the unit only if it was already running.
+It refuses a fresh install when the old Pulse unit or state directory exists.
+Renaming an existing installation requires a reviewed stop, consistent backup,
+credential and data copy, and independent health check; running the new
+installer beside the old unit is not a migration.
 
 Create an enrollment token locally against the Service database. The JSON response contains an ID, the only display of the token, and its expiry time:
 

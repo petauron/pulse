@@ -12,8 +12,8 @@ usage() {
 component=$1
 binary=$2
 case "$component" in
-    service) account=senulun ; state_directory=/var/lib/senulun ;;
-    agent) account=senulun-agent ; state_directory=/var/lib/senulun-agent ;;
+    service) account=senulun ; state_directory=/var/lib/senulun ; legacy_state_directory=/var/lib/pulse ;;
+    agent) account=senulun-agent ; state_directory=/var/lib/senulun-agent ; legacy_state_directory=/var/lib/pulse-agent ;;
     *) usage ;;
 esac
 
@@ -41,6 +41,20 @@ target_binary=$release_directory/senulun-$component
 current_link=/usr/local/bin/senulun-$component
 previous_link=/opt/senulun/previous-$component
 temporary_link=/usr/local/bin/.senulun-$component.new
+
+# This installer is not a migration tool. A fresh Senulun unit beside a legacy
+# Pulse unit could create two database writers or enroll the same host twice.
+if [ ! -L "$current_link" ] && [ ! -e "$current_link" ]; then
+    if [ -e "/etc/systemd/system/pulse-$component.service" ] ||
+       [ -e "$legacy_state_directory" ]; then
+        echo "legacy Pulse resources exist; use the reviewed stop-and-migrate procedure" >&2
+        exit 1
+    fi
+    if [ "$component" = agent ] && [ -e /etc/systemd/system/vastora-pulse-agent.service ]; then
+        echo "managed Pulse Agent exists; migrate it through Vastora" >&2
+        exit 1
+    fi
+fi
 
 old_target=
 if [ -L "$current_link" ]; then
