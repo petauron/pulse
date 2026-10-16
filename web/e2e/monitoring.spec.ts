@@ -251,7 +251,7 @@ test('probe analysis switches tasks without changing the selected chart series',
   await expect(failureChart).toHaveCount(0)
   await smoothing.click()
   await expect(smoothing).toHaveAttribute('aria-pressed', 'false')
-  const failures = page.getByRole('button', { name: '丢包 / 失败率' })
+  const failures = page.getByRole('button', { name: '丢包率 / 失败率' })
   await failures.click()
   await expect(failures).toHaveAttribute('aria-pressed', 'false')
   await failures.click()
