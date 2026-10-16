@@ -67,7 +67,7 @@ test('renamed repository binds new provenance and keeps stable distribution name
   assert.ok(proof.buildDefinition.resolvedDependencies.every((item) => item.uri.startsWith(`git+https://github.com/${repository}@`)));
   assert.equal(proof.runDetails.builder.id, `https://github.com/${renamed.GITHUB_WORKFLOW_REF}`);
   assert.throws(() => provenanceFor({ tag, sha: sourceSha }, {
-    ...renamed, GITHUB_WORKFLOW_REF: 'petauron/pulse/.github/workflows/release.yml@refs/heads/main',
+    ...renamed, GITHUB_WORKFLOW_REF: 'petauron/senulun/.github/workflows/release.yml@refs/heads/main',
   }));
   for (const file of ['Dockerfile', 'Dockerfile.release']) {
     assert.ok(readFileSync(file, 'utf8').includes(`https://github.com/${repository}`));
@@ -75,7 +75,7 @@ test('renamed repository binds new provenance and keeps stable distribution name
   const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
   assert.ok(workflow.includes('ghcr.io/${{ github.repository }}'));
   const config = JSON.parse(readFileSync('release-please-config.json', 'utf8'));
-  assert.equal(config.packages['.']['package-name'], 'pulse');
+  assert.equal(config.packages['.']['package-name'], 'senulun');
 });
 
 test('release workflow retains draft permissions, identity gates and one publication path', () => {

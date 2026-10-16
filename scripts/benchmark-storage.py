@@ -64,12 +64,12 @@ class Service:
         self.base = f"http://127.0.0.1:{port}"
         self.jar = http.cookiejar.CookieJar()
         self.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(self.jar))
-        environment = {k: v for k, v in os.environ.items() if not k.startswith("PULSE_")}
+        environment = {k: v for k, v in os.environ.items() if not k.startswith("SENULUN_")}
         environment.update({
-            "PULSE_DATABASE_PATH": str(directory / "pulse.db"),
-            "PULSE_LISTEN": f"127.0.0.1:{port}", "PULSE_PUBLIC_URL": self.base,
-            "PULSE_MAX_NODES": "10",
-            "PULSE_MAX_DATABASE_BYTES": "67108864", "RUST_LOG": "error",
+            "SENULUN_DATABASE_PATH": str(directory / "senulun.db"),
+            "SENULUN_LISTEN": f"127.0.0.1:{port}", "SENULUN_PUBLIC_URL": self.base,
+            "SENULUN_MAX_NODES": "10",
+            "SENULUN_MAX_DATABASE_BYTES": "67108864", "RUST_LOG": "error",
         })
         self.environment = environment
         enrollment = subprocess.run([str(binary), "enrollment", "create", "--ttl-seconds", "600"],
@@ -94,7 +94,7 @@ class Service:
                 "region": "SG", "group": "test",
             }, token=secret)
             self.token, self.node = credentials["agent_token"], credentials["node_id"]
-            with sqlite3.connect(f"file:{directory / 'pulse.db'}?mode=ro", uri=True) as db:
+            with sqlite3.connect(f"file:{directory / 'senulun.db'}?mode=ro", uri=True) as db:
                 schema = db.execute("PRAGMA user_version").fetchone()[0]
             if schema != expected_schema:
                 raise RuntimeError(f"{name}: expected schema {expected_schema}, got {schema}; check build artifacts")
@@ -155,8 +155,8 @@ class Service:
                 self.process.wait(timeout=10)
 
     def durable_count(self):
-        metrics = self.directory / "pulse.metrics.db"
-        database = metrics if metrics.exists() else self.directory / "pulse.db"
+        metrics = self.directory / "senulun.metrics.db"
+        database = metrics if metrics.exists() else self.directory / "senulun.db"
         with sqlite3.connect(database) as db:
             assert db.execute("PRAGMA integrity_check(1)").fetchone()[0] == "ok"
             count = db.execute("SELECT count(*) FROM snapshots").fetchone()[0]
@@ -227,7 +227,7 @@ def verify_upgrade(binaries):
                 time.sleep(1)
             service.verify()
             # Leave old-version WAL behind: migration/backup must recover it.
-            assert (service.directory / "pulse.db-wal").stat().st_size > 32
+            assert (service.directory / "senulun.db-wal").stat().st_size > 32
             service.close(crash=True)
             service.process = subprocess.Popen([str(binaries["candidate"]), "serve"],
                 env=service.environment, cwd=service.directory,
@@ -246,7 +246,7 @@ def verify_upgrade(binaries):
             service.verify()
             service.submit()
             service.verify()
-            backups = list(service.directory.glob("pulse.db.backup-*"))
+            backups = list(service.directory.glob("senulun.db.backup-*"))
             assert len(backups) == 1 and backups[0].is_file()
             db = sqlite3.connect(f"file:{backups[0]}?mode=ro", uri=True)
             try:
@@ -258,7 +258,7 @@ def verify_upgrade(binaries):
                 cwd=service.directory, capture_output=True, check=True, timeout=20)
             paired = Path(result.stdout.decode().strip())
             assert paired.parent == service.directory and paired.is_dir()
-            assert {"pulse.db", "pulse.metrics.db", "manifest.json"} <= {p.name for p in paired.iterdir()}
+            assert {"senulun.db", "senulun.metrics.db", "manifest.json"} <= {p.name for p in paired.iterdir()}
             service.close(crash=True)
             assert service.durable_count() == 4
             emit(event="upgrade_verified", old_schema=3, new_schema=4,

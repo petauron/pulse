@@ -79,17 +79,17 @@ impl AuthConfig {
     /// # Errors
     /// Returns an error for missing OAuth settings, invalid environment text, or an unreadable secret file.
     pub fn from_env() -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let public_url = match std::env::var("PULSE_PUBLIC_URL") {
+        let public_url = match std::env::var("SENULUN_PUBLIC_URL") {
             Ok(value) => value,
             Err(std::env::VarError::NotPresent) => Self::default().public_url,
-            Err(_) => return Err("PULSE_PUBLIC_URL must contain valid Unicode".into()),
+            Err(_) => return Err("SENULUN_PUBLIC_URL must contain valid Unicode".into()),
         };
         let client_id =
-            std::env::var_os("PULSE_GITHUB_CLIENT_ID").filter(|value| !value.is_empty());
+            std::env::var_os("SENULUN_GITHUB_CLIENT_ID").filter(|value| !value.is_empty());
         let secret_file =
-            std::env::var_os("PULSE_GITHUB_CLIENT_SECRET_FILE").filter(|value| !value.is_empty());
+            std::env::var_os("SENULUN_GITHUB_CLIENT_SECRET_FILE").filter(|value| !value.is_empty());
         let allowed_user_id =
-            std::env::var_os("PULSE_GITHUB_ALLOWED_USER_ID").filter(|value| !value.is_empty());
+            std::env::var_os("SENULUN_GITHUB_ALLOWED_USER_ID").filter(|value| !value.is_empty());
         let github = match (client_id, secret_file, allowed_user_id) {
             (None, None, None) => None,
             (Some(client_id), Some(secret_file), Some(allowed_user_id)) => {
@@ -100,7 +100,7 @@ impl AuthConfig {
                 let client_secret = read_secret_file(&PathBuf::from(secret_file), 1)?;
                 Some(GithubOAuthConfig { client_id, client_secret, allowed_user_id })
             }
-            _ => return Err("GitHub OAuth requires PULSE_GITHUB_CLIENT_ID, PULSE_GITHUB_CLIENT_SECRET_FILE, and PULSE_GITHUB_ALLOWED_USER_ID together".into()),
+            _ => return Err("GitHub OAuth requires SENULUN_GITHUB_CLIENT_ID, SENULUN_GITHUB_CLIENT_SECRET_FILE, and SENULUN_GITHUB_ALLOWED_USER_ID together".into()),
         };
         Ok(Self { public_url, github })
     }
@@ -255,7 +255,7 @@ impl AuthState {
             || url.fragment().is_some()
             || url.path() != "/"
         {
-            return Err("PULSE_PUBLIC_URL must be an HTTPS origin, or HTTP on localhost for local development".into());
+            return Err("SENULUN_PUBLIC_URL must be an HTTPS origin, or HTTP on localhost for local development".into());
         }
         if let Some(github) = &config.github
             && (github.client_id.trim().is_empty()
@@ -479,7 +479,7 @@ impl AuthState {
         {
             return Err(AuthError {
                 status: StatusCode::FORBIDDEN,
-                message: "request Origin does not match PULSE_PUBLIC_URL",
+                message: "request Origin does not match SENULUN_PUBLIC_URL",
             });
         }
         Ok(())
@@ -1147,7 +1147,7 @@ fn limit_database_pages(
     let pages: i64 = connection.query_row("PRAGMA page_count", [], |row| row.get(0))?;
     let pages = u64::try_from(pages).map_err(|_| "invalid SQLite page count")?;
     if pages.saturating_mul(page_size) > max_database_bytes {
-        return Err("database already exceeds PULSE_MAX_DATABASE_BYTES".into());
+        return Err("database already exceeds SENULUN_MAX_DATABASE_BYTES".into());
     }
     // Match Storage's strict byte ceiling, including non-page-aligned limits.
     let max_pages = i64::try_from(max_database_bytes / page_size)
@@ -1408,7 +1408,7 @@ mod tests {
 
     fn state() -> (tempfile::TempDir, AuthState) {
         let directory = tempfile::tempdir().unwrap();
-        let database = directory.path().join("pulse.db");
+        let database = directory.path().join("senulun.db");
         let _storage = crate::storage::Storage::open(&database, 32 * 1024 * 1024).unwrap();
         let state = AuthState::new(
             &database,
@@ -1616,7 +1616,7 @@ mod tests {
     async fn concurrent_initialization_creates_exactly_one_administrator() {
         let (directory, first) = state();
         let second = AuthState::new(
-            &directory.path().join("pulse.db"),
+            &directory.path().join("senulun.db"),
             AuthConfig::default(),
             32 * 1024 * 1024,
         )
@@ -1658,7 +1658,7 @@ mod tests {
                 .count(),
             1
         );
-        let connection = Connection::open(directory.path().join("pulse.db")).unwrap();
+        let connection = Connection::open(directory.path().join("senulun.db")).unwrap();
         let count: i64 = connection
             .query_row("SELECT COUNT(*) FROM auth_admin", [], |row| row.get(0))
             .unwrap();

@@ -123,7 +123,7 @@ index 0000000..e76143a
 +});
 +
 +it("uses HTTP without attempting WebSocket in the Pulse package", async () => {
-+  vi.stubEnv("VITE_PULSE_HTTP_RPC", "true");
++  vi.stubEnv("VITE_SENULUN_HTTP_RPC", "true");
 +  const ws = vi.fn();
 +  vi.stubGlobal("WebSocket", ws);
 +  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
@@ -215,7 +215,7 @@ index 2be9bfe..fc600d6 100644
 -  constructor(private readonly baseUrl = "/api/rpc2") {
 +  constructor(
 +    private readonly baseUrl = "/api/rpc2",
-+    private readonly useWebSocket = import.meta.env.VITE_PULSE_HTTP_RPC !== "true",
++    private readonly useWebSocket = import.meta.env.VITE_SENULUN_HTTP_RPC !== "true",
 +  ) {
      this.autoConnect();
    }

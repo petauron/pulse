@@ -18,7 +18,7 @@ function shouldIgnoreRollupWarning(warning: { code?: string, id?: string }): boo
 export default defineConfig({
   define: {
     __BUILD_VERSION__: JSON.stringify(packageJson.version),
-    __BUILD_GIT_HASH__: JSON.stringify(process.env.PULSE_BUILD_GIT_HASH || 'dev'),
+    __BUILD_GIT_HASH__: JSON.stringify(process.env.SENULUN_BUILD_GIT_HASH || 'dev'),
   },
   plugins: [
     vue(),

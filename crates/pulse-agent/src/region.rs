@@ -24,7 +24,7 @@ impl Provider {
             "disabled" => Ok(Self::Disabled),
             "ipinfo" => Ok(Self::Ipinfo),
             "" | "geojs" => Ok(Self::Geojs),
-            _ => Err("PULSE_GEOIP_PROVIDER must be disabled, ipinfo, or geojs"),
+            _ => Err("SENULUN_GEOIP_PROVIDER must be disabled, ipinfo, or geojs"),
         }
     }
 
@@ -53,7 +53,7 @@ impl RegionResolver {
             .map(|endpoint| {
                 tracing::info!(
                     provider = ?provider,
-                    "automatic country discovery enabled; provider sees public egress IP and Agent version, not Senulun credentials or metrics; set PULSE_GEOIP_PROVIDER=disabled to opt out"
+                    "automatic country discovery enabled; provider sees public egress IP and Agent version, not Senulun credentials or metrics; set SENULUN_GEOIP_PROVIDER=disabled to opt out"
                 );
                 tokio::spawn(async move {
                     loop {
@@ -64,7 +64,7 @@ impl RegionResolver {
             });
         if manual_region.is_empty() && provider == Provider::Disabled {
             tracing::warn!(
-                "automatic country discovery is disabled and node region is empty; set PULSE_NODE_REGION or enable PULSE_GEOIP_PROVIDER for globe placement"
+                "automatic country discovery is disabled and node region is empty; set SENULUN_NODE_REGION or enable SENULUN_GEOIP_PROVIDER for globe placement"
             );
         }
         Self { current, worker }

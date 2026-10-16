@@ -11,7 +11,7 @@ npm run build
 npm run test:e2e
 ```
 
-Development requests under `/api` are proxied to `http://127.0.0.1:8080`. Production assets are generated in `dist` and embedded into `pulse-service`.
+Development requests under `/api` are proxied to `http://127.0.0.1:8080`. Production assets are generated in `dist` and embedded into `senulun-service`.
 
 The build registers only referenced Iconify glyphs and packages flags locally. Runtime API, image, script, style, and WebSocket requests are restricted to the Senulun origin by the Service content security policy.
 

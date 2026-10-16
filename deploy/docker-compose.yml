@@ -1,28 +1,28 @@
 # Requires an image built from this authentication-enabled revision; Alpha.2 lacks these APIs.
 # Keep the optional GitHub client secret private and readable by UID 65532.
 services:
-  pulse:
-    image: ${PULSE_SERVICE_IMAGE:?Set PULSE_SERVICE_IMAGE to an image built from this revision}
+  senulun:
+    image: ${SENULUN_SERVICE_IMAGE:?Set SENULUN_SERVICE_IMAGE to an image built from this revision}
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      PULSE_LISTEN: "0.0.0.0:8080"
-      PULSE_ALLOW_PUBLIC_LISTEN: "true"
-      PULSE_DATABASE_PATH: /var/lib/pulse/pulse.db
-      PULSE_PUBLIC_URL: ${PULSE_PUBLIC_URL:?Set the exact browser-facing HTTPS origin}
+      SENULUN_LISTEN: "0.0.0.0:8080"
+      SENULUN_ALLOW_PUBLIC_LISTEN: "true"
+      SENULUN_DATABASE_PATH: /var/lib/senulun/senulun.db
+      SENULUN_PUBLIC_URL: ${SENULUN_PUBLIC_URL:?Set the exact browser-facing HTTPS origin}
       # Optional GitHub OAuth: uncomment these and the two secret entries below together.
-      # PULSE_GITHUB_CLIENT_ID: ${PULSE_GITHUB_CLIENT_ID}
-      # PULSE_GITHUB_CLIENT_SECRET_FILE: /run/secrets/pulse_github_secret
-      # PULSE_GITHUB_ALLOWED_USER_ID: ${PULSE_GITHUB_ALLOWED_USER_ID}
+      # SENULUN_GITHUB_CLIENT_ID: ${SENULUN_GITHUB_CLIENT_ID}
+      # SENULUN_GITHUB_CLIENT_SECRET_FILE: /run/secrets/senulun_github_secret
+      # SENULUN_GITHUB_ALLOWED_USER_ID: ${SENULUN_GITHUB_ALLOWED_USER_ID}
     volumes:
-      - pulse_data:/var/lib/pulse
+      - senulun_data:/var/lib/senulun
     # secrets:
-    #   - pulse_github_secret
+    #   - senulun_github_secret
 
 volumes:
-  pulse_data:
+  senulun_data:
 
 # secrets:
-#   pulse_github_secret:
-#     file: ${PULSE_GITHUB_CLIENT_SECRET_SOURCE_FILE}
+#   senulun_github_secret:
+#     file: ${SENULUN_GITHUB_CLIENT_SECRET_SOURCE_FILE}

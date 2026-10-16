@@ -21,7 +21,7 @@ git apply /path/to/pulse.patch
 npm ci
 npm run lint
 npm test
-VITE_PULSE_HTTP_RPC=true npm run build
+VITE_SENULUN_HTTP_RPC=true npm run build
 cp LICENSE dist/LICENSE.LuminaPlus
 node scripts/package-zip.mjs
 ```

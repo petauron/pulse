@@ -95,11 +95,11 @@ pub(super) fn configure_limit(db: &Connection, schema: &str, max_bytes: u64) -> 
         })?,
     )?;
     if page_size == 0 || max_bytes < page_size {
-        return Err("PULSE_MAX_DATABASE_BYTES must contain at least one SQLite page".into());
+        return Err("SENULUN_MAX_DATABASE_BYTES must contain at least one SQLite page".into());
     }
     if pages.saturating_mul(page_size) > max_bytes {
         return Err(format!(
-            "{schema} database already exceeds PULSE_MAX_DATABASE_BYTES ({max_bytes} bytes)"
+            "{schema} database already exceeds SENULUN_MAX_DATABASE_BYTES ({max_bytes} bytes)"
         )
         .into());
     }
@@ -319,8 +319,8 @@ pub(super) fn backup(db: &mut Connection, control: &Path) -> Result<PathBuf> {
     let metrics_source = Connection::open_with_flags(path(control)?, flags)?;
     main_source.busy_timeout(Duration::from_secs(5))?;
     metrics_source.busy_timeout(Duration::from_secs(5))?;
-    online_backup(&main_source, &temporary.join("pulse.db"))?;
-    online_backup(&metrics_source, &temporary.join("pulse.metrics.db"))?;
+    online_backup(&main_source, &temporary.join("senulun.db"))?;
+    online_backup(&metrics_source, &temporary.join("senulun.metrics.db"))?;
     let identity: String = reservation.query_row(
         "SELECT store_id FROM main.storage_identity WHERE id=1",
         [],
@@ -331,7 +331,7 @@ pub(super) fn backup(db: &mut Connection, control: &Path) -> Result<PathBuf> {
     reservation.rollback()?;
     let manifest = serde_json::json!({
         "format_version": 1, "store_id": identity,
-        "control": "pulse.db", "metrics": "pulse.metrics.db",
+        "control": "senulun.db", "metrics": "senulun.metrics.db",
         "control_schema": control_version, "metrics_schema": VERSION,
         "created_at_unix_ms": super::unix_time_ms()?
     });

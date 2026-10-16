@@ -91,7 +91,7 @@ Rules monitor offline state, CPU/memory/disk utilization, traffic-limit percenta
 or days until expiry. A rule has a duration and a notification cooldown. Missing
 or stale utilization cannot prove recovery; pending duration is reset until fresh
 data arrives. Empty channel selection keeps the incident inside Senulun.
-The offline timeout is the larger of `PULSE_OFFLINE_AFTER_SECONDS` and three
+The offline timeout is the larger of `SENULUN_OFFLINE_AFTER_SECONDS` and three
 centrally configured report intervals, so a 300-second interval does not falsely
 toggle offline every 90 seconds. Dashboard status and alert evaluation use the
 same effective timeout.
@@ -129,8 +129,8 @@ for the exact distribution version and uses a fixed, two-second
 the fallback. Virtualization auto-detection is best-effort, and explicit
 configuration wins. No shell or PATH lookup is used.
 
-Set `PULSE_EXTENDED_METRICS=disabled`, `PULSE_GPU_METRICS=disabled`, or
-`PULSE_AUTODETECT_VIRTUALIZATION=disabled` to disable the corresponding collection.
+Set `SENULUN_EXTENDED_METRICS=disabled`, `SENULUN_GPU_METRICS=disabled`, or
+`SENULUN_AUTODETECT_VIRTUALIZATION=disabled` to disable the corresponding collection.
 No full-process cache or arbitrary command facility is maintained. The default
 host-reporting interval is three seconds, adjustable centrally within 1–300 seconds.
 Size retention and database capacity for the chosen interval before production use.

@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn install_activate_settings_and_fallback_survive_restart() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("pulse.db");
+        let path = directory.path().join("senulun.db");
         let store = ThemeStore::open(&path).unwrap();
         let archive = theme_zip(&[
             ("komari-theme.json", br#"{"name":"Test","short":"test","version":"1.0.0","configuration":{"type":"managed","data":[{"key":"title","default":"Hello"}]}}"#),
@@ -530,7 +530,7 @@ mod tests {
             .unwrap();
         assert_eq!(store.settings()["title"], "Changed");
         assert_eq!(store.read_asset("").unwrap().1, b"<html>Theme</html>");
-        assert!(store.read_asset("../pulse.db").is_none());
+        assert!(store.read_asset("../senulun.db").is_none());
         let restored = ThemeStore::open(&path).unwrap();
         assert_eq!(restored.active(), "test");
         restored.activate("emerald").unwrap();
@@ -556,7 +556,7 @@ mod tests {
         }
         let archive = writer.finish().unwrap().into_inner();
         let directory = tempfile::tempdir().unwrap();
-        let store = ThemeStore::open(&directory.path().join("pulse.db")).unwrap();
+        let store = ThemeStore::open(&directory.path().join("senulun.db")).unwrap();
         assert_eq!(store.install(&archive).unwrap().short, "LuminaPlus");
     }
 
@@ -564,7 +564,7 @@ mod tests {
     fn bundled_luminaplus_package_installs_and_serves_assets() {
         let archive = include_bytes!("../../../compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip");
         let directory = tempfile::tempdir().unwrap();
-        let store = ThemeStore::open(&directory.path().join("pulse.db")).unwrap();
+        let store = ThemeStore::open(&directory.path().join("senulun.db")).unwrap();
         let manifest = store.install(archive).unwrap();
         assert_eq!(manifest.short, "LuminaPlus");
         store.activate("LuminaPlus").unwrap();
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn invalid_archive_cannot_escape_theme_directory() {
         let directory = tempfile::tempdir().unwrap();
-        let store = ThemeStore::open(&directory.path().join("pulse.db")).unwrap();
+        let store = ThemeStore::open(&directory.path().join("senulun.db")).unwrap();
         let archive = theme_zip(&[
             (
                 "komari-theme.json",
