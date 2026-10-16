@@ -46,11 +46,14 @@ temporary_link=/usr/local/bin/.senulun-$component.new
 # Pulse unit could create two database writers or enroll the same host twice.
 if [ ! -L "$current_link" ] && [ ! -e "$current_link" ]; then
     if [ -e "/etc/systemd/system/pulse-$component.service" ] ||
-       [ -e "$legacy_state_directory" ]; then
+       [ -L "/etc/systemd/system/pulse-$component.service" ] ||
+       [ -e "$legacy_state_directory" ] || [ -L "$legacy_state_directory" ]; then
         echo "legacy Pulse resources exist; use the reviewed stop-and-migrate procedure" >&2
         exit 1
     fi
-    if [ "$component" = agent ] && [ -e /etc/systemd/system/vastora-pulse-agent.service ]; then
+    if [ "$component" = agent ] &&
+       { [ -e /etc/systemd/system/vastora-pulse-agent.service ] ||
+         [ -L /etc/systemd/system/vastora-pulse-agent.service ]; }; then
         echo "managed Pulse Agent exists; migrate it through Vastora" >&2
         exit 1
     fi
