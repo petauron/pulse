@@ -62,7 +62,7 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
   await login(page, '/admin?section=probes')
   const id = await waitForNode(page.request)
   await page.getByRole('button', { name: '刷新', exact: true }).first().click()
-  const name = `e2e-health-${testInfo.project.name}`
+  const name = `e2e-health-${testInfo.project.name}-${testInfo.retry}`
   let taskId = ''
   try {
     await page.getByLabel('名称', { exact: true }).fill(name)
@@ -105,9 +105,9 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     await page.keyboard.press('Escape')
     await page.goto(`/instance/${id}`)
     await expect(page.getByLabel('探测历史时间范围').getByRole('tab', { name: '1 小时', exact: true })).toHaveAttribute('data-state', 'active')
-    await page.getByText('延迟与失败率汇总', { exact: true }).click()
-    await expect(page.getByRole('table', { name: '所选时间范围的延迟与失败率汇总' })).toContainText(name)
-    await expect(page.getByRole('table', { name: '所选时间范围的延迟与失败率汇总' })).toContainText('ms')
+    await page.getByText('延迟与丢包率汇总', { exact: true }).click()
+    await expect(page.getByRole('table', { name: '所选时间范围的延迟与丢包率汇总' })).toContainText(name)
+    await expect(page.getByRole('table', { name: '所选时间范围的延迟与丢包率汇总' })).toContainText('ms')
     await page.goto('/admin?section=probes')
     const task = page.getByRole('listitem').filter({ hasText: name })
     await task.getByRole('button', { name: '编辑' }).click()
