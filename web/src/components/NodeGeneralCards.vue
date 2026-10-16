@@ -11,7 +11,7 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
-import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, summarizeNodeValue } from '@/utils/financeHelper'
+import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, getStoredFinanceCurrency, setStoredFinanceCurrency, summarizeNodeValue } from '@/utils/financeHelper'
 import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
 
@@ -94,7 +94,8 @@ const formattedMemoryTotal = computed(() => formatBytesSplit(totalMemory.value.t
 const formattedDiskUsed = computed(() => formatBytesSplit(totalDisk.value.used, appStore.byteDecimals))
 const formattedDiskTotal = computed(() => formatBytesSplit(totalDisk.value.total, appStore.byteDecimals))
 
-const financeCurrency = ref<CurrencyCode>('CNY')
+const financeCurrency = ref<CurrencyCode>(getStoredFinanceCurrency())
+watch(financeCurrency, setStoredFinanceCurrency)
 const { rates, date: rateDate, live: dailyRates } = useExchangeRates()
 watch(rates, (value) => {
   if (!value[financeCurrency.value])

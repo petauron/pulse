@@ -41,6 +41,8 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   await page.keyboard.press('Escape')
   await expect(valueTrigger).toHaveAttribute('aria-expanded', 'false')
   await expect(valueTrigger).toBeFocused()
+  await page.reload()
+  await expect(valueTrigger).toContainText('USD')
 
   await page.getByRole('button', { name: '列表视图' }).click()
   const row = page.getByRole('button', { name: /查看 e2e-node 节点详情，当前在线/ })

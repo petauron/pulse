@@ -62,6 +62,24 @@ export function normalizeCurrency(currency: string | null | undefined): Currency
   return EXPLICIT_CURRENCY_ALIASES[value] || 'CNY'
 }
 
+const financeCurrencyStorageKey = 'fin_currency'
+
+export function getStoredFinanceCurrency(): CurrencyCode {
+  try {
+    return normalizeCurrency(localStorage.getItem(financeCurrencyStorageKey))
+  }
+  catch {
+    return 'CNY'
+  }
+}
+
+export function setStoredFinanceCurrency(currency: CurrencyCode): void {
+  try {
+    localStorage.setItem(financeCurrencyStorageKey, currency)
+  }
+  catch { /* The selection still works when browser storage is unavailable. */ }
+}
+
 // Emerald-Cazi bundled reference rates: units per CNY, not live market quotes.
 export const REFERENCE_EXCHANGE_RATES: Record<CurrencyCode, number> = {
   AUD: 0.20941,
