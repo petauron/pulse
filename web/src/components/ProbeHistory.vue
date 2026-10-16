@@ -222,11 +222,17 @@ const chartThresholds = computed(() => {
     const candidate = settings?.[key]
     return typeof candidate === 'number' && Number.isFinite(candidate) && candidate >= min && candidate <= max ? candidate : fallback
   }
+  const color = (key: string, fallback: string) => {
+    const candidate = settings?.[key]
+    return typeof candidate === 'string' && hexColor.test(candidate) ? candidate : fallback
+  }
   return {
     latencyWarning: value('pingLatencyWarning', 160, 1, 5000),
     latencyCritical: value('pingLatencyCritical', 300, 1, 5000),
     failureWarning: value('pingLossWarning', 3, 0, 100),
     failureCritical: value('pingLossCritical', 10, 0, 100),
+    warningColor: color('pingWarningColor', '#FACC15'),
+    criticalColor: color('pingCriticalColor', '#F43F5E'),
   }
 })
 
@@ -239,7 +245,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   const latencySeries = showDelay.value && mode !== 'failure'
     ? selectedTasks.value.map((task, index) => ({
         id: `${task.id}:latency`,
-        name: task.name,
+        name: `${task.name} 延迟`,
         type: 'line' as const,
         yAxisIndex: 0,
         showSymbol: false,
@@ -256,8 +262,8 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
               label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
               lineStyle: { width: 1, type: 'dashed' as const, opacity: 0.65 },
               data: [
-                { name: '延迟警告', yAxis: chartThresholds.value.latencyWarning, lineStyle: { color: '#FACC15' } },
-                { name: '延迟严重', yAxis: chartThresholds.value.latencyCritical, lineStyle: { color: '#F43F5E' } },
+                { name: '延迟警告', yAxis: chartThresholds.value.latencyWarning, lineStyle: { color: chartThresholds.value.warningColor } },
+                { name: '延迟严重', yAxis: chartThresholds.value.latencyCritical, lineStyle: { color: chartThresholds.value.criticalColor } },
               ],
             }
           : undefined,
@@ -273,7 +279,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
         const points = taskFailureData(task.id)
         return {
           id: `${task.id}:failure-rate`,
-          name: `${task.name} · ${failureLabel(task.kind)}`,
+          name: `${task.name} ${task.kind === 'icmp' ? '丢包' : '失败'}`,
           type: 'line' as const,
           yAxisIndex: mode === 'combined' ? 1 : 0,
           showSymbol: points.length === 1,
@@ -291,8 +297,8 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
                 label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
                 lineStyle: { width: 1, type: 'dotted' as const, opacity: 0.65 },
                 data: [
-                  { name: `${failureMetricLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: '#FACC15' } },
-                  { name: `${failureMetricLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: '#F43F5E' } },
+                  { name: `${failureMetricLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: chartThresholds.value.warningColor } },
+                  { name: `${failureMetricLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: chartThresholds.value.criticalColor } },
                 ],
               }
             : undefined,

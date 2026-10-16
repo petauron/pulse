@@ -207,6 +207,8 @@ test('probe analysis switches tasks without changing the selected chart series',
   const chart = page.locator('[aria-label="探测延迟和丢包或失败率曲线，左右轴分别为毫秒和百分比，长时间缺报为断点"]')
   await expect.poll(() => chart.evaluate(element => Math.round(element.getBoundingClientRect().height))).toBe(testInfo.project.name === 'mobile-chromium' ? 328 : 392)
   await chart.hover()
+  await expect(chart.getByText('e2e-probe 延迟')).toBeVisible()
+  await expect(chart.getByText('e2e-probe-2 丢包')).toBeVisible()
   await expect(chart.getByText('20 ms', { exact: true })).toBeVisible()
   await expect(chart.getByText('50.00%', { exact: true })).toBeVisible()
   const csvPromise = page.waitForEvent('download')
