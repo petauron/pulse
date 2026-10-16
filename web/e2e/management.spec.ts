@@ -87,6 +87,8 @@ test('probe CRUD executes on the local Agent and exposes real result history', a
     await expect(preview).toContainText('ms')
     await expect(preview).toContainText('丢包')
     const latencyPanel = page.getByRole('button', { name: `e2e-node ${name} 延迟` })
+    await expect(latencyPanel).toHaveAttribute('title', new RegExp(`${name} · 最近 1 小时平均延迟 \\d+ ms`))
+    await expect(page.getByRole('button', { name: `e2e-node ${name} 丢包` })).toHaveAttribute('title', new RegExp(`${name} · 最近 1 小时平均丢包 [\\d.]+%（TCP/HTTP 探测失败率）`))
     await latencyPanel.focus()
     await latencyPanel.press('Enter')
     await expect(page.getByRole('dialog', { name: 'e2e-node · 网络质量' })).toBeVisible()

@@ -49,6 +49,13 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
   const time = historyHours.value >= 24 ? new Date(point.time).toLocaleString() : new Date(point.time).toLocaleTimeString()
   return `${name} · ${time} · ${result}`
 }
+function panelTooltip(row: { name: string, kind: NodeProbe['kind'], stale: boolean, latency: string, loss: string }, metric: typeof metrics[number]): string {
+  if (row.stale)
+    return `${row.name} · 暂无数据`
+  if (metric === 'latency')
+    return `${row.name} · 最近 ${historyLabel.value}平均延迟 ${row.latency}`
+  return `${row.name} · 最近 ${historyLabel.value}平均丢包 ${row.loss}${row.kind === 'icmp' ? '' : '（TCP/HTTP 探测失败率）'}`
+}
 function openMetric(event: Event) {
   if (!props.interactive)
     return
@@ -74,6 +81,7 @@ function onMetricKeydown(event: KeyboardEvent) {
         v-for="metric in metrics" :key="metric" :role="interactive ? 'button' : 'group'" :tabindex="interactive ? 0 : undefined"
         class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left"
         :class="interactive ? 'cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : undefined"
+        :title="interactive ? panelTooltip(row, metric) : undefined"
         :aria-label="interactive ? `${nodeName ?? ''} ${row.name} ${metric === 'latency' ? '延迟' : '丢包'}`.trim() : `${row.name} ${metric === 'latency' ? '延迟' : row.kind === 'icmp' ? '丢包率' : '丢包（TCP/HTTP 探测失败率）'} ${row.stale ? '暂无数据' : row[metric]}`"
         @click="openMetric" @keydown="onMetricKeydown"
       >
