@@ -184,7 +184,7 @@ test('probe history does not leave stale metrics visible after refresh fails', a
   responseMode = 'empty'
   await page.getByRole('button', { name: '重新尝试' }).click()
   await expect.poll(() => releaseEmptyResponse !== undefined).toBe(true)
-  await expect(page.getByRole('status')).toContainText('正在读取探测记录…')
+  await expect(page.getByRole('status').filter({ hasText: '正在读取探测记录…' })).toBeVisible()
   releaseEmptyResponse?.()
   await expect(page.getByText('暂无延迟数据')).toBeVisible()
   await expect(page.getByRole('alert')).toHaveCount(0)
