@@ -5,7 +5,8 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { useAppStore } from '@/stores/app'
 import { getProbeToneColor, selectHomeProbes } from '@/utils/nodeHelpers'
 
-const props = defineProps<{ probes?: NodeProbe[], compact?: boolean, nodeUuid?: string }>()
+const props = defineProps<{ probes?: NodeProbe[], compact?: boolean, nodeUuid?: string, interactive?: boolean, nodeName?: string }>()
+const emit = defineEmits<{ open: [] }>()
 const app = useAppStore()
 const metrics = ['latency', 'loss'] as const
 const historyHours = computed(() => {
@@ -48,6 +49,18 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
   const time = historyHours.value >= 24 ? new Date(point.time).toLocaleString() : new Date(point.time).toLocaleTimeString()
   return `${name} · ${time} · ${result}`
 }
+function openMetric(event: Event) {
+  if (!props.interactive)
+    return
+  event.stopPropagation()
+  emit('open')
+}
+function onMetricKeydown(event: KeyboardEvent) {
+  if (!props.interactive || (event.key !== 'Enter' && event.key !== ' '))
+    return
+  event.preventDefault()
+  openMetric(event)
+}
 </script>
 
 <template>
@@ -57,7 +70,13 @@ function sampleTooltip(name: string, point: NodeProbe['points'][number], metric:
         <span class="block truncate font-medium text-foreground/75">{{ row.name }}</span>
         <span v-if="row.stale" class="sr-only">暂无数据</span>
       </DataTooltip>
-      <div v-for="metric in metrics" :key="metric" role="group" class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left" :aria-label="`${row.name} ${metric === 'latency' ? '延迟' : row.kind === 'icmp' ? '丢包率' : '丢包（TCP/HTTP 探测失败率）'} ${row.stale ? '暂无数据' : row[metric]}`">
+      <div
+        v-for="metric in metrics" :key="metric" :role="interactive ? 'button' : 'group'" :tabindex="interactive ? 0 : undefined"
+        class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left"
+        :class="interactive ? 'cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : undefined"
+        :aria-label="interactive ? `${nodeName ?? ''} ${row.name} ${metric === 'latency' ? '延迟' : '丢包'}`.trim() : `${row.name} ${metric === 'latency' ? '延迟' : row.kind === 'icmp' ? '丢包率' : '丢包（TCP/HTTP 探测失败率）'} ${row.stale ? '暂无数据' : row[metric]}`"
+        @click="openMetric" @keydown="onMetricKeydown"
+      >
         <div class="relative flex items-center justify-between leading-none">
           <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : '丢包' }}</span>
           <div class="mx-1 flex-1 border-t-2 border-dotted border-gray-500/10" />

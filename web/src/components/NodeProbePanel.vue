@@ -12,11 +12,12 @@ const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistor
 <template>
   <div @click.stop>
     <div
-      role="button" tabindex="0" class="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      v-if="compact" role="button" tabindex="0" class="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       :aria-label="`${node.name} 延迟 / 丢包详情`" @click="open = true" @keydown.enter.self.prevent="open = true" @keydown.space.self.prevent="open = true"
     >
-      <NodeProbeSummary :probes="node.probes" :compact="compact" :node-uuid="node.uuid" />
+      <NodeProbeSummary :probes="node.probes" compact :node-uuid="node.uuid" />
     </div>
+    <NodeProbeSummary v-else :probes="node.probes" :node-uuid="node.uuid" :node-name="node.name" interactive @open="open = true" />
     <Dialog v-model:open="open">
       <DialogContent class="max-h-[85dvh] overflow-y-auto sm:max-w-4xl" @click.stop>
         <DialogHeader>
