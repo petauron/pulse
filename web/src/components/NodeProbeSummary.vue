@@ -105,9 +105,21 @@ function onMetricKeydown(event: KeyboardEvent) {
     </div>
     <span v-if="!rows.length" class="text-muted-foreground">未配置探测</span>
   </div>
-  <div v-else class="flex h-8 w-full flex-col justify-center gap-px overflow-hidden" aria-label="探测延迟概览，点击查看详情">
-    <div v-for="row in rows" :key="row.id" class="grid h-[3px] shrink-0 grid-cols-10 gap-px" :title="`${row.name} · 延迟 ${row.latency} · 丢包 ${row.loss}${row.kind === 'icmp' ? '' : '（探测失败率）'}`">
-      <span v-for="(point, i) in row.points" :key="i" class="h-full bg-muted-foreground/15" :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor('latency', point.latency, app.publicSettings?.theme_settings) }" />
+  <div v-else class="group flex h-8 w-full flex-col justify-center gap-px pr-4" aria-label="首个探测任务的延迟与丢包概览，点击查看详情">
+    <div v-for="row in rows.slice(0, 1)" :key="row.id" class="flex flex-col gap-px">
+      <div v-for="metric in metrics" :key="metric" class="group/panel relative opacity-80 hover:opacity-100" :title="panelTooltip(row, metric)">
+        <div :data-probe-metric="metric" class="grid h-1 grid-cols-10 items-end gap-px transition-all hover:h-2.5 motion-reduce:transition-none">
+          <DataTooltip
+            v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full" content-class="w-40 leading-relaxed"
+            :content="row.stale ? `${row.name} · 暂无数据` : sampleTooltip(row.name, point, metric)"
+          >
+            <span
+              class="block h-full w-full rounded-[1px] bg-muted-foreground/15 transition-all group-hover/data-tooltip:opacity-100 motion-reduce:transition-none"
+              :style="!point.samples || row.stale ? undefined : { backgroundColor: getProbeToneColor(metric, metric === 'latency' ? point.latency : point.loss, app.publicSettings?.theme_settings) }"
+            />
+          </DataTooltip>
+        </div>
+      </div>
     </div>
     <span v-if="!rows.length" class="text-[11px] text-muted-foreground">未配置探测</span>
   </div>
