@@ -145,7 +145,7 @@ const customTags = computed(() => getCustomTags(props.node))
             </div>
             <ProgressThin :percentage="trafficUsedPercentage" status="success" :height="4" />
             <DataTooltip placement="top" class="block">
-              <div class="whitespace-pre-wrap text-[11px] text-muted-foreground truncate">
+              <div class="text-[11px] text-muted-foreground truncate">
                 {{ formatBytes(trafficUsed) }} /
                 <template v-if="showTrafficProgress(props.node)">
                   {{ formatBytes(props.node.traffic_limit) }}
