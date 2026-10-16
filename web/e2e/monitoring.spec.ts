@@ -17,6 +17,7 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   await expect(card).toBeVisible({ timeout: 20_000 })
   await expect(page.getByTestId('node-card-grid')).toHaveClass(/auto-rows-fr/)
   await expect(card).toContainText('e2e-node')
+  await expect(card.locator(':scope > div:first-child > div:first-child')).toHaveText('e2e-node')
   await expect(card.getByLabel(/^最近 .+的平均延迟与探测结果，每格约 \d+ 分钟$/)).toBeVisible()
   await expect(card.locator('.grid.grid-cols-2 > div').nth(3).locator('.truncate').first()).toHaveCSS('white-space', 'nowrap')
   const flag = card.getByRole('img', { name: 'SG', exact: true })

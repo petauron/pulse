@@ -53,20 +53,15 @@ const customTags = computed(() => getCustomTags(props.node))
     @keydown.space.self.prevent="emit('click')"
   >
     <template #header>
-      <div class="flex gap-2 min-w-0 items-start">
-        <div class="mt-1.5 size-2 shrink-0 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
+      <div class="flex gap-2 min-w-0 items-center">
+        <div class="size-2 shrink-0 rounded-full relative" :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']">
           <div
             class="animate-ping absolute inset-0 rounded-full opacity-50"
             :class="[props.node.online ? 'bg-emerald-600' : 'bg-red-600']"
           />
         </div>
-        <div class="flex-1 min-w-0">
-          <div class="text-md font-bold truncate" :title="props.node.name">
-            {{ props.node.name }}
-          </div>
-          <div class="mt-0.5 min-h-[14px] truncate text-[11px] font-normal leading-tight text-muted-foreground/75" :class="!props.node.public_remark && 'invisible'" :title="props.node.public_remark || ''">
-            {{ props.node.public_remark || '无公开备注' }}
-          </div>
+        <div class="text-md font-bold flex-1 min-w-0 truncate" :title="props.node.public_remark ? `${props.node.name}\n${props.node.public_remark}` : props.node.name">
+          {{ props.node.name }}
         </div>
       </div>
     </template>
