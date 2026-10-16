@@ -152,7 +152,7 @@ const cardGridClass = computed(() => showVisualPanel.value
           <div class="flex items-start justify-between">
             <span class="text-xs font-medium tracking-wider text-muted-foreground">内存用量</span>
             <Icon
-              icon="icon-park-outline:memory" :width="20" :height="20"
+              icon="tabler:cash" :width="20" :height="20"
               class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
             />
           </div>
@@ -227,7 +227,7 @@ const cardGridClass = computed(() => showVisualPanel.value
             <div class="flex items-start justify-between">
               <span class="text-xs font-medium tracking-wider text-muted-foreground">剩余价值</span>
               <Icon
-                icon="tabler:server-2" :width="20" :height="20"
+                icon="tabler:cash" :width="20" :height="20"
                 class="text-slate-500/20 group-hover:text-slate-500 transition-colors"
               />
             </div>
