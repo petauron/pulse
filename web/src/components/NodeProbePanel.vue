@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import type { NodeData } from '@/stores/nodes'
-import { defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import NodeProbeSummary from '@/components/NodeProbeSummary.vue'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
+import { failureRateLabelForKinds } from '@/utils/probeLabels'
 
-defineProps<{ node: NodeData, compact?: boolean }>()
+const props = defineProps<{ node: NodeData, compact?: boolean }>()
 const open = ref(false)
 const ProbeHistory = defineAsyncComponent(() => import('@/components/ProbeHistory.vue'))
 const { pickSurfaceClass } = useBackgroundSurface()
+const rateLabel = computed(() => failureRateLabelForKinds(props.node.probes?.map(probe => probe.kind) ?? []))
 </script>
 
 <template>
   <div @click.stop>
     <div
       v-if="compact" role="button" tabindex="0" class="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      :aria-label="`${node.name} 延迟 / 丢包详情`" @click="open = true" @keydown.enter.self.prevent="open = true" @keydown.space.self.prevent="open = true"
+      :aria-label="`${node.name} 延迟 / ${rateLabel}详情`" @click="open = true" @keydown.enter.self.prevent="open = true" @keydown.space.self.prevent="open = true"
     >
       <NodeProbeSummary :probes="node.probes" compact :node-uuid="node.uuid" />
     </div>
@@ -27,7 +29,7 @@ const { pickSurfaceClass } = useBackgroundSurface()
         @click.stop
       >
         <DialogHeader class="relative isolate flex h-13 flex-row items-center overflow-hidden px-4">
-          <DialogTitle class="relative z-10 min-w-0 flex-1 truncate pr-8">{{ node.name }} 延迟 / 丢包</DialogTitle>
+          <DialogTitle class="relative z-10 min-w-0 flex-1 truncate pr-8">{{ node.name }} 延迟 / {{ rateLabel }}</DialogTitle>
           <DialogDescription class="sr-only">TCP/HTTP 显示探测失败率，不等同于 ICMP 丢包。详情按所选时间范围统计。</DialogDescription>
           <div aria-hidden="true" class="pointer-events-none absolute inset-0 bg-slate-50 dark:bg-slate-900/50">
             <div class="absolute top-0 left-1/2 -ml-152 h-100 w-325 dark:mask-[linear-gradient(white,transparent)]">

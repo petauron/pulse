@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { useAppStore } from '@/stores/app'
 import { getProbeToneColor, selectHomeProbes } from '@/utils/nodeHelpers'
+import { failureRateLabel } from '@/utils/probeLabels'
 
 const props = defineProps<{ probes?: NodeProbe[], compact?: boolean, nodeUuid?: string, interactive?: boolean, nodeName?: string }>()
 const emit = defineEmits<{ open: [] }>()
@@ -54,7 +55,7 @@ function panelTooltip(row: { name: string, kind: NodeProbe['kind'], stale: boole
     return `${row.name} · 暂无数据`
   if (metric === 'latency')
     return `${row.name} · 最近 ${historyLabel.value}平均延迟 ${row.latency}`
-  return `${row.name} · 最近 ${historyLabel.value}平均丢包 ${row.loss}${row.kind === 'icmp' ? '' : '（TCP/HTTP 探测失败率）'}`
+  return `${row.name} · 最近 ${historyLabel.value}平均${failureRateLabel(row.kind)} ${row.loss}`
 }
 function openMetric(event: Event) {
   if (!props.interactive)
@@ -71,7 +72,7 @@ function onMetricKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" :aria-label="`最近 ${historyLabel}的平均延迟与丢包（TCP/HTTP 为探测失败率），每格约 ${historyHours * 6} 分钟`">
+  <div v-if="!compact" class="flex flex-col gap-y-2 text-[11px]" :aria-label="`最近 ${historyLabel}的平均延迟与探测结果，每格约 ${historyHours * 6} 分钟`">
     <div v-for="row in rows" :key="row.id" class="grid h-8 grid-cols-[minmax(64px,0.75fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-2">
       <DataTooltip placement="top" :content="row.name" class="min-w-0" content-class="min-w-24">
         <span class="block truncate font-medium text-foreground/75">{{ row.name }}</span>
@@ -82,11 +83,11 @@ function onMetricKeydown(event: KeyboardEvent) {
         class="group/panel relative flex h-7 min-w-0 flex-col gap-1 text-left"
         :class="interactive ? 'cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring' : undefined"
         :title="interactive ? panelTooltip(row, metric) : undefined"
-        :aria-label="interactive ? `${nodeName ?? ''} ${row.name} ${metric === 'latency' ? '延迟' : '丢包'}`.trim() : `${row.name} ${metric === 'latency' ? '延迟' : row.kind === 'icmp' ? '丢包率' : '丢包（TCP/HTTP 探测失败率）'} ${row.stale ? '暂无数据' : row[metric]}`"
+        :aria-label="interactive ? `${nodeName ?? ''} ${row.name} ${metric === 'latency' ? '延迟' : failureRateLabel(row.kind)}`.trim() : `${row.name} ${metric === 'latency' ? '延迟' : failureRateLabel(row.kind)} ${row.stale ? '暂无数据' : row[metric]}`"
         @click="openMetric" @keydown="onMetricKeydown"
       >
         <div class="relative flex items-center justify-between leading-none">
-          <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : '丢包' }}</span>
+          <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : failureRateLabel(row.kind, true) }}</span>
           <div class="mx-1 flex-1 border-t-2 border-dotted border-gray-500/10" />
           <span class="shrink-0 font-medium tabular-nums text-foreground/85">{{ row.stale ? '—' : row[metric] }}</span>
         </div>
@@ -106,7 +107,7 @@ function onMetricKeydown(event: KeyboardEvent) {
     <span v-if="!rows.length" class="text-muted-foreground">未配置探测</span>
   </div>
   <!-- On touch, the list cell opens details on the first tap instead of opening a bar tooltip. -->
-  <div v-else class="group flex h-8 w-full flex-col justify-center gap-px pr-4" aria-label="首个探测任务的延迟与丢包概览，点击查看详情" @pointerdown.capture.stop>
+  <div v-else class="group flex h-8 w-full flex-col justify-center gap-px pr-4" aria-label="首个探测任务的延迟与探测结果概览，点击查看详情" @pointerdown.capture.stop>
     <div v-for="row in rows.slice(0, 1)" :key="row.id" class="flex flex-col gap-px">
       <div v-for="metric in metrics" :key="metric" class="group/panel relative opacity-80 hover:opacity-100" :title="panelTooltip(row, metric)">
         <div :data-probe-metric="metric" class="grid h-1 grid-cols-10 items-end gap-px transition-all hover:h-2.5 motion-reduce:transition-none">

@@ -13,6 +13,7 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
 import { fetchProbeHistory } from '@/utils/admin'
 import { probeChartSeries, probeFailureSeries } from '@/utils/probeChart'
+import { failureRateLabel, failureRateLabelForKinds } from '@/utils/probeLabels'
 import '@/utils/echarts'
 
 const props = defineProps<{ uuid: string, kind?: 'icmp' | 'tcp' | 'http', taskId?: string, selectedHours?: number }>()
@@ -217,8 +218,11 @@ function taskFailureData(id: string): Array<[number, number | null]> {
   return probeFailureSeries(records, data.value.range_start_unix_ms, data.value.range_end_unix_ms, data.value.chart_bucket_ms)
 }
 
-const failureLabel = (kind: ProbeHistory['tasks'][number]['kind']) => kind === 'icmp' ? '丢包率' : '失败率'
-const summaryTitle = '延迟与丢包率汇总'
+const chartFailureLabel = computed(() => failureRateLabelForKinds(
+  (selectedTasks.value.length ? selectedTasks.value : tasks.value).map(task => task.kind),
+))
+const summaryFailureLabel = computed(() => failureRateLabelForKinds(tasks.value.map(task => task.kind)))
+const summaryTitle = computed(() => `延迟与${summaryFailureLabel.value}汇总`)
 const showZoom = computed(() => app.publicSettings?.theme_settings?.pingChartShowZoom !== false)
 const chartThresholds = computed(() => {
   const settings = app.publicSettings?.theme_settings
@@ -283,7 +287,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
         const points = taskFailureData(task.id)
         return {
           id: `${task.id}:failure-rate`,
-          name: `${task.name} 丢包`,
+          name: `${task.name} ${failureRateLabel(task.kind)}`,
           type: 'line' as const,
           yAxisIndex: mode === 'combined' ? 1 : 0,
           showSymbol: points.length === 1,
@@ -301,8 +305,8 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
                 label: { show: true, position: 'insideEndTop' as const, fontSize: 10 },
                 lineStyle: { width: 1, type: 'dotted' as const, opacity: 0.65 },
                 data: [
-                  { name: '丢包警告', yAxis: chartThresholds.value.failureWarning, lineStyle: { color: chartThresholds.value.warningColor } },
-                  { name: '丢包严重', yAxis: chartThresholds.value.failureCritical, lineStyle: { color: chartThresholds.value.criticalColor } },
+                  { name: `${chartFailureLabel.value}警告`, yAxis: chartThresholds.value.failureWarning, lineStyle: { color: chartThresholds.value.warningColor } },
+                  { name: `${chartFailureLabel.value}严重`, yAxis: chartThresholds.value.failureCritical, lineStyle: { color: chartThresholds.value.criticalColor } },
                 ],
               }
             : undefined,
@@ -321,7 +325,7 @@ function chartOption(mode: 'combined' | 'latency' | 'failure'): EChartsOption {
   }
   const failureAxis = {
     type: 'value' as const,
-    name: '丢包 (%)',
+    name: `${chartFailureLabel.value} (%)`,
     min: 0,
     max: 100,
     position: mode === 'combined' ? 'right' as const : 'left' as const,
@@ -390,7 +394,7 @@ function exportCsv(): void {
   if (!data.value || !selectedTasks.value.length)
     return
   const selected = selectedTasks.value
-  const headers = ['时间', ...selected.flatMap(task => [`${task.name} 延迟(ms)`, `${task.name} ${failureLabel(task.kind)}(%)`])]
+  const headers = ['时间', ...selected.flatMap(task => [`${task.name} 延迟(ms)`, `${task.name} ${failureRateLabel(task.kind)}(%)`])]
   const series = selected.map(task => ({
     latency: new Map(taskChartData(task.id)),
     failure: new Map(taskFailureData(task.id)),
@@ -494,7 +498,7 @@ function exportPng(): void {
               </div>
               <div class="mt-3 grid grid-cols-3 gap-2">
                 <span class="min-w-0"><span class="block text-[11px] text-muted-foreground">平均</span><span class="block truncate text-sm font-semibold tabular-nums">{{ cardLatency(summaryByTask.get(task.id)?.avg_latency_ms) }}</span></span>
-                <span class="min-w-0" :title="task.kind === 'icmp' ? 'ICMP 丢包率' : 'TCP/HTTP 探测失败率'"><span class="block text-[11px] text-muted-foreground">丢包</span><span class="block truncate text-sm font-semibold tabular-nums">{{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '--' }}</span></span>
+                <span class="min-w-0"><span class="block text-[11px] text-muted-foreground">{{ failureRateLabel(task.kind, true) }}</span><span class="block truncate text-sm font-semibold tabular-nums">{{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '--' }}</span></span>
                 <span class="min-w-0"><span class="block text-[11px] text-muted-foreground">P95</span><span class="block truncate text-sm font-semibold tabular-nums">{{ cardLatency(summaryByTask.get(task.id)?.p95_latency_ms) }}</span></span>
               </div>
             </div>
@@ -518,13 +522,13 @@ function exportPng(): void {
                 { label: 'P50', value: analysisLatency(analysisSummary?.p50_latency_ms) },
                 { label: 'P95', value: analysisLatency(analysisSummary?.p95_latency_ms) },
                 { label: 'P99', value: analysisLatency(analysisSummary?.p99_latency_ms) },
-                { label: '丢包率', value: analysisSummary?.samples ? `${analysisSummary.loss_percent.toFixed(2)}%` : '无样本' },
+                { label: failureRateLabel(analysisTask.kind), value: analysisSummary?.samples ? `${analysisSummary.loss_percent.toFixed(2)}%` : '无样本' },
                 { label: '波动率', value: analysisSummary?.p99_p50_ratio == null ? '—' : analysisSummary.p99_p50_ratio.toFixed(2) },
                 { label: '样本数', value: String(analysisSummary?.samples ?? 0) },
                 { label: '采集间隔', value: `${analysisTask.interval_seconds}s` },
                 { label: '协议', value: analysisTask.kind.toUpperCase() },
               ]" :key="metric.label">
-                <dt class="text-[11px] text-muted-foreground" :title="metric.label === '丢包率' && analysisTask.kind !== 'icmp' ? 'TCP/HTTP 探测失败率' : undefined">{{ metric.label }}</dt>
+                <dt class="text-[11px] text-muted-foreground">{{ metric.label }}</dt>
                 <dd class="mt-0.5 text-sm font-semibold tabular-nums">{{ metric.value }}</dd>
               </div>
             </dl>
@@ -535,7 +539,7 @@ function exportPng(): void {
             延迟
           </Button>
           <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="showFailures && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="showFailures" @click="showFailures = !showFailures">
-            丢包
+            {{ chartFailureLabel }}
           </Button>
           <div class="flex items-center gap-1">
             <Button variant="ghost" size="xs" class="h-7 rounded-sm border-none bg-background/60 hover:bg-background" :class="cutPeak && 'bg-background !text-emerald-700 dark:!text-emerald-400'" :aria-pressed="cutPeak" @click="cutPeak = !cutPeak">
@@ -580,14 +584,14 @@ function exportPng(): void {
         </p>
         <template v-if="data.chart.length && (showDelay || showFailures)">
           <div v-if="chartLayout === 'combined'" class="h-88 rounded-md p-3 md:h-104" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-            <VChart :key="app.resolvedThemeMode" ref="combinedChartRef" :option="combinedOption" autoresize style="height: 100%; width: 100%" aria-label="探测延迟和丢包曲线，TCP/HTTP 丢包表示探测失败率，左右轴分别为毫秒和百分比，长时间缺报为断点" />
+            <VChart :key="app.resolvedThemeMode" ref="combinedChartRef" :option="combinedOption" autoresize style="height: 100%; width: 100%" :aria-label="`探测延迟和${chartFailureLabel}曲线，左右轴分别为毫秒和百分比，长时间缺报为断点`" />
           </div>
           <template v-else>
             <div v-if="showDelay" class="h-72 rounded-md p-3 md:h-80" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
               <VChart :key="app.resolvedThemeMode" ref="latencyChartRef" :option="latencyOption" autoresize style="height: 100%; width: 100%" aria-label="独立延迟曲线，纵轴为毫秒，长时间缺报为断点" />
             </div>
             <div v-if="showFailures" class="h-72 rounded-md p-3 md:h-80" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
-              <VChart :key="app.resolvedThemeMode" ref="failureChartRef" :option="failureOption" autoresize style="height: 100%; width: 100%" aria-label="独立丢包曲线，TCP/HTTP 丢包表示探测失败率，纵轴为百分比，长时间缺报为断点" />
+              <VChart :key="app.resolvedThemeMode" ref="failureChartRef" :option="failureOption" autoresize style="height: 100%; width: 100%" :aria-label="`独立${chartFailureLabel}曲线，纵轴为百分比，长时间缺报为断点`" />
             </div>
           </template>
         </template>
@@ -625,7 +629,7 @@ function exportPng(): void {
                   </th><th class="p-2">
                     波动率
                   </th><th class="p-2">
-                    丢包率
+                    {{ summaryFailureLabel }}
                   </th>
                 </tr>
               </thead><tbody>
@@ -645,7 +649,7 @@ function exportPng(): void {
                   </td><td class="p-2">
                     {{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}
                   </td><td class="whitespace-nowrap p-2">
-                    <span class="sr-only">{{ failureLabel(task.kind) }} </span>
+                    <span class="sr-only">{{ failureRateLabel(task.kind) }} </span>
                     {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
                   </td>
                 </tr>
