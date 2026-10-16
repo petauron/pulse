@@ -1,8 +1,9 @@
 # Senulun runtime identity cutover
 
 Senulun is the successor name for Pulse. The public name changed first; this
-release also changes the executable, environment, service, state and catalog
-identities. It is **not** an in-place binary replacement for a running Pulse
+release changes the executable, environment, service and state identities;
+the independent catalog changes its application IDs in a separate publication.
+It is **not** an in-place binary replacement for a running Pulse
 installation. Do not start it against the old data directory or credentials.
 
 ## New runtime contract
