@@ -15,13 +15,13 @@ import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, getStoredFinanceCurrency, setStor
 import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
 
-const NodeEarthMaps = defineAsyncComponent(() => import('@/components/NodeEarthMaps.vue'))
-
 const props = defineProps<{
   nodes?: NodeData[]
   globeNodes?: NodeData[]
   transitionKey?: string
 }>()
+
+const NodeEarthMaps = defineAsyncComponent(() => import('@/components/NodeEarthMaps.vue'))
 
 const appStore = useAppStore()
 const { pickSurfaceClass } = useBackgroundSurface()
