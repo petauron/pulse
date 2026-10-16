@@ -99,6 +99,26 @@ test('the first failed connection recovers without reloading the page', async ({
   await expect(page.getByText('连接服务器失败，正在自动重试。请检查网络设置。')).toBeHidden()
 })
 
+test('Emerald maps mode renders the bundled world map with node counts', async ({ page }) => {
+  await page.route('**/api/public', async (route) => {
+    const response = await route.fetch()
+    const payload = await response.json()
+    payload.data.theme_settings = {
+      ...payload.data.theme_settings,
+      earthViewMode: 'maps',
+    }
+    await route.fulfill({ response, json: payload })
+  })
+
+  await login(page)
+  const map = page.getByTestId('earth-map')
+  await expect(map).toBeVisible()
+  await expect(map).toHaveAttribute('aria-label', /世界地图：共 \d+ 个节点，在线 \d+ 个，离线 \d+ 个/)
+  await expect(map.locator('canvas')).toBeVisible()
+  const asset = await page.request.get('/maps/world.json')
+  expect(asset.ok()).toBe(true)
+})
+
 test('network quality offers the full retained range with an exact custom label', async ({ page }) => {
   await page.route('**/api/public', async (route) => {
     const response = await route.fetch()

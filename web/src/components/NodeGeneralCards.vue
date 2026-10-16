@@ -3,7 +3,7 @@ import type { NodeData } from '@/stores/nodes'
 import type { CurrencyCode } from '@/utils/financeHelper'
 import { Icon } from '@iconify/vue'
 import { useNow } from '@vueuse/core'
-import { computed, nextTick, ref, useId, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, ref, useId, watch } from 'vue'
 import NodeEarthGlobe from '@/components/NodeEarthGlobe.vue'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -14,6 +14,8 @@ import { useNodesStore } from '@/stores/nodes'
 import { CURRENCY_SYMBOLS, FINANCE_CURRENCIES, getStoredFinanceCurrency, setStoredFinanceCurrency, summarizeNodeValue } from '@/utils/financeHelper'
 import { formatBytesPerSecondSplit, formatBytesSplit } from '@/utils/helper'
 import { summarizeNodeCapacity } from '@/utils/nodeSummary'
+
+const NodeEarthMaps = defineAsyncComponent(() => import('@/components/NodeEarthMaps.vue'))
 
 const props = defineProps<{
   nodes?: NodeData[]
@@ -126,7 +128,8 @@ const financeDisclosure = computed(() => [
   finance.value.excluded ? `${finance.value.excluded} 个节点因资料不完整，未计入部分估算。` : '',
 ].filter(Boolean).join(' '))
 const showEarth = computed(() => appStore.earthViewMode === 'earth' || appStore.earthViewMode === 'earth-stop')
-const showVisualPanel = computed(() => showEarth.value)
+const showMaps = computed(() => appStore.earthViewMode === 'maps')
+const showVisualPanel = computed(() => showEarth.value || showMaps.value)
 const wrapperClass = computed(() => showVisualPanel.value
   ? 'p-4 grid grid-cols-12 grid-rows-1 gap-2 h-auto md:h-58'
   : 'p-4 grid grid-cols-1 gap-2 h-auto')
@@ -138,6 +141,7 @@ const cardGridClass = computed(() => showVisualPanel.value
 <template>
   <div :class="wrapperClass">
     <NodeEarthGlobe v-if="showEarth" :nodes="globeNodes" class="col-span-12 col-start-1 md:col-span-6 md:col-start-7" />
+    <NodeEarthMaps v-else-if="showMaps" :nodes="globeNodes" class="col-span-12 col-start-1 md:col-span-6 md:col-start-7" />
 
     <div :class="cardGridClass">
       <CardX
