@@ -105,7 +105,8 @@ function onMetricKeydown(event: KeyboardEvent) {
     </div>
     <span v-if="!rows.length" class="text-muted-foreground">未配置探测</span>
   </div>
-  <div v-else class="group flex h-8 w-full flex-col justify-center gap-px pr-4" aria-label="首个探测任务的延迟与丢包概览，点击查看详情">
+  <!-- On touch, the list cell opens details on the first tap instead of opening a bar tooltip. -->
+  <div v-else class="group flex h-8 w-full flex-col justify-center gap-px pr-4" aria-label="首个探测任务的延迟与丢包概览，点击查看详情" @pointerdown.capture.stop>
     <div v-for="row in rows.slice(0, 1)" :key="row.id" class="flex flex-col gap-px">
       <div v-for="metric in metrics" :key="metric" class="group/panel relative opacity-80 hover:opacity-100" :title="panelTooltip(row, metric)">
         <div :data-probe-metric="metric" class="grid h-1 grid-cols-10 items-end gap-px transition-all hover:h-2.5 motion-reduce:transition-none">
