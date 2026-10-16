@@ -720,12 +720,17 @@ fn emerald_header_mode_defaults_for_existing_settings_and_rejects_unknown_modes(
             "earth_view_mode": mode
         }))
         .unwrap();
-        assert_eq!(serde_json::to_value(settings.earth_view_mode).unwrap(), serde_json::json!(mode));
+        assert_eq!(
+            serde_json::to_value(settings.earth_view_mode).unwrap(),
+            serde_json::json!(mode)
+        );
     }
-    assert!(serde_json::from_value::<crate::control::Settings>(serde_json::json!({
-        "earth_view_mode": "unsupported"
-    }))
-    .is_err());
+    assert!(
+        serde_json::from_value::<crate::control::Settings>(serde_json::json!({
+            "earth_view_mode": "unsupported"
+        }))
+        .is_err()
+    );
 }
 
 #[test]
