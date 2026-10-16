@@ -1003,6 +1003,7 @@ version = "0.1.0-alpha.17"
 dependencies = [
  "pulse-protocol",
  "reqwest",
+ "rustix",
  "serde",
  "serde_json",
  "sysinfo",

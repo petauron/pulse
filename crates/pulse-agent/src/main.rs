@@ -162,7 +162,7 @@ impl Collector {
 
         let mut seen_disks = HashSet::new();
         let mut disk_total_bytes = 0_u64;
-        let mut disk_available_bytes = 0_u64;
+        let mut disk_used_bytes = 0_u64;
         for disk in self.disks.list() {
             let mount_point = disk.mount_point().to_string_lossy();
             if config
@@ -172,15 +172,15 @@ impl Collector {
             {
                 continue;
             }
-            let identity = (
-                disk.name().to_string_lossy().into_owned(),
-                disk.total_space(),
-            );
-            if disk.total_space() == 0 || !seen_disks.insert(identity) {
+            let Some((total_bytes, used_bytes)) = disk_usage(disk) else {
+                continue;
+            };
+            let identity = (disk.name().to_string_lossy().into_owned(), total_bytes);
+            if total_bytes == 0 || !seen_disks.insert(identity) {
                 continue;
             }
-            disk_total_bytes = disk_total_bytes.saturating_add(disk.total_space());
-            disk_available_bytes = disk_available_bytes.saturating_add(disk.available_space());
+            disk_total_bytes = disk_total_bytes.saturating_add(total_bytes);
+            disk_used_bytes = disk_used_bytes.saturating_add(used_bytes);
         }
         let mut network_received = 0_u64;
         let mut network_transmitted = 0_u64;
@@ -230,7 +230,7 @@ impl Collector {
             swap_total_bytes: self.system.total_swap(),
             swap_used_bytes: self.system.used_swap(),
             disk_total_bytes,
-            disk_used_bytes: disk_total_bytes.saturating_sub(disk_available_bytes),
+            disk_used_bytes,
             network_receive_bytes_per_second: rate_per_second(network_received, elapsed),
             network_transmit_bytes_per_second: rate_per_second(network_transmitted, elapsed),
             network_total_received_bytes: network_total_received,
@@ -696,6 +696,32 @@ fn include_network_interface(name: &str, allowed: Option<&HashSet<String>>) -> b
     )
 }
 
+#[cfg(unix)]
+fn disk_usage(disk: &sysinfo::Disk) -> Option<(u64, u64)> {
+    // Komari counts allocated blocks as used; blocks reserved for the
+    // filesystem are not ordinary-user available space, but are not used.
+    let stats = rustix::fs::statvfs(disk.mount_point()).ok()?;
+    Some(disk_usage_from_blocks(
+        stats.f_blocks,
+        stats.f_bfree,
+        stats.f_frsize,
+    ))
+}
+
+#[cfg(not(unix))]
+fn disk_usage(disk: &sysinfo::Disk) -> Option<(u64, u64)> {
+    let total = disk.total_space();
+    Some((total, total.saturating_sub(disk.available_space())))
+}
+
+#[cfg(unix)]
+fn disk_usage_from_blocks(blocks: u64, free_blocks: u64, block_size: u64) -> (u64, u64) {
+    (
+        blocks.saturating_mul(block_size),
+        blocks.saturating_sub(free_blocks).saturating_mul(block_size),
+    )
+}
+
 fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
     let elapsed_millis = elapsed.as_millis().max(1);
     let bytes_per_second = u128::from(bytes).saturating_mul(1_000) / elapsed_millis;
@@ -705,6 +731,15 @@ fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn disk_used_excludes_reserved_but_unallocated_blocks() {
+        // 100 total blocks, 20 free blocks, only 15 available to an
+        // unprivileged user: Komari reports 80 used, not 85.
+        assert_eq!(disk_usage_from_blocks(100, 20, 4), (400, 320));
+        assert_eq!(disk_usage_from_blocks(1, 2, 4), (4, 0));
+    }
 
     #[test]
     fn network_interface_defaults_match_komari_without_blocking_an_explicit_allowlist() {
