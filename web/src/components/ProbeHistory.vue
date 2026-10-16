@@ -6,6 +6,8 @@ import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { Button } from '@/components/ui/button'
 import { DataTooltip } from '@/components/ui/data-tooltip'
+import { Empty } from '@/components/ui/empty'
+import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useAppStore } from '@/stores/app'
@@ -61,8 +63,10 @@ async function reload(): Promise<void> {
       data.value = response
   }
   catch (cause) {
-    if (current === generation)
+    if (current === generation) {
+      data.value = null
       error.value = cause instanceof Error ? cause.message : String(cause)
+    }
   }
   finally {
     if (current === generation)
@@ -447,17 +451,16 @@ function exportPng(): void {
         </Button>
       </div>
     </div>
-    <p v-if="error" role="alert" class="text-sm text-destructive">
-      {{ error }}
-    </p>
-    <p v-if="loading && !data" role="status" class="text-sm text-muted-foreground">
+    <p v-if="loading" role="status" class="sr-only">
       正在读取探测记录…
     </p>
-    <template v-if="data">
-      <p v-if="!tasks.length" class="text-sm text-muted-foreground">
-        暂无延迟数据
-      </p>
-      <template v-else>
+    <Spinner :show="loading" :aria-busy="loading" class="min-h-32" :description="loading && !data ? '正在读取探测记录…' : undefined">
+      <div v-if="error" role="alert" class="flex flex-col items-center gap-3 py-8 text-center text-sm text-destructive">
+        <span>{{ error }}</span>
+        <Button variant="outline" size="sm" @click="reload">重新尝试</Button>
+      </div>
+      <Empty v-else-if="!loading && (!data || !tasks.length)" description="暂无延迟数据" />
+      <template v-else-if="data && tasks.length">
         <section aria-label="延迟数据分析" class="flex flex-col gap-3">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <h3 class="text-sm font-semibold">
@@ -685,6 +688,6 @@ function exportPng(): void {
           </div>
         </details>
       </template>
-    </template>
+    </Spinner>
   </div>
 </template>

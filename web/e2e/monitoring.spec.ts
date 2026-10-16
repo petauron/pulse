@@ -149,6 +149,47 @@ test('probe history honors Emerald chart defaults and retained range', async ({ 
   expect(requests[1]).toContain('hours=1')
 })
 
+test('probe history does not leave stale metrics visible after refresh fails', async ({ page }) => {
+  let responseMode: 'data' | 'error' | 'empty' = 'data'
+  let releaseEmptyResponse: (() => void) | undefined
+  await page.route('**/api/v1/nodes/*/probes?*', async (route) => {
+    if (responseMode === 'error') {
+      await route.fulfill({ status: 503, json: { error: '探测暂不可用' } })
+      return
+    }
+    if (responseMode === 'empty')
+      await new Promise<void>((resolve) => { releaseEmptyResponse = resolve })
+    await route.fulfill({
+      json: {
+        tasks: responseMode === 'empty' ? [] : [{ id: 'e2e-probe', name: 'e2e-probe', kind: 'icmp', interval_seconds: 60 }],
+        records: [],
+        chart: [],
+        summary: [],
+        chart_source_points: 0,
+        chart_bucket_ms: 3601,
+        range_start_unix_ms: Date.now() - 3_600_000,
+        range_end_unix_ms: Date.now(),
+      },
+    })
+  })
+  await login(page)
+  await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
+  await expect(page.getByRole('region', { name: '延迟数据分析' })).toBeVisible()
+
+  responseMode = 'error'
+  await page.getByRole('button', { name: '立即刷新' }).click()
+  await expect(page.getByRole('alert')).toContainText('探测暂不可用')
+  await expect(page.getByRole('region', { name: '延迟数据分析' })).toHaveCount(0)
+
+  responseMode = 'empty'
+  await page.getByRole('button', { name: '重新尝试' }).click()
+  await expect.poll(() => releaseEmptyResponse !== undefined).toBe(true)
+  await expect(page.getByRole('status')).toContainText('正在读取探测记录…')
+  releaseEmptyResponse?.()
+  await expect(page.getByText('暂无延迟数据')).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('probe analysis switches tasks without changing the selected chart series', async ({ page }, testInfo) => {
   await page.route('**/api/public', async (route) => {
     const response = await route.fetch()
