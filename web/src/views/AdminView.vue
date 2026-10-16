@@ -21,7 +21,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const app = useAppStore()
 const state = shallowRef<AdminState | null>(null)
-const settings = ref<SiteSettings>({ site_name: 'Senulun', private_site: true, agent_interval_seconds: 3 })
+const settings = ref<SiteSettings>({ site_name: 'Senulun', private_site: true, agent_interval_seconds: 3, earth_view_mode: 'earth' })
 const loading = ref(false)
 const loadError = ref('')
 let controller: AbortController | null = null
@@ -41,7 +41,7 @@ async function refresh(): Promise<void> {
       state.value = response
       settings.value = { ...response.settings }
       if (app.publicSettings)
-        app.publicSettings = { ...app.publicSettings, sitename: response.settings.site_name, private_site: response.settings.private_site, theme_settings: { ...app.publicSettings.theme_settings, dataUpdateInterval: response.settings.agent_interval_seconds, dailyExchangeRates: response.settings.daily_exchange_rates } }
+        app.publicSettings = { ...app.publicSettings, sitename: response.settings.site_name, private_site: response.settings.private_site, theme_settings: { ...app.publicSettings.theme_settings, dataUpdateInterval: response.settings.agent_interval_seconds, dailyExchangeRates: response.settings.daily_exchange_rates, earthViewMode: response.settings.earth_view_mode } }
     }
   }
   catch (cause) {
@@ -120,6 +120,15 @@ async function logout(): Promise<void> {
           <fieldset :disabled="busy" class="space-y-4">
             <label class="grid gap-2 text-sm">站点名称<Input v-model="settings.site_name" required maxlength="128" /></label>
             <label class="grid gap-2 text-sm">Agent 上报间隔（秒）<Input v-model="settings.agent_interval_seconds" type="number" min="1" max="300" step="1" required /></label>
+            <label class="grid gap-2 text-sm">首页头部展示模式
+              <select v-model="settings.earth_view_mode" class="h-9 w-full rounded-md border border-border bg-background px-3">
+                <option value="earth">旋转地球</option>
+                <option value="earth-stop">静止地球</option>
+                <option value="maps">点状地图</option>
+                <option value="cards">仅汇总卡片</option>
+                <option value="hide">隐藏头部</option>
+              </select>
+            </label>
             <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="settings.private_site" type="checkbox" class="size-4 accent-primary">私有站点：登录后才能查看监控数据</label>
             <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="settings.ip_info_enabled" type="checkbox" class="size-4 accent-primary" aria-describedby="ip-info-privacy">启用 IP 信息查询（仅管理员）</label>
             <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="settings.daily_exchange_rates" type="checkbox" class="size-4 accent-primary">每日汇率（Frankfurter）</label>

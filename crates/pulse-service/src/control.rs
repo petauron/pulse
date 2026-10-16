@@ -121,6 +121,18 @@ pub(crate) struct Settings {
     pub agent_interval_seconds: u64,
     pub ip_info_enabled: bool,
     pub daily_exchange_rates: bool,
+    pub earth_view_mode: EarthViewMode,
+}
+
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum EarthViewMode {
+    #[default]
+    Earth,
+    EarthStop,
+    Maps,
+    Cards,
+    Hide,
 }
 
 impl Default for Settings {
@@ -131,6 +143,7 @@ impl Default for Settings {
             agent_interval_seconds: 3,
             ip_info_enabled: false,
             daily_exchange_rates: false,
+            earth_view_mode: EarthViewMode::Earth,
         }
     }
 }

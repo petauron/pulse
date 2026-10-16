@@ -704,6 +704,31 @@ fn configuration_errors_cannot_create_arbitrary_probe_commands() {
 }
 
 #[test]
+fn emerald_header_mode_defaults_for_existing_settings_and_rejects_unknown_modes() {
+    let old_settings = serde_json::json!({
+        "site_name": "Senulun",
+        "private_site": true,
+        "agent_interval_seconds": 3
+    });
+    let settings: crate::control::Settings = serde_json::from_value(old_settings).unwrap();
+    assert_eq!(
+        serde_json::to_value(settings.earth_view_mode).unwrap(),
+        serde_json::json!("earth")
+    );
+    for mode in ["earth", "earth-stop", "maps", "cards", "hide"] {
+        let settings: crate::control::Settings = serde_json::from_value(serde_json::json!({
+            "earth_view_mode": mode
+        }))
+        .unwrap();
+        assert_eq!(serde_json::to_value(settings.earth_view_mode).unwrap(), serde_json::json!(mode));
+    }
+    assert!(serde_json::from_value::<crate::control::Settings>(serde_json::json!({
+        "earth_view_mode": "unsupported"
+    }))
+    .is_err());
+}
+
+#[test]
 fn slow_reporting_extends_the_offline_window_consistently() {
     let (_dir, storage, _node) = fixture();
     storage
@@ -713,6 +738,7 @@ fn slow_reporting_extends_the_offline_window_consistently() {
             agent_interval_seconds: 300,
             ip_info_enabled: false,
             daily_exchange_rates: false,
+            earth_view_mode: crate::control::EarthViewMode::Earth,
         })
         .unwrap();
     let db = storage.connection().unwrap();

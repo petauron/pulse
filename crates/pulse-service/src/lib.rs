@@ -859,7 +859,7 @@ async fn public_settings_data(state: &AppState) -> Result<Value, ApiError> {
             "dataUpdateInterval": settings.agent_interval_seconds,
             "rpcTransportMode": "http",
             "defaultViewMode": "card",
-            "earthViewMode": "earth",
+            "earthViewMode": settings.earth_view_mode,
             "visitorInfoCardEnabled": true,
             "dailyExchangeRates": settings.daily_exchange_rates,
             "hideAdminEntryWhenLoggedOut": false,

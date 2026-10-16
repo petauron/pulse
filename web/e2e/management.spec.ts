@@ -57,6 +57,23 @@ test('public mode still hides hidden nodes and never exposes administrator write
   }
 })
 
+test('administrator can switch the Emerald header to the bundled map', async ({ page }) => {
+  await login(page, '/admin?section=site')
+  const original = await (await page.request.get('/api/admin/state')).json()
+  try {
+    await page.getByLabel('首页头部展示模式').selectOption('maps')
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect(page.getByRole('status').filter({ hasText: '已保存' })).toBeVisible()
+    const updated = await (await page.request.get('/api/admin/state')).json()
+    expect(updated.settings.earth_view_mode).toBe('maps')
+    await page.goto('/')
+    await expect(page.getByTestId('earth-map').locator('canvas')).toBeVisible()
+  }
+  finally {
+    await mutation(page.request, '/api/admin/settings', original.settings)
+  }
+})
+
 test('probe CRUD executes on the local Agent and exposes real result history', async ({ page }, testInfo) => {
   test.setTimeout(90_000)
   await login(page, '/admin?section=probes')

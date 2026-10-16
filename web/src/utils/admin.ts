@@ -6,6 +6,7 @@ export interface SiteSettings {
   agent_interval_seconds: number
   ip_info_enabled?: boolean
   daily_exchange_rates?: boolean
+  earth_view_mode: 'earth' | 'earth-stop' | 'maps' | 'cards' | 'hide'
 }
 
 export interface ManagedNode {
