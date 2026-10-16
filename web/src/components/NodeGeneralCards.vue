@@ -117,6 +117,13 @@ const exchangeRateRows = computed(() => FINANCE_CURRENCIES.filter(currency => ra
   rate: ((rates.value[currency] ?? 0) / (rates.value[financeCurrency.value] ?? 1)).toFixed(6),
   symbol: CURRENCY_SYMBOLS[currency],
 })))
+const financeDisclosure = computed(() => [
+  dailyRates.value
+    ? `Frankfurter 每日汇率（${rateDate.value}）；休市时显示最近交易日。`
+    : '当前使用主题内置参考汇率，非实时。可在站点设置启用每日汇率。',
+  '月均按 30 天折算；剩余按未到期时长折算。',
+  finance.value.excluded ? `${finance.value.excluded} 个节点因资料不完整，未计入部分估算。` : '',
+].filter(Boolean).join(' '))
 const showEarth = computed(() => appStore.earthViewMode === 'earth' || appStore.earthViewMode === 'earth-stop')
 const showVisualPanel = computed(() => showEarth.value)
 const wrapperClass = computed(() => showVisualPanel.value
@@ -246,7 +253,7 @@ const cardGridClass = computed(() => showVisualPanel.value
           :aria-hidden="!openFinanceCard"
           :inert="!openFinanceCard"
           hoverable
-          class="absolute top-0 left-1/2 z-20 min-h-42 w-[260%] max-w-88 -translate-x-[50%] -translate-y-[25%] rounded-md border-none shadow-[0_0_20px,0_0_0_1px] shadow-emerald-600/10 transition-all"
+          class="absolute top-0 left-1/2 z-20 h-42 w-[260%] max-w-88 -translate-x-[50%] -translate-y-[25%] rounded-md border-none shadow-[0_0_20px,0_0_0_1px] shadow-emerald-600/10 transition-all"
           :class="[
             pickSurfaceClass('bg-background', 'bg-background/50 backdrop-blur-lg'),
             openFinanceCard ? 'opacity-100 scale-100  -translate-y-[5%]' : 'opacity-0 pointer-events-none scale-50',
@@ -262,7 +269,7 @@ const cardGridClass = computed(() => showVisualPanel.value
           >
             <Icon icon="lucide:x" :width="14" :height="14" />
           </button>
-          <div class="flex h-full min-w-0 flex-col overflow-hidden">
+          <div class="flex h-full min-w-0 flex-col">
             <div class="shrink-0 grid grid-cols-3 gap-1.5">
               <div v-for="(item, index) in financeSummaryItems" :key="item.label" class="min-w-0">
                 <div class="flex mb-1.5 items-center text-xs font-medium text-muted-foreground">
@@ -286,10 +293,19 @@ const cardGridClass = computed(() => showVisualPanel.value
             <div class="flex-1 my-1.5" />
             <div class="shrink-0 flex flex-col flex-1">
               <div class="flex mb-1 items-center justify-between gap-2">
-                <div class="flex items-center gap-1 text-xs font-medium tracking-wider text-muted-foreground">
-                  {{ dailyRates ? `汇率 · ${rateDate}` : '参考汇率估算' }}
-                </div>
-                <select v-model="financeCurrency" aria-label="切换汇率基准币种" class="bg-background text-xs rounded border border-border p-1">
+                <DataTooltip
+                  as="button" type="button" placement="bottom" :content="financeDisclosure" :width="240"
+                  class="flex items-center gap-1 rounded-sm text-xs font-medium tracking-wider text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="查看汇率来源与估算说明"
+                >
+                  {{ dailyRates ? '今日汇率' : '参考汇率估算' }}
+                  <Icon icon="lucide:info" :width="12" :height="12" aria-hidden="true" />
+                </DataTooltip>
+                <select
+                  v-model="financeCurrency"
+                  class="shrink-0 rounded-sm border border-border/70 bg-background/70 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus:text-foreground"
+                  aria-label="切换汇率基准币种"
+                >
                   <option v-for="currency in FINANCE_CURRENCIES.filter(code => rates[code])" :key="currency" :value="currency">
                     {{ currency }}
                   </option>
@@ -301,12 +317,6 @@ const cardGridClass = computed(() => showVisualPanel.value
                   <span>{{ row.symbol }}{{ row.rate }}</span>
                 </div>
               </div>
-              <p class="text-[10px] text-muted-foreground mt-1">
-                {{ dailyRates ? 'Frankfurter 每日汇率；休市时显示最近交易日。' : '当前使用主题内置参考汇率，非实时。可在站点设置启用每日汇率。' }} 月均按 30 天折算；剩余按未到期时长折算。
-              </p>
-              <p v-if="finance.excluded" class="text-[10px] text-muted-foreground">
-                {{ finance.excluded }} 个节点因资料不完整，未计入部分估算。
-              </p>
             </div>
           </div>
         </CardX>
