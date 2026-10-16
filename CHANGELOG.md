@@ -4,6 +4,17 @@ All notable changes to Pulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) after its first stable release.
 
+## [0.1.0-alpha.18](https://github.com/petauron/senulun/compare/v0.1.0-alpha.17...v0.1.0-alpha.18) (2026-10-16)
+
+
+### Bug Fixes
+
+* align Emerald monitoring and Komari TCP latency ([a136fef](https://github.com/petauron/senulun/commit/a136fef44f879cb320f34b2466a230cb593e4237))
+* **deps:** align and validate the updated build toolchain ([#57](https://github.com/petauron/senulun/issues/57)) ([f61d86e](https://github.com/petauron/senulun/commit/f61d86e70811829f164eaf2047877b0329dde4bb))
+* **deps:** patch brace-expansion denial of service ([f482ff3](https://github.com/petauron/senulun/commit/f482ff36d1a72a981cde0ec184823df5e161caba))
+* **deps:** patch shell-quote command injection ([7a36757](https://github.com/petauron/senulun/commit/7a367570a714bf815d76a08e49ecac13d2b40a71))
+* **deps:** update Argon2 and reqwest with authentication regressions ([#18](https://github.com/petauron/senulun/issues/18)) ([617a975](https://github.com/petauron/senulun/commit/617a97584bf26ff6778fed8057e521af1d8d8f0f))
+
 ## [0.1.0-alpha.17](https://github.com/petauron/senulun/compare/v0.1.0-alpha.16...v0.1.0-alpha.17) (2026-10-12)
 
 
