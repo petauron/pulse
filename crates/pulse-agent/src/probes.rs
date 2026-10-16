@@ -461,7 +461,7 @@ fn parse_ping_latency(output: &[u8]) -> Option<f64> {
                 // Komari records the integer millisecond RTT for each ICMP sample.
                 // "time<1" is a strict upper bound, so its integer RTT is zero.
                 return if upper_bound {
-                    (value == 1.0).then_some(0.0)
+                    (value > 0.0 && value <= 1.0).then_some(0.0)
                 } else {
                     Some(value.floor())
                 };
