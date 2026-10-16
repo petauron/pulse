@@ -187,11 +187,7 @@ impl Collector {
         let mut network_total_received = 0_u64;
         let mut network_total_transmitted = 0_u64;
         for (name, network) in self.networks.list() {
-            let selected = config.network_interfaces.as_ref().map_or_else(
-                || !is_loopback_interface(name),
-                |allowed| allowed.contains(name),
-            );
-            if !selected {
+            if !include_network_interface(name, config.network_interfaces.as_ref()) {
                 continue;
             }
             network_received = network_received.saturating_add(network.received());
@@ -682,8 +678,22 @@ fn validate_local_text(
     Ok(())
 }
 
-fn is_loopback_interface(name: &str) -> bool {
-    name == "lo" || name == "lo0" || name.starts_with("lo:")
+fn include_network_interface(name: &str, allowed: Option<&HashSet<String>>) -> bool {
+    allowed.map_or_else(
+        || {
+            // Match Komari's default: virtual bridges and container links must
+            // not double-count provider-facing traffic. An explicit allowlist
+            // still overrides the default for intentional custom monitoring.
+            const EXCLUDED_PREFIXES: [&str; 12] = [
+                "br", "cni", "docker", "podman", "flannel", "lo", "veth", "virbr", "vmbr", "tap",
+                "fwbr", "fwpr",
+            ];
+            !EXCLUDED_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix))
+        },
+        |allowed| allowed.contains(name),
+    )
 }
 
 fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
@@ -695,6 +705,22 @@ fn rate_per_second(bytes: u64, elapsed: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn network_interface_defaults_match_komari_without_blocking_an_explicit_allowlist() {
+        for name in [
+            "br0", "cni0", "docker0", "podman0", "flannel.1", "lo", "veth123", "virbr0",
+            "vmbr0", "tap0", "fwbr0", "fwpr0",
+        ] {
+            assert!(!include_network_interface(name, None), "{name}");
+        }
+        for name in ["eth0", "ens3", "enp1s0", "wlan0"] {
+            assert!(include_network_interface(name, None), "{name}");
+        }
+        let allowed = HashSet::from(["veth123".to_owned()]);
+        assert!(include_network_interface("veth123", Some(&allowed)));
+        assert!(!include_network_interface("eth0", Some(&allowed)));
+    }
 
     #[test]
     fn remote_plain_http_is_rejected() {
