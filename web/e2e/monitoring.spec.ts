@@ -60,6 +60,8 @@ test('real Agent is visible through the Emerald card, list, search, detail, and 
   await row.press('Enter')
   await expect(page).toHaveURL(/\/instance\/[0-9a-f-]+$/)
   await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
+  await expect(page.getByText('节点价格', { exact: true }).locator('../..')).toContainText(/\$[\d,.]+\s*USD/)
+  await expect(page.getByText('剩余价值', { exact: true }).locator('../..')).toContainText(/\$[\d,.]+\s*USD/)
   await expect(page.getByText('e2e-node', { exact: true })).toBeVisible()
   await expect(page.getByText('在线', { exact: true })).toBeVisible()
   await expect(page.getByText('CPU', { exact: true }).first()).toBeVisible()

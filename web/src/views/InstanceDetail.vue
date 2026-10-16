@@ -11,7 +11,7 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useExchangeRates } from '@/composables/useExchangeRates'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useNodesStore } from '@/stores/nodes'
-import { CURRENCY_SYMBOLS, normalizeCurrency } from '@/utils/financeHelper'
+import { CURRENCY_SYMBOLS, getStoredFinanceCurrency, normalizeCurrency } from '@/utils/financeHelper'
 import { formatDateTime } from '@/utils/helper'
 import { getTrafficUsed } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
@@ -29,6 +29,7 @@ const nodesStore = useNodesStore()
 const { formatBytes, formatBytesPerSecond, formatUptime } = useNodeFormatters()
 const { rates } = useExchangeRates()
 const now = useNow({ interval: 60000 })
+const selectedCurrency = getStoredFinanceCurrency()
 
 onMounted(() => {
   window.scrollTo({ top: 0, behavior: 'instant' })
@@ -62,7 +63,18 @@ const metricCards = computed<MetricCard[]>(() => {
   const rate = rates.value[currency] ?? 0
   const hasRate = Number.isFinite(rate) && rate > 0
   const priceCNY = hasRate && Number.isFinite(node.price) && node.price > 0 ? node.price / rate : 0
-  const formatMoney = (value: number) => `${CURRENCY_SYMBOLS.CNY}${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const displayCurrency = rates.value[selectedCurrency] ? selectedCurrency : 'CNY'
+  const displayRate = rates.value[displayCurrency] ?? 1
+  const formatMoney = (valueCNY: number) => {
+    const amount = valueCNY * displayRate
+    const compact = Math.abs(amount) >= 100000
+    const value = new Intl.NumberFormat('zh-CN', {
+      maximumFractionDigits: 2,
+      minimumFractionDigits: compact ? 0 : 2,
+      notation: compact ? 'compact' : 'standard',
+    }).format(amount)
+    return `${CURRENCY_SYMBOLS[displayCurrency]}${value}`
+  }
   const hasPrice = Number.isFinite(node.price) && node.price > 0
   const hasCycle = Number.isFinite(node.billing_cycle) && node.billing_cycle > 0
   const expiry = Date.parse(node.expired_at)
@@ -79,13 +91,13 @@ const metricCards = computed<MetricCard[]>(() => {
   return [
     {
       label: '节点价格',
-      value: hasPrice ? `${formatMoney(priceCNY)} CNY` : formatMoney(0),
-      unit: hasPrice ? ` / ${getBillingCycleText(node.billing_cycle)}` : 'CNY',
+      value: hasPrice ? `${formatMoney(priceCNY)} ${displayCurrency}` : formatMoney(0),
+      unit: hasPrice ? ` / ${getBillingCycleText(node.billing_cycle)}` : displayCurrency,
       icon: 'tabler:cash',
     },
     {
       label: '月均支出',
-      value: hasCycle ? `${formatMoney(priceCNY / node.billing_cycle * 30)} CNY` : '不适用',
+      value: hasCycle ? `${formatMoney(priceCNY / node.billing_cycle * 30)} ${displayCurrency}` : '不适用',
       unit: hasCycle ? ' / 月' : undefined,
       icon: 'tabler:receipt-2',
     },
@@ -99,7 +111,7 @@ const metricCards = computed<MetricCard[]>(() => {
     {
       label: '剩余价值',
       value: formatMoney(remainingValue),
-      unit: 'CNY',
+      unit: displayCurrency,
       icon: 'tabler:coins',
     },
   ]
