@@ -718,7 +718,9 @@ fn disk_usage(disk: &sysinfo::Disk) -> Option<(u64, u64)> {
 fn disk_usage_from_blocks(blocks: u64, free_blocks: u64, block_size: u64) -> (u64, u64) {
     (
         blocks.saturating_mul(block_size),
-        blocks.saturating_sub(free_blocks).saturating_mul(block_size),
+        blocks
+            .saturating_sub(free_blocks)
+            .saturating_mul(block_size),
     )
 }
 
