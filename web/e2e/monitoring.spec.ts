@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer'
 import { readFile } from 'node:fs/promises'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
-import { login } from './auth'
+import { login, mutation, waitForNode } from './auth'
 
 test('real Agent is visible through the Emerald card, list, search, detail, and history flow', async ({ page }, testInfo) => {
   const consoleErrors: string[] = []
@@ -129,7 +129,6 @@ test('network quality offers the full retained range with an exact custom label'
   })
   await login(page, '/network-quality')
   await expect(page.getByRole('button', { name: '访问者信息' })).toBeVisible()
-  await expect(page.getByRole('columnheader', { name: '丢包率' })).toBeVisible()
   const ranges = page.getByRole('group', { name: '统计范围' })
   await expect(ranges.getByRole('button')).toHaveText(['1 小时', '6 小时', '12 小时', '1 天', '7 天', '30 天', '60 天', '90 天', '100 天'])
   await ranges.getByRole('button', { name: '100 天' }).click()
@@ -139,6 +138,37 @@ test('network quality offers the full retained range with an exact custom label'
   await page.getByRole('button', { name: '查看 e2e-node 节点详情' }).click()
   await expect(page.getByRole('tab', { name: '4 小时', exact: true })).toBeVisible()
   await expect(page.getByRole('tab', { name: '100 天', exact: true })).toBeVisible()
+})
+
+test('network quality labels TCP connection failures as Komari loss', async ({ page }, testInfo) => {
+  await login(page)
+  const nodeId = await waitForNode(page.request)
+  const name = `e2e-tcp-label-${testInfo.project.name}-${testInfo.retry}`
+  let taskId = ''
+  try {
+    const response = await mutation(page.request, '/api/admin/probes', {
+      name,
+      weight: 0,
+      kind: 'tcp',
+      target: '127.0.0.1:18080',
+      interval_seconds: 60,
+      timeout_seconds: 2,
+      enabled: true,
+      node_ids: [nodeId],
+    })
+    expect(response.ok()).toBe(true)
+    const state = await (await page.request.get('/api/admin/state')).json()
+    taskId = state.probes.find((task: { name: string }) => task.name === name)?.id ?? ''
+    expect(taskId).not.toBe('')
+
+    await page.goto('/network-quality')
+    await expect(page.getByRole('columnheader', { name: '丢包率' })).toBeVisible()
+    await expect(page.getByText('TCP 的“丢包率”表示连接失败比例', { exact: false })).toBeVisible()
+  }
+  finally {
+    if (taskId)
+      await mutation(page.request, `/api/admin/probes/${taskId}/delete`)
+  }
 })
 
 test('probe history honors Emerald chart defaults and retained range', async ({ page }) => {
