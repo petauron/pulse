@@ -221,8 +221,6 @@ function taskFailureData(id: string): Array<[number, number | null]> {
 const chartFailureLabel = computed(() => failureRateLabelForKinds(
   (selectedTasks.value.length ? selectedTasks.value : tasks.value).map(task => task.kind),
 ))
-const summaryFailureLabel = computed(() => failureRateLabelForKinds(tasks.value.map(task => task.kind)))
-const summaryTitle = computed(() => `延迟与${summaryFailureLabel.value}汇总`)
 const showZoom = computed(() => app.publicSettings?.theme_settings?.pingChartShowZoom !== false)
 const chartThresholds = computed(() => {
   const settings = app.publicSettings?.theme_settings
@@ -579,9 +577,6 @@ function exportPng(): void {
         <p v-if="exportError" role="alert" class="text-sm text-destructive">
           {{ exportError }}
         </p>
-        <p v-if="data.chart_source_points > data.chart.length" class="text-sm text-muted-foreground">
-          曲线覆盖整个所选时间范围，已将 {{ data.chart_source_points }} 个样本按时间聚合为 {{ data.chart.length }} 个点；汇总和最近记录仍使用原始样本。
-        </p>
         <template v-if="data.chart.length && (showDelay || showFailures)">
           <div v-if="chartLayout === 'combined'" class="h-88 rounded-md p-3 md:h-104" :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xl')">
             <VChart :key="app.resolvedThemeMode" ref="combinedChartRef" :option="combinedOption" autoresize style="height: 100%; width: 100%" :aria-label="`探测延迟和${chartFailureLabel}曲线，左右轴分别为毫秒和百分比，长时间缺报为断点`" />
@@ -601,62 +596,6 @@ function exportPng(): void {
         <p v-else class="text-sm text-muted-foreground">
           请选择要显示的曲线。
         </p>
-        <p class="text-xs text-muted-foreground">
-          百分比轴是每个有样本时间桶的失败比例；较长缺报会断开，不计为 0%。TCP、HTTP 失败不等同于 ICMP 丢包。
-        </p>
-        <details class="relative rounded-md border p-3 bg-background/50">
-          <summary class="cursor-pointer text-sm font-medium">
-            {{ summaryTitle }}
-          </summary>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-sm">
-              <caption class="sr-only">
-                所选时间范围的{{ summaryTitle }}
-              </caption><thead>
-                <tr class="border-b">
-                  <th class="p-2">
-                    任务
-                  </th><th class="p-2">
-                    样本
-                  </th><th class="p-2">
-                    平均延迟
-                  </th><th class="p-2">
-                    最低 / 最高
-                  </th><th class="p-2">
-                    最新
-                  </th><th class="p-2">
-                    P50 / P95 / P99
-                  </th><th class="p-2">
-                    波动率
-                  </th><th class="p-2">
-                    {{ summaryFailureLabel }}
-                  </th>
-                </tr>
-              </thead><tbody>
-                <tr v-for="task in tasks" :key="task.id" class="border-b">
-                  <th class="p-2 font-medium">
-                    {{ task.name }}
-                  </th><td class="p-2">
-                    {{ summaryByTask.get(task.id)?.samples ?? 0 }}
-                  </td><td class="p-2">
-                    {{ latency(summaryByTask.get(task.id)?.avg_latency_ms) }}
-                  </td><td class="whitespace-nowrap p-2">
-                    {{ latency(summaryByTask.get(task.id)?.min_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.max_latency_ms) }}
-                  </td><td class="p-2">
-                    {{ latency(summaryByTask.get(task.id)?.latest_latency_ms) }}
-                  </td><td class="whitespace-nowrap p-2">
-                    {{ latency(summaryByTask.get(task.id)?.p50_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.p95_latency_ms) }} / {{ latency(summaryByTask.get(task.id)?.p99_latency_ms) }}
-                  </td><td class="p-2">
-                    {{ summaryByTask.get(task.id)?.p99_p50_ratio == null ? '—' : summaryByTask.get(task.id)!.p99_p50_ratio!.toFixed(2) }}
-                  </td><td class="whitespace-nowrap p-2">
-                    <span class="sr-only">{{ failureRateLabel(task.kind) }} </span>
-                    {{ summaryByTask.get(task.id)?.samples ? `${summaryByTask.get(task.id)!.loss_percent.toFixed(2)}%` : '无样本' }}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </details>
         <details v-if="recent.length" class="relative rounded-md border p-3 bg-background/50">
           <summary class="cursor-pointer text-sm font-medium">
             查看最近 {{ recent.length }} 条记录

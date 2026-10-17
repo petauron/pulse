@@ -694,6 +694,11 @@ fn dashboard_probe_preview_honors_history_task_selection_and_row_limit() {
 #[test]
 fn dashboard_probe_theme_limits_match_retention_and_eight_rows() {
     let node = uuid::Uuid::new_v4().to_string();
+    assert_eq!(crate::control::DashboardProbeConfig::default().row_count, 3);
+    assert_eq!(
+        crate::control::DashboardProbeConfig::from_theme(&serde_json::json!({}), 7).row_count,
+        3
+    );
     let settings = serde_json::json!({
         "homePingHistoryHours": 168,
         "homePingRowCount": 99,

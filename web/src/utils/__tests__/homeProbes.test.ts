@@ -9,9 +9,9 @@ function probe(id: string): NodeProbe {
 describe('selectHomeProbes', () => {
   const probes = [probe('a'), probe('b'), probe('c')]
 
-  it('uses Emerald default of two rows and keeps empty slots visible', () => {
-    expect(selectHomeProbes(probes, 'node')).toEqual([probes[0], probes[1]])
-    expect(selectHomeProbes([], 'node')).toEqual([null, null])
+  it('uses three default rows and keeps empty slots visible', () => {
+    expect(selectHomeProbes(probes, 'node')).toEqual(probes)
+    expect(selectHomeProbes([], 'node')).toEqual([null, null, null])
   })
 
   it('follows per-node task order and fills missing rows', () => {

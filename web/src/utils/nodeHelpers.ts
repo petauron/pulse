@@ -99,7 +99,7 @@ export function selectHomeProbes(probes: NodeProbe[], nodeUuid: string, settings
   const configuredCount = settings?.homePingRowCount
   const rowCount = typeof configuredCount === 'number' && Number.isFinite(configuredCount)
     ? Math.round(Math.min(8, Math.max(1, configuredCount)))
-    : 2
+    : 3
   const configuredMap = settings?.homePingTasksByNode
   const taskIds = configuredMap && typeof configuredMap === 'object' && !Array.isArray(configuredMap) && Object.hasOwn(configuredMap, nodeUuid)
     ? (configuredMap as Record<string, unknown>)[nodeUuid]
