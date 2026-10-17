@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const cargoAbout = process.env.CARGO_ABOUT || 'cargo-about'
 const check = process.argv.slice(2).includes('--check')
-const temporary = mkdtempSync(join(tmpdir(), 'pulse-license-output-'))
+const temporary = mkdtempSync(join(tmpdir(), 'senulun-license-output-'))
 const read = path => readFileSync(path, 'utf8')
 const run = (command, args) => execFileSync(command, args, {
   cwd: repository,

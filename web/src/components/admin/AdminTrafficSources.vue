@@ -122,7 +122,7 @@ const statusText: Record<string, string> = {
         仅 Service 定时读取管理员指定的 HTTPS JSON 接口；外部快照与 Agent 本地流量分别保存，不会相互覆盖。默认每 30 分钟同步，失败时保留上次值并显示过期状态。
       </p>
       <p v-if="!keyReady" role="alert" class="rounded-md border border-destructive/40 p-3 text-sm text-destructive">
-        尚未配置 PULSE_TRAFFIC_KEY_FILE。请在 Service 上提供权限为 0600 的 32 字节随机密钥文件后重启，才能保存登录凭据。
+        尚未配置 SENULUN_TRAFFIC_KEY_FILE。请在 Service 上提供权限为 0600 的 32 字节随机密钥文件后重启，才能保存登录凭据。
       </p>
       <Button type="button" variant="outline" :disabled="loading || busy" @click="load">{{ loading ? '正在刷新…' : '刷新同步状态' }}</Button>
       <label class="grid gap-2 text-sm">关联节点

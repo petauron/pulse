@@ -13,7 +13,7 @@ monitored host's egress rather than a reverse proxy in front of the Service. It
 reuses reqwest, serde, and Tokio; no new dependency, IP storage, protocol field, or
 database migration is needed. The existing snapshot `region` field carries the
 result into the existing country-cluster rendering. Manual region wins; an unset
-or empty `PULSE_GEOIP_PROVIDER` selects GeoJS, and `disabled` prevents requests.
+or empty `SENULUN_GEOIP_PROVIDER` selects GeoJS, and `disabled` prevents requests.
 This documented GeoIP exception does not authorize other default third-party calls. One cancellable task
 retains one country value in a watch channel, with one five-second/8 KiB request
 at a time, a 24-hour success refresh, and a 15-minute failure retry. Lookups never
@@ -21,7 +21,7 @@ block the metric loop, and failures keep the latest successful country in memory
 
 ## Protocol
 
-`pulse-protocol` owns versioned request and response types. Protocol changes must be deliberate and covered by compatibility tests once the first stable protocol ships.
+`senulun-protocol` owns versioned request and response types. Protocol changes must be deliberate and covered by compatibility tests once the first stable protocol ships.
 
 ## Service
 

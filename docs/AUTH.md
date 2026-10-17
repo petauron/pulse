@@ -7,8 +7,8 @@ Administration APIs always require a complete administrator session.
 
 ## First setup
 
-Set `PULSE_PUBLIC_URL` to the exact browser-facing origin, for example
-`https://pulse.example.com`. It must be HTTPS except for HTTP loopback development.
+Set `SENULUN_PUBLIC_URL` to the exact browser-facing origin, for example
+`https://senulun.example.com`. It must be HTTPS except for HTTP loopback development.
 Subpath deployments are not supported. Senulun uses this configured origin for
 Origin checks, OAuth callbacks, and cookie security; forwarded headers do not
 change these decisions.
@@ -93,11 +93,11 @@ these operations.
 ## Optional GitHub OAuth
 
 GitHub OAuth is disabled unless an administrator explicitly configures
-`PULSE_GITHUB_CLIENT_ID`, `PULSE_GITHUB_CLIENT_SECRET_FILE`, and
-`PULSE_GITHUB_ALLOWED_USER_ID` together. The last setting is the allowed account's
+`SENULUN_GITHUB_CLIENT_ID`, `SENULUN_GITHUB_CLIENT_SECRET_FILE`, and
+`SENULUN_GITHUB_ALLOWED_USER_ID` together. The last setting is the allowed account's
 immutable numeric GitHub user ID.
 Use a dedicated GitHub OAuth application with callback URL
-`PULSE_PUBLIC_URL/api/auth/oauth/callback`. Client secrets must be supplied through
+`SENULUN_PUBLIC_URL/api/auth/oauth/callback`. Client secrets must be supplied through
 the deployment's secret configuration, never committed to Git.
 
 Initial password setup remains required. OAuth authenticates only that existing

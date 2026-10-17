@@ -1010,10 +1010,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulse-agent"
+name = "senulun-agent"
 version = "0.1.0-alpha.21"
 dependencies = [
- "pulse-protocol",
+ "senulun-protocol",
  "reqwest",
  "rustix",
  "serde",
@@ -1027,7 +1027,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulse-protocol"
+name = "senulun-protocol"
 version = "0.1.0-alpha.21"
 dependencies = [
  "serde",
@@ -1035,7 +1035,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pulse-service"
+name = "senulun-service"
 version = "0.1.0-alpha.21"
 dependencies = [
  "argon2",
@@ -1043,7 +1043,7 @@ dependencies = [
  "base64 0.23.1",
  "hex",
  "mime_guess",
- "pulse-protocol",
+ "senulun-protocol",
  "reqwest",
  "ring",
  "rusqlite",

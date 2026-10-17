@@ -156,7 +156,7 @@ test('notification channels require an explicit opt-in and remain disabled when 
     const enabled = page.getByLabel('启用渠道并允许发送上述告警信息')
     await expect(enabled).not.toBeChecked()
     await page.getByLabel('渠道名称', { exact: true }).fill(name)
-    await page.getByLabel('Webhook URL', { exact: true }).fill('https://example.invalid/pulse-e2e')
+    await page.getByLabel('Webhook URL', { exact: true }).fill('https://example.invalid/senulun-e2e')
     await page.getByRole('button', { name: '保存渠道' }).click()
     await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible()
     const state = await (await page.request.get('/api/admin/state')).json()

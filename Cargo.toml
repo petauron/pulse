@@ -1,8 +1,8 @@
 [workspace]
 members = [
-  "crates/pulse-agent",
-  "crates/pulse-protocol",
-  "crates/pulse-service",
+  "crates/senulun-agent",
+  "crates/senulun-protocol",
+  "crates/senulun-service",
 ]
 resolver = "3"
 

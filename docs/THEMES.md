@@ -20,7 +20,7 @@ administrator saves the URLs. Light/dark background URL pairs are supported.
 Reload the page after changing resource origins so the new policy takes effect.
 
 Packages, the active-theme selector and per-theme JSON settings live in
-the persistent directory beside PULSE_DATABASE_PATH, under themes/.
+the persistent directory beside SENULUN_DATABASE_PATH, under themes/.
 Back up this directory in addition to the two SQLite files. Restoring only
 the database pair does not restore installed themes. If an active theme is
 missing on startup, Senulun displays the embedded Emerald theme.
@@ -66,7 +66,7 @@ features that require the omitted interfaces will need adaptation.
 
 ## LuminaPlus v1.3.5
 
-Install compat/luminaplus/LuminaPlus-v1.3.5-pulse.zip through Admin → Themes,
+Install compat/luminaplus/LuminaPlus-v1.3.5-senulun.zip through Admin → Themes,
 then activate it. Installation alone never activates a package. The theme's
 settings page is /?view=theme-manage after signing in. Senulun administration
 remains at /admin, and LuminaPlus's /admin/ping link redirects to Senulun probes.

@@ -24,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'cargo build --locked --manifest-path ../Cargo.toml -p pulse-service -p pulse-agent && node e2e/server.mjs',
+    command: 'cargo build --locked --manifest-path ../Cargo.toml -p senulun-service -p senulun-agent && node e2e/server.mjs',
     url: 'http://127.0.0.1:18080/healthz',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

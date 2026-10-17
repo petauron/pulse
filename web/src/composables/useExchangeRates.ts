@@ -6,7 +6,7 @@ import { useAppStore } from '@/stores/app'
 import { CURRENCY_SYMBOLS, REFERENCE_EXCHANGE_RATES } from '@/utils/financeHelper'
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/
-const cacheKey = 'pulse:frankfurter-cny:v1'
+const cacheKey = 'senulun:frankfurter-cny:v1'
 type Rates = Partial<Record<CurrencyCode, number>>
 function parseRates(raw: unknown): Rates | null {
   if (!raw || typeof raw !== 'object')
