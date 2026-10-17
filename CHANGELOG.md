@@ -4,6 +4,13 @@ All notable changes to Pulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) after its first stable release.
 
+## [0.1.0-alpha.20](https://github.com/petauron/senulun/compare/v0.1.0-alpha.19...v0.1.0-alpha.20) (2026-10-17)
+
+
+### Bug Fixes
+
+* align Komari probe summary and bucket tooltips ([8471ebf](https://github.com/petauron/senulun/commit/8471ebf326d49a30f48b5f0e611e1d86bb8d84fd))
+
 ## [0.1.0-alpha.19](https://github.com/petauron/senulun/compare/v0.1.0-alpha.18...v0.1.0-alpha.19) (2026-10-17)
 
 
