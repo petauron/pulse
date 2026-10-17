@@ -32,8 +32,8 @@ impl DashboardProbeConfig {
         let hours = bounded_theme_integer(settings, "homePingHistoryHours", 1, 1, 168)
             .min(retention_days.saturating_mul(24).max(1));
         let row_count =
-            usize::try_from(bounded_theme_integer(settings, "homePingRowCount", 2, 1, 8))
-                .unwrap_or(2);
+            usize::try_from(bounded_theme_integer(settings, "homePingRowCount", 3, 1, 8))
+                .unwrap_or(3);
         let mut tasks_by_node = HashMap::new();
         if let Some(nodes) = settings["homePingTasksByNode"].as_object() {
             for (node, task_ids) in nodes {
@@ -83,7 +83,7 @@ impl Default for DashboardProbeConfig {
     fn default() -> Self {
         Self {
             hours: 1,
-            row_count: 2,
+            row_count: 3,
             tasks_by_node: HashMap::new(),
         }
     }
