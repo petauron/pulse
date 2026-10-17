@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { selectHomeProbes } from '../nodeHelpers'
 
 function probe(id: string): NodeProbe {
-  return { id, name: id, kind: 'tcp', interval_seconds: 60, points: [] }
+  return { id, name: id, kind: 'tcp', interval_seconds: 60, samples: 0, avg_latency_ms: null, loss_percent: null, points: [] }
 }
 
 describe('selectHomeProbes', () => {
