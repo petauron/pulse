@@ -472,13 +472,19 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     let preview =
         crate::control::dashboard_probes(&db, &node.node_id, &tasks, now, &config).unwrap();
     assert_eq!(preview.len(), 3);
-    assert_eq!(preview[0]["points"].as_array().unwrap().len(), 1);
+    assert_eq!(preview[0]["points"].as_array().unwrap().len(), 10);
     assert_eq!(preview[0]["kind"], "tcp");
-    assert_eq!(preview[0]["points"][0]["samples"], 25);
-    assert_eq!(preview[0]["points"][0]["successful_samples"], 24);
-    assert_eq!(preview[0]["points"][0]["loss"], 4.0);
-    assert_eq!(preview[0]["points"][0]["latency"], 20.0);
-    assert_eq!(preview[0]["points"][0]["bucket"], 9);
+    assert_eq!(preview[0]["samples"], 25);
+    assert_eq!(preview[0]["avg_latency_ms"], 20.0);
+    assert_eq!(preview[0]["loss_percent"], 4.0);
+    assert_eq!(preview[0]["points"][0]["samples"], 0);
+    assert_eq!(preview[0]["points"][0]["time"], i64::try_from(now - 3_600_000).unwrap());
+    assert_eq!(preview[0]["points"][9]["samples"], 25);
+    assert_eq!(preview[0]["points"][9]["successful_samples"], 24);
+    assert_eq!(preview[0]["points"][9]["loss"], 4.0);
+    assert_eq!(preview[0]["points"][9]["latency"], 20.0);
+    assert_eq!(preview[0]["points"][9]["bucket"], 9);
+    assert_eq!(preview[0]["points"][9]["time"], i64::try_from(now - 360_000).unwrap());
     assert!(preview[0].get("target").is_none());
     assert!(preview[0].get("node_ids").is_none());
     task.enabled = false;
@@ -494,6 +500,49 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
             .unwrap()
             .is_empty()
     );
+}
+
+#[test]
+fn dashboard_probe_summary_uses_full_window_not_unweighted_bucket_means() {
+    let (_dir, storage, node) = fixture();
+    let now = unix_time_ms().unwrap();
+    let mut task = ProbeDefinition {
+        id: String::new(),
+        name: "carrier".into(),
+        weight: 0,
+        kind: ProbeKind::Tcp,
+        target: "private-probe.example:80".into(),
+        interval_seconds: 30,
+        timeout_seconds: 5,
+        enabled: true,
+        node_ids: vec![node.node_id.clone()],
+    };
+    storage.save_probe(&mut task).unwrap();
+    let db = storage.connection().unwrap();
+    for index in 0..12 {
+        db.execute(
+            "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success)
+             VALUES(?1,?2,?3,?4,?4,100,1)",
+            rusqlite::params![node.node_id, task.id, format!("early-{index}"), i64::try_from(now - 3_500_000 + index * 1000).unwrap()],
+        ).unwrap();
+    }
+    db.execute(
+        "INSERT INTO probe_results(node_id,task_id,sample_id,collected_at_ms,received_at_ms,latency_ms,success)
+         VALUES(?1,?2,'late',?3,?3,200,1)",
+        rusqlite::params![node.node_id, task.id, i64::try_from(now - 1000).unwrap()],
+    ).unwrap();
+    let preview = crate::control::dashboard_probes(
+        &db,
+        &node.node_id,
+        &[task],
+        now,
+        &crate::control::DashboardProbeConfig::default(),
+    ).unwrap();
+    assert_eq!(preview[0]["samples"], 13);
+    assert!((preview[0]["avg_latency_ms"].as_f64().unwrap() - 1400.0 / 13.0).abs() < 0.001);
+    assert_eq!(preview[0]["loss_percent"], 0.0);
+    assert_eq!(preview[0]["points"][0]["latency"], 100.0);
+    assert_eq!(preview[0]["points"][9]["latency"], 200.0);
 }
 
 #[test]
@@ -609,10 +658,13 @@ fn dashboard_probe_preview_honors_history_task_selection_and_row_limit() {
     .unwrap();
     assert_eq!(custom.len(), 2);
     assert_eq!(custom[0]["id"], other.id);
+    assert_eq!(custom[0]["samples"], 0);
+    assert!(custom[0]["avg_latency_ms"].is_null());
+    assert!(custom[0]["loss_percent"].is_null());
     assert_eq!(custom[1]["id"], task.id);
-    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 1);
-    assert_eq!(custom[1]["points"][0]["bucket"], 2);
-    assert_eq!(custom[1]["points"][0]["latency"], 30.0);
+    assert_eq!(custom[1]["points"].as_array().unwrap().len(), 10);
+    assert_eq!(custom[1]["points"][2]["bucket"], 2);
+    assert_eq!(custom[1]["points"][2]["latency"], 30.0);
     let eight_tasks = (0..8)
         .map(|index| ProbeDefinition {
             id: uuid::Uuid::new_v4().to_string(),

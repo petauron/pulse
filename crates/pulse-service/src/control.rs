@@ -1198,7 +1198,7 @@ fn period_usage(db: &Connection, node: &str) -> Result<(u64, u64), StorageError>
         .unwrap_or_default())
 }
 
-/// Bounded ten-bucket overview for the theme-selected tasks and history range.
+/// Full-window totals plus a bounded ten-bucket trend for the theme-selected tasks.
 pub(crate) fn dashboard_probes(
     db: &Connection,
     node: &str,
@@ -1211,13 +1211,20 @@ pub(crate) fn dashboard_probes(
     let start_ms = now.saturating_sub(range_ms);
     let bucket_ms = range_ms.div_ceil(10).max(1);
     let mut statement = db.prepare_cached(
-        "SELECT max(received_at_ms),avg(CASE WHEN success=1 THEN latency_ms END),
+        "SELECT ?3+((received_at_ms-?3-1)/?5)*?5,avg(CASE WHEN success=1 THEN latency_ms END),
                 sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*),count(*),
                 sum(CASE WHEN success=1 AND latency_ms IS NOT NULL THEN 1 ELSE 0 END),
                 (received_at_ms-?3-1)/?5
          FROM probe_results
          WHERE node_id=?1 AND task_id=?2 AND received_at_ms>?3 AND received_at_ms<=?4
-         GROUP BY (received_at_ms-?3-1)/?5 ORDER BY max(received_at_ms) DESC LIMIT 10",
+         GROUP BY (received_at_ms-?3-1)/?5 ORDER BY (received_at_ms-?3-1)/?5",
+    )?;
+    // The headline must not depend on how many trend buckets are rendered.
+    let mut summary_statement = db.prepare_cached(
+        "SELECT count(*),avg(CASE WHEN success=1 THEN latency_ms END),
+                sum(CASE WHEN success=0 THEN 1 ELSE 0 END)*100.0/count(*)
+         FROM probe_results
+         WHERE node_id=?1 AND task_id=?2 AND received_at_ms>?3 AND received_at_ms<=?4",
     )?;
     let assigned = |task: &&ProbeDefinition| {
         task.enabled && (task.node_ids.is_empty() || task.node_ids.iter().any(|id| id == node))
@@ -1237,7 +1244,12 @@ pub(crate) fn dashboard_probes(
         available.into_iter().take(config.row_count).collect()
     };
     for task in selected {
-        let mut points = statement
+        let (samples, avg_latency_ms, loss_percent): (i64, Option<f64>, Option<f64>) =
+            summary_statement.query_row(
+                params![node, task.id, integer(start_ms), integer(now)],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+        let populated_points = statement
             .query_map(
                 params![
                     node,
@@ -1247,19 +1259,48 @@ pub(crate) fn dashboard_probes(
                     integer(bucket_ms),
                 ],
                 |row| {
-                    Ok(json!({
+                    let bucket: i64 = row.get(5)?;
+                    Ok((bucket, json!({
                         "time": row.get::<_, i64>(0)?,
                         "latency": row.get::<_, Option<f64>>(1)?,
                         "loss": row.get::<_, f64>(2)?,
                         "samples": row.get::<_, i64>(3)?,
                         "successful_samples": row.get::<_, i64>(4)?,
-                        "bucket": row.get::<_, i64>(5)?
-                    }))
+                        "bucket": bucket
+                    })))
                 },
             )?
             .collect::<Result<Vec<_>, _>>()?;
-        points.reverse();
-        result.push(json!({"id":task.id,"name":task.name,"kind":task.kind,"interval_seconds":task.interval_seconds,"points":points}));
+        let mut points = (0_u64..10)
+            .map(|bucket| {
+                json!({
+                    "time": integer(start_ms.saturating_add(bucket.saturating_mul(bucket_ms))),
+                    "latency": null,
+                    "loss": 0.0,
+                    "samples": 0,
+                    "successful_samples": 0,
+                    "bucket": bucket
+                })
+            })
+            .collect::<Vec<_>>();
+        for (bucket, point) in populated_points {
+            if let Some(slot) = usize::try_from(bucket)
+                .ok()
+                .and_then(|index| points.get_mut(index))
+            {
+                *slot = point;
+            }
+        }
+        result.push(json!({
+            "id": task.id,
+            "name": task.name,
+            "kind": task.kind,
+            "interval_seconds": task.interval_seconds,
+            "samples": samples,
+            "avg_latency_ms": avg_latency_ms,
+            "loss_percent": loss_percent,
+            "points": points
+        }));
     }
     Ok(result)
 }

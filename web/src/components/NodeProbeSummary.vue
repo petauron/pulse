@@ -3,6 +3,7 @@ import type { NodeProbe } from '@/utils/rpc'
 import { computed } from 'vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { useAppStore } from '@/stores/app'
+import { formatDateTime } from '@/utils/helper'
 import { getProbeToneColor, selectHomeProbes } from '@/utils/nodeHelpers'
 import { failureRateLabel } from '@/utils/probeLabels'
 
@@ -25,36 +26,33 @@ const rows = computed(() => {
     : props.probes ?? []
   return selected.map((task, index) => {
     if (!task) {
-      return { id: `empty-${index}`, name: '未配置', kind: 'icmp' as const, stale: true, points: emptyPoints, latency: '—', loss: '—' }
+      return { id: `empty-${index}`, name: '未配置', kind: 'icmp' as const, stale: true, points: emptyPoints, latency: '--', loss: '--' }
     }
-    const stale = !task.points.some(point => point.samples > 0)
+    const stale = task.samples === 0
     const points = task.points.slice(-10)
-    const successes = points.filter(p => p.successful_samples > 0 && p.latency !== null)
     return {
       id: task.id,
       name: task.name,
       kind: task.kind,
       stale,
       points: emptyPoints.map((empty, bucket) => points.find(p => p.bucket === bucket) ?? empty),
-      latency: !stale && successes.length ? `${Math.round(successes.reduce((sum, p) => sum + p.latency! * p.successful_samples, 0) / successes.reduce((sum, p) => sum + p.successful_samples, 0))} ms` : '—',
-      loss: !stale && points.length ? `${(points.reduce((sum, p) => sum + p.loss * p.samples, 0) / points.reduce((sum, p) => sum + p.samples, 0)).toFixed(1)}%` : '—',
+      latency: task.avg_latency_ms === null ? '--' : `${Math.round(task.avg_latency_ms)} ms`,
+      loss: task.loss_percent === null ? '--' : `${task.loss_percent.toFixed(1)}%`,
     }
   })
 })
 function sampleTooltip(name: string, point: NodeProbe['points'][number], metric: typeof metrics[number]): string {
-  if (!point.samples)
-    return `${name} · 此时间段无样本`
-  const result = metric === 'loss'
-    ? `${point.loss.toFixed(1)}% · ${point.samples} 次探测`
-    : point.latency === null ? '无成功样本' : `${Math.round(point.latency)} ms · ${point.successful_samples} 次成功探测`
-  const time = historyHours.value >= 24 ? new Date(point.time).toLocaleString() : new Date(point.time).toLocaleTimeString()
-  return `${name} · ${time} · ${result}`
+  const value = !point.samples
+    ? 'N/A'
+    : metric === 'loss' ? `${point.loss.toFixed(1)}%` : point.latency === null ? 'N/A' : `${Math.round(point.latency)} ms`
+  const time = formatDateTime(new Date(point.time), historyHours.value >= 24 ? 'MM-DD HH:mm' : 'HH:mm:ss')
+  return `${name}\n${time}\n${value}`
 }
 function panelTooltip(row: { name: string, kind: NodeProbe['kind'], stale: boolean, latency: string, loss: string }, metric: typeof metrics[number]): string {
   if (row.stale)
     return `${row.name} · 暂无数据`
   if (metric === 'latency')
-    return `${row.name} · 最近 ${historyLabel.value}平均延迟 ${row.latency}`
+    return row.latency === '--' ? `${row.name} · 最近 ${historyLabel.value}暂无有效延迟` : `${row.name} · 最近 ${historyLabel.value}平均延迟 ${row.latency}`
   return `${row.name} · 最近 ${historyLabel.value}平均${failureRateLabel(row.kind)} ${row.loss}`
 }
 function openMetric(event: Event) {
@@ -89,12 +87,12 @@ function onMetricKeydown(event: KeyboardEvent) {
         <div class="relative flex items-center justify-between leading-none">
           <span class="shrink-0 text-muted-foreground">{{ metric === 'latency' ? '延迟' : failureRateLabel(row.kind, true) }}</span>
           <div class="mx-1 flex-1 border-t-2 border-dotted border-gray-500/10" />
-          <span class="shrink-0 font-medium tabular-nums text-foreground/85">{{ row.stale ? '—' : row[metric] }}</span>
+          <span class="shrink-0 font-medium tabular-nums text-foreground/85">{{ row.stale ? '--' : row[metric] }}</span>
         </div>
         <div class="grid h-2 grid-cols-10 items-end gap-px opacity-80 group-hover/panel:opacity-100">
           <DataTooltip
-            v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full" content-class="w-40 leading-relaxed"
-            :content="row.stale ? `${row.name} · 暂无数据` : sampleTooltip(row.name, point, metric)"
+            v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full"
+            :content="row.stale ? `${row.name}\nN/A` : sampleTooltip(row.name, point, metric)"
           >
             <span
               class="block h-full w-full rounded-[1px] bg-muted-foreground/15 transition-transform duration-150 group-hover/data-tooltip:scale-y-200 motion-reduce:transition-none"
@@ -112,8 +110,8 @@ function onMetricKeydown(event: KeyboardEvent) {
       <div v-for="metric in metrics" :key="metric" class="group/panel relative opacity-80 hover:opacity-100" :title="panelTooltip(row, metric)">
         <div :data-probe-metric="metric" class="grid h-1 grid-cols-10 items-end gap-px transition-all hover:h-2.5 motion-reduce:transition-none">
           <DataTooltip
-            v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full" content-class="w-40 leading-relaxed"
-            :content="row.stale ? `${row.name} · 暂无数据` : sampleTooltip(row.name, point, metric)"
+            v-for="(point, i) in row.points" :key="i" placement="top" class="h-full w-full"
+            :content="row.stale ? `${row.name}\nN/A` : sampleTooltip(row.name, point, metric)"
           >
             <span
               class="block h-full w-full rounded-[1px] bg-muted-foreground/15 transition-all group-hover/data-tooltip:opacity-100 motion-reduce:transition-none"
