@@ -40,25 +40,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
 
     if arguments.as_slice() == ["migrate-and-serve"] {
-        let destination = database_path
-            .parent()
-            .ok_or("database path has no directory")?;
-        if database_path.file_name().and_then(|name| name.to_str()) != Some("senulun.db")
-            || destination.file_name().and_then(|name| name.to_str()) != Some("store")
-        {
-            return Err("managed storage migration requires store/senulun.db; custom database paths require an explicit offline migration".into());
-        }
-        let root = destination.parent().ok_or("storage has no parent")?;
-        let source = root.join("pulse.db");
-        if source.try_exists()? && !destination.join("brand-migration.json").try_exists()? {
-            senulun_service::brand_storage::migrate_storage(
-                &source,
-                destination,
-                max_database_bytes,
-            )?;
-        } else if !destination.try_exists()? {
-            std::fs::create_dir(destination)?;
-        }
+        senulun_service::brand_storage::prepare_managed_storage(
+            &database_path,
+            max_database_bytes,
+        )?;
     }
 
     let listen_address: SocketAddr = env::var("SENULUN_LISTEN")

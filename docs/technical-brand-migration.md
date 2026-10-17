@@ -15,6 +15,10 @@ authorize publishing a release, signing a catalog or upgrading an instance.
   and integrity, and atomically publishes a complete canonical `store` directory.
   It does not rename tables, create nodes or regenerate credentials. Old files
   remain offline recovery evidence, never a second read/write runtime path.
+- Every subsequent managed startup checks the receipt and both database
+  identities before opening the writer. A missing or mismatched database fails
+  closed; a leftover receipt cannot initialize an empty replacement. Ordinary
+  startup reads only identity rows, not the full monitoring history.
 - Existing data and external traffic credential keys are retained. Never create
   a new traffic key for encrypted sources; migrate only its configuration name.
 - Browser cookie names are canonical. Users may need to sign in again; account

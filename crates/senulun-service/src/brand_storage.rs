@@ -6,6 +6,68 @@ use std::{error::Error, fs, path::Path};
 
 type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
 
+/// Prepare the canonical managed store without treating an incomplete migrated
+/// store as a fresh installation. A receipt alone is never proof of data health.
+///
+/// # Errors
+/// Rejects missing database halves, invalid receipts and mismatched identities.
+pub fn prepare_managed_storage(database: &Path, max_bytes: u64) -> Result<()> {
+    let destination = database.parent().ok_or("database path has no directory")?;
+    if !database.is_absolute()
+        || database.file_name().and_then(|name| name.to_str()) != Some("senulun.db")
+        || destination.file_name().and_then(|name| name.to_str()) != Some("store")
+    {
+        return Err("managed migration requires an absolute store/senulun.db path".into());
+    }
+    let root = destination.parent().ok_or("storage has no parent")?;
+    for path in database.ancestors() {
+        if let Ok(metadata) = fs::symlink_metadata(path)
+            && metadata.file_type().is_symlink()
+        {
+            return Err("managed storage refuses symlinks".into());
+        }
+    }
+    let source = root.join("pulse.db");
+    let receipt_path = destination.join("brand-migration.json");
+    if receipt_path.try_exists()? {
+        let metadata = fs::symlink_metadata(&receipt_path)?;
+        if !metadata.is_file() || metadata.len() > 16 * 1024 {
+            return Err("invalid storage migration receipt".into());
+        }
+        let receipt: serde_json::Value = serde_json::from_slice(&fs::read(receipt_path)?)?;
+        // Only read the identity row on ordinary startup, not a full history
+        // integrity scan. The migration already verified the backup completely.
+        if receipt["version"] != 1
+            || receipt["source"] != source.to_string_lossy().as_ref()
+            || receipt["store_id"] != database_identity(database, false)?
+            || receipt["store_id"]
+                != database_identity(&destination.join("senulun.metrics.db"), false)?
+        {
+            return Err(
+                "migrated store differs from its receipt; restore the complete pair".into(),
+            );
+        }
+        return Ok(());
+    }
+    if source.try_exists()? {
+        return migrate_storage(&source, destination, max_bytes);
+    }
+    if !destination.try_exists()? {
+        fs::create_dir(destination)?;
+        return Ok(());
+    }
+    if fs::read_dir(destination)?.next().is_none() {
+        return Ok(());
+    }
+    // A previously initialized canonical store also needs both original halves.
+    if database_identity(database, false)?
+        != database_identity(&destination.join("senulun.metrics.db"), false)?
+    {
+        return Err("canonical database pair has different identities".into());
+    }
+    Ok(())
+}
+
 /// Copy a stopped legacy store into a new directory, publishing the pair with
 /// one directory rename. The original and the matched backup are retained.
 ///
@@ -89,13 +151,19 @@ pub fn migrate_storage(source: &Path, destination: &Path, max_bytes: u64) -> Res
 }
 
 fn store_id(path: &Path) -> Result<String> {
+    database_identity(path, true)
+}
+
+fn database_identity(path: &Path, integrity: bool) -> Result<String> {
     if !fs::symlink_metadata(path)?.is_file() {
         return Err("storage migration database is not a regular file".into());
     }
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let check: String = db.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
-    if check != "ok" {
-        return Err("storage migration database failed integrity verification".into());
+    if integrity {
+        let check: String = db.query_row("PRAGMA quick_check", [], |r| r.get(0))?;
+        if check != "ok" {
+            return Err("storage migration database failed integrity verification".into());
+        }
     }
     Ok(db.query_row(
         "SELECT store_id FROM storage_identity WHERE id=1",
@@ -107,6 +175,60 @@ fn store_id(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn managed_restart_never_reinitializes_a_missing_migrated_database() {
+        for missing in ["senulun.db", "senulun.metrics.db"] {
+            let directory = tempfile::tempdir().unwrap();
+            let source = directory.path().join("pulse.db");
+            drop(Administration::open(&source, 64 << 20).unwrap());
+            let destination = directory.path().join("store");
+            let database = destination.join("senulun.db");
+            prepare_managed_storage(&database, 64 << 20).unwrap();
+            prepare_managed_storage(&database, 64 << 20).unwrap();
+            fs::rename(
+                destination.join(missing),
+                directory.path().join("retained.db"),
+            )
+            .unwrap();
+            assert!(prepare_managed_storage(&database, 64 << 20).is_err());
+            assert!(!destination.join(missing).exists());
+            assert!(source.exists());
+        }
+    }
+
+    #[test]
+    fn managed_start_distinguishes_fresh_storage_from_partial_canonical_storage() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("store/senulun.db");
+        prepare_managed_storage(&database, 64 << 20).unwrap();
+        drop(Administration::open(&database, 64 << 20).unwrap());
+        prepare_managed_storage(&database, 64 << 20).unwrap();
+        fs::rename(
+            database.with_file_name("senulun.metrics.db"),
+            directory.path().join("retained.db"),
+        )
+        .unwrap();
+        assert!(prepare_managed_storage(&database, 64 << 20).is_err());
+        assert!(!database.with_file_name("senulun.metrics.db").exists());
+    }
+
+    #[test]
+    fn managed_restart_rejects_a_receipt_with_the_wrong_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("pulse.db");
+        drop(Administration::open(&source, 64 << 20).unwrap());
+        let database = directory.path().join("store/senulun.db");
+        prepare_managed_storage(&database, 64 << 20).unwrap();
+        fs::write(
+            database.with_file_name("brand-migration.json"),
+            b"{\"version\":1,\"store_id\":\"another-store\"}",
+        )
+        .unwrap();
+        assert!(prepare_managed_storage(&database, 64 << 20).is_err());
+        assert!(source.exists());
+        assert!(database.exists());
+    }
 
     #[test]
     fn rename_preserves_pair_and_identity_and_is_idempotent() {
