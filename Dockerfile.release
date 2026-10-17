@@ -1,30 +1,30 @@
 # Package the verified native release archives; compilation happens in the binaries job.
 FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS runtime
 ARG TARGETARCH
-ARG PULSE_BUILD_GIT_HASH=unknown
+ARG SENULUN_BUILD_GIT_HASH=unknown
 LABEL org.opencontainers.image.source="https://github.com/petauron/senulun" \
       org.opencontainers.image.description="Self-hosted node monitoring with an outbound-only Agent" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.revision="${PULSE_BUILD_GIT_HASH}"
+      org.opencontainers.image.revision="${SENULUN_BUILD_GIT_HASH}"
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --gid 65532 pulse \
-    && useradd --uid 65532 --gid pulse --system --home-dir /var/lib/pulse --shell /usr/sbin/nologin pulse \
-    && install --directory --owner pulse --group pulse --mode 0700 /var/lib/pulse
-COPY ${TARGETARCH}/pulse-service /usr/local/bin/pulse-service
-COPY ${TARGETARCH}/pulse-agent /usr/local/bin/pulse-agent
-COPY ${TARGETARCH}/LICENSE ${TARGETARCH}/NOTICE ${TARGETARCH}/RUST_THIRD_PARTY_LICENSES.html ${TARGETARCH}/RUST_STDLIB_LICENSES.html /usr/share/doc/pulse/
-COPY ${TARGETARCH}/web/THIRD_PARTY_NOTICES.md ${TARGETARCH}/web/LICENSE.* /usr/share/doc/pulse/web/
-COPY ${TARGETARCH}/web/THIRD_PARTY_LICENSES.md /usr/share/doc/pulse/web/
+    && groupadd --gid 65532 senulun \
+    && useradd --uid 65532 --gid senulun --system --home-dir /var/lib/senulun --shell /usr/sbin/nologin senulun \
+    && install --directory --owner senulun --group senulun --mode 0700 /var/lib/senulun
+COPY ${TARGETARCH}/senulun-service /usr/local/bin/senulun-service
+COPY ${TARGETARCH}/senulun-agent /usr/local/bin/senulun-agent
+COPY ${TARGETARCH}/LICENSE ${TARGETARCH}/NOTICE ${TARGETARCH}/RUST_THIRD_PARTY_LICENSES.html ${TARGETARCH}/RUST_STDLIB_LICENSES.html /usr/share/doc/senulun/
+COPY ${TARGETARCH}/web/THIRD_PARTY_NOTICES.md ${TARGETARCH}/web/LICENSE.* /usr/share/doc/senulun/web/
+COPY ${TARGETARCH}/web/THIRD_PARTY_LICENSES.md /usr/share/doc/senulun/web/
 USER 65532:65532
-WORKDIR /var/lib/pulse
-ENV PULSE_LISTEN=0.0.0.0:8080 \
-    PULSE_ALLOW_PUBLIC_LISTEN=true \
-    PULSE_DATABASE_PATH=/var/lib/pulse/pulse.db
-VOLUME ["/var/lib/pulse"]
+WORKDIR /var/lib/senulun
+ENV SENULUN_LISTEN=0.0.0.0:8080 \
+    SENULUN_ALLOW_PUBLIC_LISTEN=true \
+    SENULUN_DATABASE_PATH=/var/lib/senulun/store/senulun.db
+VOLUME ["/var/lib/senulun"]
 EXPOSE 8080
 STOPSIGNAL SIGTERM
-ENTRYPOINT ["/usr/local/bin/pulse-service"]
-CMD ["serve"]
+ENTRYPOINT ["/usr/local/bin/senulun-service"]
+CMD ["migrate-and-serve"]

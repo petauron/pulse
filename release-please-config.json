@@ -4,7 +4,7 @@
     ".": {
       "release-type": "simple",
       "version-file": "version.txt",
-      "package-name": "pulse",
+      "package-name": "senulun",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "bump-minor-pre-major": true,
@@ -21,7 +21,7 @@
         {
           "type": "toml",
           "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value == 'pulse-agent' || @.name.value == 'pulse-protocol' || @.name.value == 'pulse-service')].version"
+          "jsonpath": "$.package[?(@.name.value == 'senulun-agent' || @.name.value == 'senulun-protocol' || @.name.value == 'senulun-service')].version"
         },
         {
           "type": "json",

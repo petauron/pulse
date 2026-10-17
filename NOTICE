@@ -6,7 +6,7 @@ This product includes software developed by Pulse contributors.
 Rust crate licenses and original copyright/notice files are distributed in
 RUST_THIRD_PARTY_LICENSES.html. Notices for the pinned Rust standard library
 are distributed in RUST_STDLIB_LICENSES.html. These files accompany both the
-binary archives and the container image under /usr/share/doc/pulse/.
+binary archives and the container image under /usr/share/doc/senulun/.
 
 The Web interface includes modified software from Komari Theme Emerald,
 Copyright 2026 Tokinx, under the MIT License.

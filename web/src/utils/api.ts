@@ -49,7 +49,7 @@ export class ApiError extends Error {
   }
 }
 
-export class PulseApi {
+export class SenulunApi {
   private readonly baseUrl: URL
 
   constructor(baseUrl = import.meta.env.VITE_API_BASE || DEFAULT_API_BASE) {
@@ -198,10 +198,10 @@ export class PulseApi {
   }
 }
 
-let sharedApiInstance: PulseApi | null = null
+let sharedApiInstance: SenulunApi | null = null
 
-export function getSharedApi(): PulseApi {
-  sharedApiInstance ??= new PulseApi()
+export function getSharedApi(): SenulunApi {
+  sharedApiInstance ??= new SenulunApi()
   return sharedApiInstance
 }
 

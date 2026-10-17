@@ -75,7 +75,7 @@ test('renamed repository binds new provenance and keeps stable distribution name
   const workflow = readFileSync('.github/workflows/release.yml', 'utf8');
   assert.ok(workflow.includes('ghcr.io/${{ github.repository }}'));
   const config = JSON.parse(readFileSync('release-please-config.json', 'utf8'));
-  assert.equal(config.packages['.']['package-name'], 'pulse');
+  assert.equal(config.packages['.']['package-name'], 'senulun');
 });
 
 test('release workflow retains draft permissions, identity gates and one publication path', () => {

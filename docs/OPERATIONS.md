@@ -1,6 +1,6 @@
 # Production operations
 
-Senulun has two deployment roles: run `pulse-service` on the monitoring host, and run one outbound-only `pulse-agent` on every monitored Linux host. The Agent never accepts inbound commands. Run both under dedicated unprivileged accounts.
+Senulun has two deployment roles: run `senulun-service` on the monitoring host, and run one outbound-only `senulun-agent` on every monitored Linux host. The Agent never accepts inbound commands. Run both under dedicated unprivileged accounts.
 
 ## Trust boundary
 
@@ -10,7 +10,7 @@ Remote Agents accept only HTTPS Service URLs. Senulun has no analytics, telemetr
 
 **Default outbound request:** Agents with no manual region use GeoJS to discover
 their country. GeoJS sees the public egress IP and Agent version, not Senulun tokens
-or metrics. To prevent this, set `PULSE_GEOIP_PROVIDER=disabled` in the Agent
+or metrics. To prevent this, set `SENULUN_GEOIP_PROVIDER=disabled` in the Agent
 environment **before starting or upgrading**. See [node location](#node-location-and-globe-placement).
 
 ## Verify a release
@@ -22,11 +22,11 @@ sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify "$ARCHIVE" --repo petauron/senulun
 ```
 
-Set `ARCHIVE` to the downloaded `pulse-<tag>-linux-<arch>.tar.gz` from a release
+Set `ARCHIVE` to the downloaded `senulun-<tag>-linux-<arch>.tar.gz` from a release
 built in `petauron/senulun`. This policy is for releases after the repository
-rename. Historical artifacts were signed by `petauron/pulse`; retain their
+rename. Historical artifacts were signed by `petauron/senulun`; retain their
 original provenance and verification policy instead of treating them as newly
-signed Senulun releases. Published images at `ghcr.io/petauron/pulse` remain
+signed Senulun releases. Published images at `ghcr.io/petauron/senulun` remain
 available under their original immutable digests. Do not overwrite old releases
 or relax the new-source attestation policy to accept both identities.
 
@@ -39,9 +39,9 @@ The release workflow validates binaries, SBOMs, and a multi-architecture contain
 The release archive contains the binaries and `deploy/`. Review the environment example, then install from the extracted, verified archive:
 
 ```bash
-sudo ./deploy/install-systemd.sh service "$PWD/pulse-service"
-sudoedit /etc/pulse/service.env
-sudo systemctl start pulse-service
+sudo ./deploy/install-systemd.sh service "$PWD/senulun-service"
+sudoedit /etc/senulun/service.env
+sudo systemctl start senulun-service
 ```
 
 The installer creates a dedicated account and mode-0700 state directory, records the previous binary, installs a hardened unit, and enables it without starting an unconfigured first installation. An update restarts the unit only if it was already running.
@@ -49,41 +49,41 @@ The installer creates a dedicated account and mode-0700 state directory, records
 Create an enrollment token locally against the Service database. The JSON response contains an ID, the only display of the token, and its expiry time:
 
 ```bash
-sudo -u pulse env PULSE_DATABASE_PATH=/var/lib/pulse/pulse.db \
-  /usr/local/bin/pulse-service enrollment create --ttl-seconds 600
+sudo -u senulun env SENULUN_DATABASE_PATH=/var/lib/senulun/senulun.db \
+  /usr/local/bin/senulun-service enrollment create --ttl-seconds 600
 ```
 
 On the Agent host:
 
 ```bash
-sudo ./deploy/install-systemd.sh agent "$PWD/pulse-agent"
-sudoedit /etc/pulse/agent.env
-sudo install -o pulse-agent -g pulse-agent -m 0600 /path/to/securely-transferred-token \
-  /etc/pulse/agent-enrollment-token
-sudo systemctl start pulse-agent
+sudo ./deploy/install-systemd.sh agent "$PWD/senulun-agent"
+sudoedit /etc/senulun/agent.env
+sudo install -o senulun-agent -g senulun-agent -m 0600 /path/to/securely-transferred-token \
+  /etc/senulun/agent-enrollment-token
+sudo systemctl start senulun-agent
 ```
 
-The token file must contain only the token value. It is read only when the Agent has no stored credential. `systemctl start` does not wait for enrollment. Verify that `journalctl -u pulse-agent` reports `agent credentials saved` and that this node appears online before deleting the token:
+The token file must contain only the token value. It is read only when the Agent has no stored credential. `systemctl start` does not wait for enrollment. Verify that `journalctl -u senulun-agent` reports `agent credentials saved` and that this node appears online before deleting the token:
 
 ```bash
-sudo test -s /var/lib/pulse-agent/agent-credentials.json && \
-  sudo rm -f /etc/pulse/agent-enrollment-token
+sudo test -s /var/lib/senulun-agent/agent-credentials.json && \
+  sudo rm -f /etc/senulun/agent-enrollment-token
 ```
 
 ## Node location and globe placement
 
 The globe groups nodes by country/territory, not by group names or individual
-city coordinates. Set `PULSE_NODE_REGION=US` (or another two-letter country code)
+city coordinates. Set `SENULUN_NODE_REGION=US` (or another two-letter country code)
 for manual placement. A nonempty manual region takes precedence and prevents all
 GeoIP requests, even if a provider is configured.
 
 Country discovery through GeoJS is enabled by default when no manual region is
 set. Upgrade **each Agent binary** to a build containing this feature. The equivalent
-explicit configuration in `/etc/pulse/agent.env` is:
+explicit configuration in `/etc/senulun/agent.env` is:
 
 ```ini
-PULSE_NODE_REGION=
-PULSE_GEOIP_PROVIDER=geojs
+SENULUN_NODE_REGION=
+SENULUN_GEOIP_PROVIDER=geojs
 ```
 
 Alternatively select `ipinfo`. The only accepted provider values are `disabled`,
@@ -112,7 +112,7 @@ permission or visitor geolocation is involved.
 After updating the binary and configuration:
 
 ```bash
-sudo systemctl restart pulse-agent
+sudo systemctl restart senulun-agent
 ```
 
 Keep existing credentials; no new enrollment is required. For this combined
@@ -126,11 +126,11 @@ restarts. Before the first success, the region remains empty and the node can be
 online without a globe marker. After success, the next accepted metric snapshot
 updates the existing node's region. Two US nodes share one US cluster on the globe.
 
-Check `journalctl -u pulse-agent` for `automatic node region updated`, then confirm
+Check `journalctl -u senulun-agent` for `automatic node region updated`, then confirm
 the country's flag on the node card and globe. Disabled discovery with an empty
 manual region emits a warning. Network errors, rate limits, malformed responses,
 and unknown countries leave monitoring operational. To disable further lookups,
-set `PULSE_GEOIP_PROVIDER=disabled` and restart; set a manual region as well if the
+set `SENULUN_GEOIP_PROVIDER=disabled` and restart; set a manual region as well if the
 node should remain positioned. These options are not implemented in Alpha.2;
 changing only the environment of an old binary will not enable discovery.
 
@@ -139,15 +139,15 @@ and [IPinfo](https://github.com/komari-monitor/komari/blob/main/utils/geoip/ipin
 
 ## Containerized Service
 
-The image runs as UID/GID 65532 and stores its mode-0600 SQLite databases in `/var/lib/pulse`. Persist the entire directory, not a single database file. The Agent should still run directly on each monitored host so its metrics describe that host rather than a container.
+The image runs as UID/GID 65532 and stores its mode-0600 SQLite databases in `/var/lib/senulun`. Persist the entire directory, not a single database file. The Agent should still run directly on each monitored host so its metrics describe that host rather than a container.
 
 ```bash
-sudo install -d -o 65532 -g 65532 -m 0700 /srv/pulse
-docker run --detach --name pulse --restart unless-stopped \
+sudo install -d -o 65532 -g 65532 -m 0700 /srv/senulun
+docker run --detach --name senulun --restart unless-stopped \
   --publish 127.0.0.1:8080:8080 \
-  --volume /srv/pulse:/var/lib/pulse \
-  --env PULSE_PUBLIC_URL=https://pulse.example.com \
-  "${PULSE_SERVICE_IMAGE:?Set an image built from this revision}"
+  --volume /srv/senulun:/var/lib/senulun \
+  --env SENULUN_PUBLIC_URL=https://senulun.example.com \
+  "${SENULUN_SERVICE_IMAGE:?Set an image built from this revision}"
 ```
 
 Use an image built from this revision for token-free setup; older releases may require a setup token. Publish to loopback and terminate TLS at the reverse proxy. Open `/login` and create the first administrator before sharing the public address. Later setup attempts are rejected. The [Compose example](../deploy/docker-compose.yml) provides the same configuration. Run local administration with `docker exec`, using the database path already present in the image environment.
@@ -157,23 +157,23 @@ Use an image built from this revision for token-free setup; older releases may r
 Enrollment tokens are single-use, expire after 60 to 86,400 seconds, and can be revoked before use:
 
 ```bash
-pulse-service enrollment revoke ENROLLMENT_ID
+senulun-service enrollment revoke ENROLLMENT_ID
 ```
 
 To rotate an Agent credential without exposing it in a command-line argument:
 
-1. Stop `pulse-agent` on that node.
-2. On the Service host, run `pulse-service node rotate NODE_ID` and redirect its one-time output to a mode-0600 file.
+1. Stop `senulun-agent` on that node.
+2. On the Service host, run `senulun-service node rotate NODE_ID` and redirect its one-time output to a mode-0600 file.
 3. Transfer that file over an authenticated encrypted channel.
-4. On the Agent host, pipe the file to `sudo -u pulse-agent env PULSE_CREDENTIALS_PATH=/var/lib/pulse-agent/agent-credentials.json pulse-agent credentials replace`.
+4. On the Agent host, pipe the file to `sudo -u senulun-agent env SENULUN_CREDENTIALS_PATH=/var/lib/senulun-agent/agent-credentials.json senulun-agent credentials replace`.
 5. Delete both temporary copies, start the Agent, and confirm a new snapshot arrives.
 
-Rotation invalidates the previous token immediately. If a node is lost or compromised, use `pulse-service node revoke NODE_ID`; this retains its historical rows but excludes it from active views. `pulse-service node delete NODE_ID` permanently deletes the node and its snapshots. Review up to 1,000 local lifecycle events with `pulse-service audit 1000`. These commands must be run with the Service database environment and account.
+Rotation invalidates the previous token immediately. If a node is lost or compromised, use `senulun-service node revoke NODE_ID`; this retains its historical rows but excludes it from active views. `senulun-service node delete NODE_ID` permanently deletes the node and its snapshots. Review up to 1,000 local lifecycle events with `senulun-service audit 1000`. These commands must be run with the Service database environment and account.
 
 If initial enrollment succeeds but the Agent cannot save its credential (or the response is lost), stop the Agent and fix the state directory's ownership, mode, or disk capacity. The single-use enrollment token cannot be reused. When the original enrollment ID is retained, inspect its exact node association on the Service host:
 
 ```bash
-pulse-service enrollment inspect ENROLLMENT_ID
+senulun-service enrollment inspect ENROLLMENT_ID
 ```
 
 This returns JSON with the enrollment ID, expiry, consumption time, associated `node_id` and `node_active`. It returns no token or token hash and does not enroll, rotate, reactivate or delete anything. Expiry does not remove the original association. An unused or deleted-node enrollment has no `node_id`; a revoked node has `node_active: false`. A missing enrollment returns an error. Do not infer the original node from matching names or addresses, and do not treat this read as authorization to reactivate a revoked node.
@@ -181,9 +181,9 @@ This returns JSON with the enrollment ID, expiry, consumption time, associated `
 Use the verified original active node ID to rotate its token as above. On a host with no credential file, import the rotated token from stdin instead of using `replace`:
 
 ```bash
-sudo -u pulse-agent env PULSE_SERVICE_URL=https://pulse.example.com \
-  PULSE_CREDENTIALS_PATH=/var/lib/pulse-agent/agent-credentials.json \
-  pulse-agent credentials import NODE_ID < /path/to/mode-0600-rotated-token
+sudo -u senulun-agent env SENULUN_SERVICE_URL=https://senulun.example.com \
+  SENULUN_CREDENTIALS_PATH=/var/lib/senulun-agent/agent-credentials.json \
+  senulun-agent credentials import NODE_ID < /path/to/mode-0600-rotated-token
 ```
 
 Import refuses to overwrite an existing credential. Set the exact original Service URL, delete the temporary token copies, restart the Agent, and verify fresh samples arrive for the same node. The Service uses SQLite WAL with `synchronous=FULL` so confirmed credential changes are durable after a host crash, subject to the storage device honoring fsync.
@@ -192,7 +192,7 @@ To inspect reporting evidence on the Service, supply the current rotated token o
 stdin, keeping it out of process arguments:
 
 ```bash
-pulse-service node reporting NODE_ID < /path/to/mode-0600-rotated-token
+senulun-service node reporting NODE_ID < /path/to/mode-0600-rotated-token
 ```
 
 The read authenticates the exact active node and returns only its ID and
@@ -206,27 +206,27 @@ traffic or authorize release of another application's recovery fence.
 
 The Service uses two paired SQLite files:
 
-- `pulse.db`: accounts, sessions, credentials, node metadata, monitoring configuration, alerts and audit events.
-- `pulse.metrics.db`: raw snapshots, probe results, last-seen times and traffic counters.
+- `senulun.db`: accounts, sessions, credentials, node metadata, monitoring configuration, alerts and audit events.
+- `senulun.metrics.db`: raw snapshots, probe results, last-seen times and traffic counters.
 
-`PULSE_DATABASE_PATH` selects the control file; the sibling metrics filename is derived by replacing the final `.db` with `.metrics.db` (or appending `.metrics.db` if there is no `.db` suffix). Both files use WAL and `synchronous=FULL`. Successful reports are committed before acknowledgment: there is no lossy in-memory sample buffer or change to raw history precision.
+`SENULUN_DATABASE_PATH` selects the control file; the sibling metrics filename is derived by replacing the final `.db` with `.metrics.db` (or appending `.metrics.db` if there is no `.db` suffix). Both files use WAL and `synchronous=FULL`. Successful reports are committed before acknowledgment: there is no lossy in-memory sample buffer or change to raw history precision.
 
 Run the online backup command as the Service account:
 
 ```bash
-sudo -u pulse env PULSE_DATABASE_PATH=/var/lib/pulse/pulse.db \
-  /usr/local/bin/pulse-service backup
+sudo -u senulun env SENULUN_DATABASE_PATH=/var/lib/senulun/senulun.db \
+  /usr/local/bin/senulun-service backup
 ```
 
-Senulun briefly reserves both database writers, then uses SQLite's online backup API to copy and integrity-check both files. Backup copies are finalized in DELETE journal mode so they can be read independently without WAL sidecars; the running databases remain in WAL mode. The command prints a mode-0700 **directory**, containing mode-0600 `pulse.db`, `pulse.metrics.db` and `manifest.json`. The complete directory is published only after both copies and the manifest are fsynced. Copy that entire directory to encrypted storage and test restoration periodically. Writers can wait or time out during a large backup; schedule it outside peak ingestion periods. Failed backups may leave an unpublished `.partial` directory, which is not a usable backup.
+Senulun briefly reserves both database writers, then uses SQLite's online backup API to copy and integrity-check both files. Backup copies are finalized in DELETE journal mode so they can be read independently without WAL sidecars; the running databases remain in WAL mode. The command prints a mode-0700 **directory**, containing mode-0600 `senulun.db`, `senulun.metrics.db` and `manifest.json`. The complete directory is published only after both copies and the manifest are fsynced. Copy that entire directory to encrypted storage and test restoration periodically. Writers can wait or time out during a large backup; schedule it outside peak ingestion periods. Failed backups may leave an unpublished `.partial` directory, which is not a usable backup.
 
 The schema-3 to schema-4 split first creates and verifies a **single-file pre-upgrade backup** beside the original control database. Stop the old Service before upgrading. Migration uses a rollback-journal transaction across both files, verifies all copied snapshot/probe/traffic fields, and only then removes the old metric tables. Insufficient space, newer schemas, a mismatched pair or an occupied destination fail closed. An interrupted migration is recovered by SQLite's journals; do not delete journal files manually. Allow extra disk space for the pre-upgrade backup, new metrics file, rollback journals and temporary verification work. Dropping old tables frees reusable pages inside the control file but does not automatically shrink it.
 
 Restore only while the Service is stopped:
 
-1. Stop `pulse-service` and take one final filesystem copy of the state directory.
-2. Restore **both files from the same backup directory**, using the filenames expected by `PULSE_DATABASE_PATH`. Move the previous database pair and its `-wal`/`-shm` files together into the saved state copy; never mix them into the restore. The pair ID rejects unrelated databases, but it does not prove that two backups of the same installation were taken at the same time: always use one complete backup directory.
-3. Set ownership to `pulse:pulse`, directory mode to 0700, and both database modes to 0600.
+1. Stop `senulun-service` and take one final filesystem copy of the state directory.
+2. Restore **both files from the same backup directory**, using the filenames expected by `SENULUN_DATABASE_PATH`. Move the previous database pair and its `-wal`/`-shm` files together into the saved state copy; never mix them into the restore. The pair ID rejects unrelated databases, but it does not prove that two backups of the same installation were taken at the same time: always use one complete backup directory.
+3. Set ownership to `senulun:senulun`, directory mode to 0700, and both database modes to 0600.
 4. Start the Service and verify `/healthz`, the dashboard, Agent ingestion, and recent history.
 
 Senulun performs forward-only schema migrations and does not automatically downgrade a database. To roll back across the split, restore the single-file pre-upgrade backup with the previous binary, retaining the split pair separately rather than mixing it with the old file. Never replace a missing metrics database with an empty file.
@@ -236,8 +236,8 @@ Senulun performs forward-only schema migrations and does not automatically downg
 Verify and extract the new release, then rerun `install-systemd.sh`. Back up the Service first. The installer keeps the previous executable target:
 
 ```bash
-sudo ./deploy/install-systemd.sh service "$PWD/pulse-service"
-sudo ./deploy/install-systemd.sh agent "$PWD/pulse-agent"
+sudo ./deploy/install-systemd.sh service "$PWD/senulun-service"
+sudo ./deploy/install-systemd.sh agent "$PWD/senulun-agent"
 ```
 
 For a binary-only rollback with a compatible database and protocol:
@@ -256,24 +256,24 @@ sudo ./deploy/uninstall-systemd.sh agent
 sudo ./deploy/uninstall-systemd.sh service
 ```
 
-Take a backup before manually deleting preserved paths under `/var/lib/pulse`, `/var/lib/pulse-agent`, or `/etc/pulse`.
+Take a backup before manually deleting preserved paths under `/var/lib/senulun`, `/var/lib/senulun-agent`, or `/etc/senulun`.
 
 ## Capacity and metric selection
 
-`PULSE_RETENTION_DAYS`, `PULSE_MAX_NODES`, and `PULSE_MAX_DATABASE_BYTES` form hard Service bounds. The defaults are 7 days, 100 active nodes, and **2 GiB per database file** (up to 4 GiB across the pair, excluding WAL files, backups and migration scratch space). The size limit is checked and enforced independently on both files. Expired history is removed in bounded batches at startup, by hourly maintenance even without Agents, and at most once per minute on the ingestion path. A failed write is not acknowledged; Agents retry while retention can reclaim space. The Service also limits request concurrency, request bodies, history responses, its statement cache (32 entries), and SQLite page caches (1 MiB control + 3 MiB metrics; authentication has its own existing 1 MiB cache). Monitor filesystem free space independently and alert before limits are reached.
+`SENULUN_RETENTION_DAYS`, `SENULUN_MAX_NODES`, and `SENULUN_MAX_DATABASE_BYTES` form hard Service bounds. The defaults are 7 days, 100 active nodes, and **2 GiB per database file** (up to 4 GiB across the pair, excluding WAL files, backups and migration scratch space). The size limit is checked and enforced independently on both files. Expired history is removed in bounded batches at startup, by hourly maintenance even without Agents, and at most once per minute on the ingestion path. A failed write is not acknowledged; Agents retry while retention can reclaim space. The Service also limits request concurrency, request bodies, history responses, its statement cache (32 entries), and SQLite page caches (1 MiB control + 3 MiB metrics; authentication has its own existing 1 MiB cache). Monitor filesystem free space independently and alert before limits are reached.
 
-The Agent interval is bounded to 1–300 seconds, defaulting to three seconds. The administrator can change it centrally; each Agent refreshes authenticated configuration every 30 seconds. Faster intervals increase disk usage; adjust capacity and retention together. By default, disks are deduplicated by device identity and Komari's loopback, bridge, and container-interface prefixes are excluded from network totals. An explicit `PULSE_NETWORK_INTERFACES` allowlist overrides that default. Container mounts, interface aliases, or other virtual interfaces can still make aggregate metrics misleading; set exact comma-separated `PULSE_DISK_MOUNT_POINTS` and `PULSE_NETWORK_INTERFACES` allowlists when required.
+The Agent interval is bounded to 1–300 seconds, defaulting to three seconds. The administrator can change it centrally; each Agent refreshes authenticated configuration every 30 seconds. Faster intervals increase disk usage; adjust capacity and retention together. By default, disks are deduplicated by device identity and Komari's loopback, bridge, and container-interface prefixes are excluded from network totals. An explicit `SENULUN_NETWORK_INTERFACES` allowlist overrides that default. Container mounts, interface aliases, or other virtual interfaces can still make aggregate metrics misleading; set exact comma-separated `SENULUN_DISK_MOUNT_POINTS` and `SENULUN_NETWORK_INTERFACES` allowlists when required.
 
-For server traffic quotas, explicitly select the provider-facing interfaces with `PULSE_NETWORK_INTERFACES`; including bridges, container interfaces or tunnels can count the same traffic more than once. Monthly usage accumulates positive counter differences. When either counter decreases, that direction starts a new baseline without adding its remaining lifetime total. Traffic across that discontinuity is unknown, including the first sample after a reboot. Changing the interface selection changes the measurement scope: record the change and explicitly reset the usage baseline if needed. Existing inflated totals are not automatically rewritten, and provider billing remains authoritative.
+For server traffic quotas, explicitly select the provider-facing interfaces with `SENULUN_NETWORK_INTERFACES`; including bridges, container interfaces or tunnels can count the same traffic more than once. Monthly usage accumulates positive counter differences. When either counter decreases, that direction starts a new baseline without adding its remaining lifetime total. Traffic across that discontinuity is unknown, including the first sample after a reboot. Changing the interface selection changes the measurement scope: record the change and explicitly reset the usage baseline if needed. Existing inflated totals are not automatically rewritten, and provider billing remains authoritative.
 
 ## Diagnostics
 
-Use `systemctl status`, `journalctl -u pulse-service`, and `journalctl -u pulse-agent`. Logs intentionally omit enrollment and Agent tokens. The health endpoint reports only process health and version. History responses include requested/actual coverage, source count, returned count, bucket width, and whether the window was downsampled. Agent collection timestamps and clock skew remain diagnostic fields; server receipt time controls online state and retention.
+Use `systemctl status`, `journalctl -u senulun-service`, and `journalctl -u senulun-agent`. Logs intentionally omit enrollment and Agent tokens. The health endpoint reports only process health and version. History responses include requested/actual coverage, source count, returned count, bucket width, and whether the window was downsampled. Agent collection timestamps and clock skew remain diagnostic fields; server receipt time controls online state and retention.
 
 
 ### Correcting current-cycle traffic after migration
 
-`pulse-service node correct-traffic NODE_ID` accepts one JSON object on stdin
+`senulun-service node correct-traffic NODE_ID` accepts one JSON object on stdin
 (maximum 4096 bytes): `cycle_start_ms`, `sampled_at_ms`, `raw_up`, `raw_down`,
 `used_up`, and `used_down`. All counters are bytes. The supplied usage is an
 absolute total for the current UTC billing cycle at the supplied raw-counter

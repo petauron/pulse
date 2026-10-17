@@ -29,9 +29,9 @@ The project consists of a Rust Service, a Rust Agent, a shared versioned protoco
 ## Repository layout
 
 ```text
-crates/pulse-protocol  Shared wire types and protocol version
-crates/pulse-service   HTTP API and monitoring service
-crates/pulse-agent     Low-memory host metrics collector
+crates/senulun-protocol  Shared wire types and protocol version
+crates/senulun-service   HTTP API and monitoring service
+crates/senulun-agent     Low-memory host metrics collector
 web/                   Embedded Emerald-based Web dashboard
 docs/                  Architecture and roadmap
 ```
@@ -60,14 +60,14 @@ a bounded read-only monitoring API compatibility layer; see [theme support](docs
 Create a short-lived, single-use enrollment token in the same database, then start the Service:
 
 ```bash
-export PULSE_DATABASE_PATH=./pulse.db
-export PULSE_PUBLIC_URL=http://127.0.0.1:8080
+export SENULUN_DATABASE_PATH=./senulun.db
+export SENULUN_PUBLIC_URL=http://127.0.0.1:8080
 umask 077
-cargo run -p pulse-service -- enrollment create
-cargo run -p pulse-service -- serve
+cargo run -p senulun-service -- enrollment create
+cargo run -p senulun-service -- serve
 ```
 
-Open `http://127.0.0.1:8080/login` and choose the first administrator username and password. Setup closes after the first successful registration; the dashboard is private by default. Complete setup before sharing the public address. The Service defaults to `pulse.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
+Open `http://127.0.0.1:8080/login` and choose the first administrator username and password. Setup closes after the first successful registration; the dashboard is private by default. Complete setup before sharing the public address. The Service defaults to `senulun.db`, seven days of history, a 90-second offline threshold, and a maximum of 100 nodes. See [.env.example](.env.example) for all current settings.
 
 ### Enroll and run an Agent
 
@@ -76,21 +76,21 @@ In another terminal, place the returned `token` in a mode-0600 file and start th
 ```bash
 umask 077
 printf '%s\n' 'replace-with-the-returned-token' > ./enrollment-token
-PULSE_ENROLLMENT_TOKEN_FILE=./enrollment-token \
-PULSE_NODE_NAME=example-node \
-PULSE_NODE_REGION='' \
-PULSE_NODE_GROUP=default \
-  cargo run -p pulse-agent
+SENULUN_ENROLLMENT_TOKEN_FILE=./enrollment-token \
+SENULUN_NODE_NAME=example-node \
+SENULUN_NODE_REGION='' \
+SENULUN_NODE_GROUP=default \
+  cargo run -p senulun-agent
 ```
 
-One enrollment token enrolls exactly one Agent and expires after ten minutes by default. Remove the token file after enrollment. The Agent stores its per-node credential at `$XDG_STATE_HOME/pulse/agent-credentials.json` or `~/.local/state/pulse/agent-credentials.json`; subsequent starts do not need an enrollment token. Create another token with the admin CLI to enroll another node—no Service restart is needed. Set `PULSE_CREDENTIALS_PATH` to choose a different protected credential file.
+One enrollment token enrolls exactly one Agent and expires after ten minutes by default. Remove the token file after enrollment. The Agent stores its per-node credential at `$XDG_STATE_HOME/senulun/agent-credentials.json` or `~/.local/state/senulun/agent-credentials.json`; subsequent starts do not need an enrollment token. Create another token with the admin CLI to enroll another node—no Service restart is needed. Set `SENULUN_CREDENTIALS_PATH` to choose a different protected credential file.
 
 Remote Service URLs must use HTTPS. Plain HTTP is accepted only for loopback development.
 
 Automatic globe placement is enabled by default through GeoJS when
-`PULSE_NODE_REGION` is empty. The provider sees the Agent's public egress IP and
+`SENULUN_NODE_REGION` is empty. The provider sees the Agent's public egress IP and
 Agent version, but receives no metrics or Senulun credentials. Set
-`PULSE_GEOIP_PROVIDER=disabled` to opt out before starting/upgrading the Agent, or
+`SENULUN_GEOIP_PROVIDER=disabled` to opt out before starting/upgrading the Agent, or
 `ipinfo` to select IPinfo. A manual country code (for example `US`) always takes
 priority and prevents GeoIP requests. Existing explicit `disabled` settings are preserved.
 See [node location](docs/OPERATIONS.md#node-location-and-globe-placement) for refresh,

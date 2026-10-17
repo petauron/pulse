@@ -1,4 +1,4 @@
-export const AUTH_REQUIRED_EVENT = 'pulse:auth-required'
+export const AUTH_REQUIRED_EVENT = 'senulun:auth-required'
 const pathSuffix = /[?#]/
 let sessionGeneration = 0
 
