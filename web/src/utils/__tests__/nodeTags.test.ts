@@ -16,7 +16,7 @@ describe('node tags', () => {
     expect(tags.map(({ text, color }) => ({ text, color }))).toEqual([
       { text: '马来西亚', color: 'gray' },
       { text: 'V4', color: 'green' },
-      { text: '带宽1G', color: 'amber' },
+      { text: '带宽1G', color: 'blue' },
     ])
   })
 })
