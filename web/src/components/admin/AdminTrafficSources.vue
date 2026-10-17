@@ -21,10 +21,23 @@ const confirmRemove = ref(false)
 
 function emptyConfig(): ExternalTrafficConfig {
   return {
-    name: '', enabled: false, auth_mode: 'none', traffic_url: '', login_url: '', refresh_url: '',
-    username_field: 'email', password_field: 'password', refresh_token_field: 'refresh_token',
-    access_pointer: '/data/access_token', refresh_pointer: '/data/refresh_token',
-    up_pointer: '', down_pointer: '', used_pointer: '', limit_pointer: '', limit_unit: 'bytes', reset_pointer: '',
+    name: '',
+    enabled: false,
+    auth_mode: 'none',
+    traffic_url: '',
+    login_url: '',
+    refresh_url: '',
+    username_field: 'email',
+    password_field: 'password',
+    refresh_token_field: 'refresh_token',
+    access_pointer: '/data/access_token',
+    refresh_pointer: '/data/refresh_token',
+    up_pointer: '',
+    down_pointer: '',
+    used_pointer: '',
+    limit_pointer: '',
+    limit_unit: 'bytes',
+    reset_pointer: '',
   }
 }
 
@@ -83,10 +96,15 @@ async function remove(): Promise<void> {
 }
 
 const statusText: Record<string, string> = {
-  ok: '同步正常', pending: '等待首次同步', authentication_required: '认证失败，需管理员处理',
-  provider_unavailable: '服务商暂时不可用', provider_http_error: '服务商返回错误',
-  invalid_data: '返回字段无法解析', response_too_large: '响应超过上限',
-  credential_unavailable: '凭据不可用', private_address_rejected: '目标地址不安全',
+  ok: '同步正常',
+  pending: '等待首次同步',
+  authentication_required: '认证失败，需管理员处理',
+  provider_unavailable: '服务商暂时不可用',
+  provider_http_error: '服务商返回错误',
+  invalid_data: '返回字段无法解析',
+  response_too_large: '响应超过上限',
+  credential_unavailable: '凭据不可用',
+  private_address_rejected: '目标地址不安全',
   invalid_configuration: '配置无效',
 }
 </script>

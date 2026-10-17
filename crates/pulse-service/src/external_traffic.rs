@@ -485,15 +485,14 @@ impl Storage {
         &self,
         node_id: &str,
         generation: &str,
-        credential: Option<Vec<u8>>,
-        snapshot: Option<TrafficSnapshot>,
+        credential: Option<&[u8]>,
+        snapshot: Option<&TrafficSnapshot>,
         status: &str,
         now: u64,
     ) -> Result<(), StorageError> {
         let mut db = self.connection()?;
         let tx = db.transaction()?;
         let encoded = snapshot
-            .as_ref()
             .map(|value| {
                 serde_json::to_string(value)
                     .map_err(|_| StorageError::InvalidInput("invalid traffic snapshot"))
@@ -551,6 +550,10 @@ async fn delete_source(
 
 impl AppState {
     /// Poll at most eight due sources serially; the Service never sends commands to Agents.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the clock, storage, or credential encryption fails.
     pub async fn maintain_external_traffic(&self) -> Result<(), String> {
         let now = crate::current_time().map_err(|error| error.message)?;
         let sources = self
@@ -581,8 +584,8 @@ impl AppState {
                 storage.complete_traffic_source(
                     &node_id,
                     &generation,
-                    credential,
-                    snapshot,
+                    credential.as_deref(),
+                    snapshot.as_ref(),
                     status,
                     now,
                 )
@@ -644,10 +647,10 @@ async fn authenticate(
     let body = Value::Object(fields);
     let value = request_json(&url, reqwest::Method::POST, Some(&body), None).await?;
     let access = json_string(&value, &config.access_pointer).ok_or("authentication_required")?;
-    credential.access_token = access.to_owned();
-    credential.refresh_token = json_string(&value, &config.refresh_pointer)
+    access.clone_into(&mut credential.access_token);
+    json_string(&value, &config.refresh_pointer)
         .unwrap_or_default()
-        .to_owned();
+        .clone_into(&mut credential.refresh_token);
     Ok(())
 }
 
@@ -664,7 +667,7 @@ async fn refresh(config: &SourceConfig, credential: &mut Credential) -> Result<(
     let next = json_string(&value, &config.refresh_pointer)
         .unwrap_or(&credential.refresh_token)
         .to_owned();
-    credential.access_token = access.to_owned();
+    access.clone_into(&mut credential.access_token);
     credential.refresh_token = next;
     Ok(())
 }

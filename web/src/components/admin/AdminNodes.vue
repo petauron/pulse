@@ -35,6 +35,8 @@ const tagColors: { value: TagColor, label: string }[] = [
   { value: 'amber', label: '琥珀色' },
   { value: 'ruby', label: '红色' },
 ]
+const invalidTagPattern = /[;<>]/
+const trailingSemicolonsPattern = /;+$/
 const { busy, error, success, run } = useAdminAction(props.refresh)
 const actionLabels = { 'rotate': '轮换 Agent 凭据', 'revoke': '撤销 Agent 凭据', 'delete': '删除节点', 'reset-traffic': '重置本周期流量' }
 const actionHints = {
@@ -60,12 +62,12 @@ function addTag(): void {
   if (!draft.value)
     return
   const text = newTagText.value.trim()
-  if (!text || /[;<>]/.test(text)) {
+  if (!text || invalidTagPattern.test(text)) {
     tagError.value = '请输入标签文字，不能包含分号或尖括号。'
     return
   }
   const tag = `${text}<${newTagColor.value}>`
-  const existing = draft.value.tags.trim().replace(/;+$/, '')
+  const existing = draft.value.tags.trim().replace(trailingSemicolonsPattern, '')
   const next = existing ? `${existing};${tag}` : tag
   if (new TextEncoder().encode(next).length > 512) {
     tagError.value = '标签总长度不能超过 512 个字符。'
