@@ -1260,14 +1260,17 @@ pub(crate) fn dashboard_probes(
                 ],
                 |row| {
                     let bucket: i64 = row.get(5)?;
-                    Ok((bucket, json!({
-                        "time": row.get::<_, i64>(0)?,
-                        "latency": row.get::<_, Option<f64>>(1)?,
-                        "loss": row.get::<_, f64>(2)?,
-                        "samples": row.get::<_, i64>(3)?,
-                        "successful_samples": row.get::<_, i64>(4)?,
-                        "bucket": bucket
-                    })))
+                    Ok((
+                        bucket,
+                        json!({
+                            "time": row.get::<_, i64>(0)?,
+                            "latency": row.get::<_, Option<f64>>(1)?,
+                            "loss": row.get::<_, f64>(2)?,
+                            "samples": row.get::<_, i64>(3)?,
+                            "successful_samples": row.get::<_, i64>(4)?,
+                            "bucket": bucket
+                        }),
+                    ))
                 },
             )?
             .collect::<Result<Vec<_>, _>>()?;

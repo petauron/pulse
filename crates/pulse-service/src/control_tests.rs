@@ -478,13 +478,19 @@ fn dashboard_probe_preview_is_bounded_assigned_and_private() {
     assert_eq!(preview[0]["avg_latency_ms"], 20.0);
     assert_eq!(preview[0]["loss_percent"], 4.0);
     assert_eq!(preview[0]["points"][0]["samples"], 0);
-    assert_eq!(preview[0]["points"][0]["time"], i64::try_from(now - 3_600_000).unwrap());
+    assert_eq!(
+        preview[0]["points"][0]["time"],
+        i64::try_from(now - 3_600_000).unwrap()
+    );
     assert_eq!(preview[0]["points"][9]["samples"], 25);
     assert_eq!(preview[0]["points"][9]["successful_samples"], 24);
     assert_eq!(preview[0]["points"][9]["loss"], 4.0);
     assert_eq!(preview[0]["points"][9]["latency"], 20.0);
     assert_eq!(preview[0]["points"][9]["bucket"], 9);
-    assert_eq!(preview[0]["points"][9]["time"], i64::try_from(now - 360_000).unwrap());
+    assert_eq!(
+        preview[0]["points"][9]["time"],
+        i64::try_from(now - 360_000).unwrap()
+    );
     assert!(preview[0].get("target").is_none());
     assert!(preview[0].get("node_ids").is_none());
     task.enabled = false;
@@ -537,7 +543,8 @@ fn dashboard_probe_summary_uses_full_window_not_unweighted_bucket_means() {
         &[task],
         now,
         &crate::control::DashboardProbeConfig::default(),
-    ).unwrap();
+    )
+    .unwrap();
     assert_eq!(preview[0]["samples"], 13);
     assert!((preview[0]["avg_latency_ms"].as_f64().unwrap() - 1400.0 / 13.0).abs() < 0.001);
     assert_eq!(preview[0]["loss_percent"], 0.0);
