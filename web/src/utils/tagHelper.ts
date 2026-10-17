@@ -313,11 +313,15 @@ export function parseTags(tags: string | undefined): Array<{ text: string, color
   if (!tags || tags.trim() === '')
     return []
 
-  const tagList = tags.split(';').filter(tag => tag.trim() !== '')
+  const tagList = tags.split(';')
+    .map(tag => parseTagWithColor(tag.trim()))
+    .map(({ text, color }) => ({ text: text.trim(), color }))
+    .filter(({ text }) => text !== '')
 
-  return tagList.map((tag, index) => {
-    const { text, color } = parseTagWithColor(tag)
-    const defaultColor = TAG_COLORS[index % TAG_COLORS.length] ?? 'blue'
+  const defaultColors: readonly TagColor[] = ['gray', 'green', 'blue', 'violet', 'amber']
+
+  return tagList.map(({ text, color }, index) => {
+    const defaultColor = defaultColors[index % defaultColors.length] ?? 'gray'
     const resolvedColor = color ?? defaultColor
     return {
       text,

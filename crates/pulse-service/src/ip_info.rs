@@ -185,7 +185,7 @@ pub(crate) fn valid_address(raw: &str, ipv6: bool) -> bool {
             .parse::<IpAddr>()
             .is_ok_and(|ip| ip.is_ipv6() == ipv6 && public_ip(ip))
 }
-fn public_ip(ip: IpAddr) -> bool {
+pub(crate) fn public_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
             let [a, b, c, _] = ip.octets();

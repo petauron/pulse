@@ -47,10 +47,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     config.max_nodes = parse_env("PULSE_MAX_NODES", config.max_nodes)?;
     config.max_database_bytes = max_database_bytes;
     config.auth = pulse_service::AuthConfig::from_env()?;
+    config.traffic_key_file = env::var_os("PULSE_TRAFFIC_KEY_FILE").map(PathBuf::from);
     let state = AppState::open(&config)?;
     let listener = TcpListener::bind(listen_address).await?;
     let maintenance = tokio::spawn(retention_maintenance(state.clone()));
     let alerts = tokio::spawn(alert_maintenance(state.clone()));
+    let external_traffic = tokio::spawn(external_traffic_maintenance(state.clone()));
 
     tracing::info!(address = %listen_address, "Senulun Service listening");
     let serve_result = axum::serve(
@@ -61,11 +63,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     .await;
     maintenance.abort();
     alerts.abort();
+    external_traffic.abort();
     let _ = maintenance.await;
     let _ = alerts.await;
+    let _ = external_traffic.await;
     serve_result?;
     tracing::info!("Senulun Service stopped cleanly");
     Ok(())
+}
+
+async fn external_traffic_maintenance(state: AppState) {
+    let mut ticker = tokio::time::interval(Duration::from_secs(60));
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    loop {
+        ticker.tick().await;
+        if let Err(error) = state.maintain_external_traffic().await {
+            tracing::error!(%error, "external traffic maintenance failed");
+        }
+    }
 }
 
 async fn alert_maintenance(state: AppState) {

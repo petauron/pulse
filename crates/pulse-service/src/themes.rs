@@ -237,8 +237,8 @@ impl ThemeStore {
                 let entry = archive
                     .by_index(index)
                     .map_err(|_| "cannot read ZIP entry")?;
-                let name = entry.name();
-                let path = Path::new(name);
+                let name = entry.name().map_err(|_| "invalid ZIP entry name")?;
+                let path = Path::new(name.as_ref());
                 if !safe_file_path(path) || name.contains('\\') || name.contains('\0') {
                     return Err("unsafe ZIP path".to_owned());
                 }

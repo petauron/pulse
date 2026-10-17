@@ -54,6 +54,19 @@ export interface Client {
   hidden: boolean
   traffic_limit: number
   traffic_limit_type: string
+  external_traffic?: {
+    name: string
+    status: string
+    last_success_unix_ms: number
+    snapshot: {
+      up_bytes: number
+      down_bytes: number
+      used_bytes: number
+      limit_bytes: number | null
+      reset_at: string | null
+      fetched_at_unix_ms: number
+    } | null
+  }
   created_at: string
   updated_at: string
 }

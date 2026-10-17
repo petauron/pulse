@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 mod metrics;
 
-pub(crate) const SCHEMA_VERSION: i64 = 5;
+pub(crate) const SCHEMA_VERSION: i64 = 6;
 const MIN_SNAPSHOT_SPACING_MS: i64 = 950;
 const INGEST_PRUNE_INTERVAL_MS: u64 = 60_000;
 pub(crate) const RETENTION_PRUNE_BATCH_SIZE: usize = 10_000;
@@ -160,11 +160,27 @@ impl Storage {
                 tracing::info!(path = %backup_path.display(), "database pair backed up before brand migration");
             }
             let transaction = connection.transaction()?;
-            transaction.execute(
-                "UPDATE monitoring_settings SET data=json_set(data,'$.site_name','Senulun')
-                 WHERE id=1 AND json_extract(data,'$.site_name')='Pulse'",
-                [],
-            )?;
+            if version < 5 {
+                transaction.execute(
+                    "UPDATE monitoring_settings SET data=json_set(data,'$.site_name','Senulun')
+                     WHERE id=1 AND json_extract(data,'$.site_name')='Pulse'",
+                    [],
+                )?;
+            }
+            if version < 6 {
+                transaction.execute_batch(
+                    "CREATE TABLE external_traffic_sources (
+                        node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+                        config TEXT NOT NULL,
+                        credential BLOB NOT NULL,
+                        snapshot TEXT,
+                        last_attempt_ms INTEGER NOT NULL DEFAULT 0,
+                        last_success_ms INTEGER NOT NULL DEFAULT 0,
+                        generation TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'pending'
+                    );",
+                )?;
+            }
             transaction.pragma_update(None, "user_version", SCHEMA_VERSION)?;
             transaction.commit()?;
         }

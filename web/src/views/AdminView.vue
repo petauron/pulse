@@ -7,6 +7,7 @@ import AdminAlerts from '@/components/admin/AdminAlerts.vue'
 import AdminNodes from '@/components/admin/AdminNodes.vue'
 import AdminProbes from '@/components/admin/AdminProbes.vue'
 import AdminThemes from '@/components/admin/AdminThemes.vue'
+import AdminTrafficSources from '@/components/admin/AdminTrafficSources.vue'
 import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
 import { Input } from '@/components/ui/input'
@@ -26,7 +27,7 @@ const loading = ref(false)
 const loadError = ref('')
 let controller: AbortController | null = null
 let disposed = false
-const sections = [{ id: 'nodes', label: '节点' }, { id: 'probes', label: '探测' }, { id: 'alerts', label: '通知与告警' }, { id: 'themes', label: '主题' }, { id: 'site', label: '站点设置' }, { id: 'security', label: '账号安全' }]
+const sections = [{ id: 'nodes', label: '节点' }, { id: 'traffic', label: '外部流量' }, { id: 'probes', label: '探测' }, { id: 'alerts', label: '通知与告警' }, { id: 'themes', label: '主题' }, { id: 'site', label: '站点设置' }, { id: 'security', label: '账号安全' }]
 const section = computed(() => sections.some(item => item.id === route.query.section) ? route.query.section : 'nodes')
 
 async function refresh(): Promise<void> {
@@ -111,6 +112,7 @@ async function logout(): Promise<void> {
     </p>
     <template v-if="state">
       <AdminNodes v-if="section === 'nodes'" :nodes="state.nodes" :refresh="refresh" />
+      <AdminTrafficSources v-else-if="section === 'traffic'" :nodes="state.nodes" />
       <AdminProbes v-else-if="section === 'probes'" :nodes="state.nodes" :probes="state.probes" :refresh="refresh" />
       <AdminAlerts v-else-if="section === 'alerts'" :nodes="state.nodes" :channels="state.channels" :rules="state.alert_rules" :incidents="state.incidents" :failures="state.notification_failures" :refresh="refresh" />
       <AccountSecurity v-else-if="section === 'security'" />

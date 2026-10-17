@@ -22,6 +22,7 @@ fn schema_four_fixture(directory: &Path, title: &str) -> PathBuf {
          INSERT INTO auth_admin(id,username,password_hash,auth_version,totp_secret)
          VALUES(1,'admin','test-password-hash',2,X'0102');
          INSERT INTO auth_sessions VALUES('test-session-hash',1,2,10,999999,1);
+         DROP TABLE external_traffic_sources;
          PRAGMA main.user_version=4;",
     )
     .unwrap();
@@ -59,6 +60,13 @@ fn brand_migration_backs_up_pair_and_preserves_custom_titles_and_identity() {
                 .unwrap(),
             SCHEMA_VERSION
         );
+        assert!(db
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='external_traffic_sources'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .is_ok());
         assert_eq!(
             db.query_row("SELECT token_hash FROM nodes WHERE id='node-a'", [], |r| {
                 r.get::<_, String>(0)
@@ -105,6 +113,84 @@ fn brand_migration_backs_up_pair_and_preserves_custom_titles_and_identity() {
         assert_eq!(reopened.settings().unwrap().site_name, expected);
         assert_eq!(migration_backups(directory.path()).len(), 1);
     }
+}
+
+#[test]
+fn external_traffic_migration_from_five_preserves_existing_state_and_backs_up_pair() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = schema_four_fixture(directory.path(), "Senulun");
+    let db = Connection::open(&path).unwrap();
+    db.execute_batch("PRAGMA user_version=5;").unwrap();
+    drop(db);
+
+    let storage = Storage::open(&path, 64 * 1024 * 1024).unwrap();
+    let db = storage.connection().unwrap();
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        SCHEMA_VERSION
+    );
+    assert_eq!(
+        db.query_row("SELECT token_hash FROM nodes WHERE id='node-a'", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap(),
+        "credential-hash"
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT used_up+used_down FROM metrics.traffic_periods WHERE node_id='node-a'",
+            [],
+            |r| r.get::<_, i64>(0)
+        )
+        .unwrap(),
+        150
+    );
+    assert_eq!(
+        db.query_row("SELECT COUNT(*) FROM external_traffic_sources", [], |r| r
+            .get::<_, i64>(
+            0
+        ))
+        .unwrap(),
+        0
+    );
+    drop(db);
+    drop(storage);
+
+    let backups = migration_backups(directory.path());
+    assert_eq!(backups.len(), 1);
+    let manifest: Value =
+        serde_json::from_slice(&std::fs::read(backups[0].join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["control_schema"], 5);
+    assert!(backups[0].join("pulse.metrics.db").is_file());
+}
+
+#[test]
+fn external_traffic_migration_failure_keeps_schema_five() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = schema_four_fixture(directory.path(), "Senulun");
+    let db = Connection::open(&path).unwrap();
+    db.execute_batch(
+        "CREATE TABLE external_traffic_sources (collision INTEGER); PRAGMA user_version=5;",
+    )
+    .unwrap();
+    drop(db);
+
+    assert!(Storage::open(&path, 64 * 1024 * 1024).is_err());
+    let db = Connection::open(&path).unwrap();
+    assert_eq!(
+        db.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))
+            .unwrap(),
+        5
+    );
+    assert_eq!(
+        db.query_row("SELECT token_hash FROM nodes WHERE id='node-a'", [], |r| {
+            r.get::<_, String>(0)
+        })
+        .unwrap(),
+        "credential-hash"
+    );
+    assert_eq!(migration_backups(directory.path()).len(), 1);
 }
 
 #[test]

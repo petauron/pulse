@@ -314,7 +314,7 @@ fn save<T: Serialize>(
     Ok(())
 }
 
-fn configuration_audit(
+pub(crate) fn configuration_audit(
     tx: &Transaction<'_>,
     action: &str,
     subject: &str,
@@ -1273,6 +1273,24 @@ pub(crate) fn decorate_client(
     node: &str,
     value: &mut Value,
 ) -> Result<(), StorageError> {
+    let external: Option<(String, Option<String>, String, i64)> = db.query_row(
+        "SELECT json_extract(config,'$.name'),snapshot,status,last_success_ms FROM external_traffic_sources WHERE node_id=?1 AND json_extract(config,'$.enabled')=1",
+        [node], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    ).optional()?;
+    if let Some((name, snapshot, status, last_success)) = external {
+        let snapshot: Option<crate::external_traffic::TrafficSnapshot> = snapshot
+            .map(|raw| {
+                serde_json::from_str(&raw)
+                    .map_err(|_| StorageError::InvalidInput("stored traffic snapshot is invalid"))
+            })
+            .transpose()?;
+        value["external_traffic"] = json!({
+            "snapshot": snapshot,
+            "name": name,
+            "status": status,
+            "last_success_unix_ms": unsigned(last_success),
+        });
+    }
     if let Some(o) = options_or_none(db, node)? {
         value["name"] = json!(o.name);
         if !o.region.is_empty() {

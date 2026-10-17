@@ -1,7 +1,7 @@
 import type { NodeData, TrafficLimitType } from '@/stores/nodes'
 import type { NodeProbe } from '@/utils/rpc'
 import { formatDateTime } from '@/utils/helper'
-import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireTextClass, parseTags } from '@/utils/tagHelper'
+import { formatPriceWithCycle, getDaysUntilExpired, getExpireStatus, getExpireTextClass } from '@/utils/tagHelper'
 
 export interface PriceTagItem {
   text: string
@@ -67,10 +67,6 @@ export function getRemainingTimeTagClass(node: NodeData): string {
   if (!node.expired_at || !Number.isFinite(Date.parse(node.expired_at)))
     return ''
   return getExpireTextClass(node.expired_at)
-}
-
-export function getCustomTags(node: NodeData): string[] {
-  return parseTags(node.tags).map(t => t.text)
 }
 
 export function formatOfflineTime(node: NodeData): string {

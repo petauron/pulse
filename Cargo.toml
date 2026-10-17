@@ -23,6 +23,7 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "json
 hex = "0.4.3"
 mime_guess = "2.0.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
+ring = "0.17.14"
 rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 rust-embed = "8.11.0"
@@ -36,7 +37,7 @@ time = { version = "0.3.47", features = ["formatting"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["ansi", "fmt"] }
 uuid = { version = "1.22.0", features = ["v4"] }
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.4", default-features = false, features = ["deflate"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

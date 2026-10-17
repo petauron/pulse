@@ -1,0 +1,17 @@
+# External traffic sources
+
+Senulun can keep a provider-reported traffic snapshot next to, but never merged with, the Agent's local interface counters. This is an administrator-enabled HTTP integration, not a provider-specific adapter or a remote command channel. Each node can have one source; at most 32 sources may be configured. Enabled sources are polled by the Service roughly every 30 minutes, eight at a time, without changing any Agent.
+
+## Prepare credential encryption
+
+Before saving a source, create a separate file of exactly 32 random bytes with mode `0600`, for example `openssl rand -out /var/lib/senulun/traffic-credential.key 32` followed by `chmod 600 /var/lib/senulun/traffic-credential.key`. Set `PULSE_TRAFFIC_KEY_FILE` to its absolute path and restart the Service. Keep this file with the matched Service database backup. Losing it prevents decryption of stored source credentials; a restored database with configured sources fails closed when the key is absent. Do not put the key, provider credentials, or full subscription URLs in Git, CI logs, screenshots, or support tickets.
+
+In the existing administrator page, open **External traffic** and select a node. Configure a source name, the HTTPS GET URL that returns traffic JSON, and JSON Pointer paths for the raw integer-byte fields. The up and down fields are required. An optional `used` pointer takes precedence over adding those fields; use it only when the provider explicitly reports a separate billable total. An optional quota pointer can be expressed in bytes, decimal GB, or binary GiB. An optional reset-time pointer displays the provider's value without inventing a billing cycle or timezone.
+
+Authentication modes are none, fixed Bearer token, and JSON login with refresh-token rotation. The latter takes HTTPS login and refresh URLs on the *same origin* as the traffic URL; POST field names and response JSON Pointers are configurable. Credentials stay encrypted at rest in the Service control database and are never sent to an Agent or returned by the admin API. Leave credential inputs blank when editing to retain the stored values. A provider requiring CAPTCHA, MFA, or other interactive approval cannot be bypassed; a failed login leaves the last successful snapshot visible but stale. No browser Cookie is copied into the Service.
+
+Only public HTTPS destinations are accepted at request time, including after DNS resolution. Redirects and HTTP proxies are disabled; responses are capped at 128 KiB and requests time out after 10 seconds. The source sends only login, refresh, and GET traffic requests. Provider response bodies, including unrelated secrets they may contain, are never persisted or logged. Snapshot status is explicit; a failed sync does not replace usage with zero. This is a self-maintained integration, so a provider API change may require reconfiguration.
+
+## Example mapping
+
+For an API whose GET response has `data.resource_data.net_in`, `net_out`, and `traffic` as byte counters, and `data.config.traffic` as an allowance in GiB, set the down, up, used, and limit pointers respectively to `/data/resource_data/net_in`, `/data/resource_data/net_out`, `/data/resource_data/traffic`, and `/data/config/traffic`; set the limit unit to `gib`. Check the provider's field semantics before saving: runtime usage, billable usage, and traffic since the last reset may be different measurements. Keep the source disabled until those mappings have been checked against the provider dashboard.
