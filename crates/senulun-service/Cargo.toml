@@ -23,6 +23,7 @@ rust-embed.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 time.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -31,7 +32,6 @@ uuid.workspace = true
 zip.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 tower = { version = "0.5.3", features = ["util"] }
 
 [lints]
