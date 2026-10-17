@@ -4,16 +4,17 @@ import { Icon } from '@iconify/vue'
 import { computed, ref } from 'vue'
 import NodeProbePanel from '@/components/NodeProbePanel.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
-import { Badge } from '@/components/ui/badge'
+import NodeTagBadge from '@/components/NodeTagBadge.vue'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime, getStatus } from '@/utils/helper'
-import { formatOfflineTime, getCustomTags, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
+import { formatOfflineTime, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
+import { parseTags } from '@/utils/tagHelper'
 
 interface ColumnConfig {
   key: string
@@ -239,12 +240,7 @@ function getRowTransitionStyle(index: number): Record<string, string> {
               <!-- 标签 -->
               <div v-else-if="col.key === 'tags'">
                 <div class="flex flex-wrap gap-1 items-center">
-                  <Badge
-                    v-for="(tag, tagIndex) in getCustomTags(node)" :key="tagIndex" variant="outline"
-                    class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5"
-                  >
-                    {{ tag }}
-                  </Badge>
+                  <NodeTagBadge v-for="(tag, tagIndex) in parseTags(node.tags)" :key="tagIndex" :text="tag.text" :color="tag.color" />
                 </div>
               </div>
 

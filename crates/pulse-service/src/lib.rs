@@ -32,6 +32,7 @@ mod brand_migration_tests;
 mod control;
 #[cfg(test)]
 mod control_tests;
+mod external_traffic;
 mod ip_info;
 mod komari;
 mod luminaplus;
@@ -68,6 +69,8 @@ pub struct ServiceConfig {
     /// Maximum size of each SQLite file; excludes WAL and backup files.
     pub max_database_bytes: u64,
     pub auth: AuthConfig,
+    /// A separate 0600 file containing 32 random bytes for external credentials.
+    pub traffic_key_file: Option<PathBuf>,
 }
 
 impl ServiceConfig {
@@ -80,6 +83,7 @@ impl ServiceConfig {
             max_nodes: DEFAULT_MAX_NODES,
             max_database_bytes: DEFAULT_MAX_DATABASE_BYTES,
             auth: AuthConfig::default(),
+            traffic_key_file: None,
         }
     }
 }
@@ -97,6 +101,7 @@ pub struct AppState {
     session_gate: session_gate::SessionGate,
     themes: Arc<themes::ThemeStore>,
     ip_info: Arc<ip_info::IpInfo>,
+    traffic_key: Option<Arc<external_traffic::CredentialKey>>,
 }
 
 impl AppState {
@@ -109,6 +114,15 @@ impl AppState {
     pub fn open(config: &ServiceConfig) -> Result<Self, Box<dyn Error + Send + Sync>> {
         validate_config(config)?;
         let storage = Storage::open(&config.database_path, config.max_database_bytes)?;
+        let traffic_key = config
+            .traffic_key_file
+            .as_deref()
+            .map(external_traffic::CredentialKey::from_file)
+            .transpose()?
+            .map(Arc::new);
+        if traffic_key.is_none() && storage.has_traffic_sources()? {
+            return Err("configured traffic sources require PULSE_TRAFFIC_KEY_FILE".into());
+        }
         storage.prune_expired(unix_time_ms()?, config.retention_days)?;
         let auth = auth::AuthState::new(
             &config.database_path,
@@ -131,6 +145,7 @@ impl AppState {
             session_gate,
             themes,
             ip_info: Arc::new(ip_info::IpInfo::new()?),
+            traffic_key,
         })
     }
 
@@ -394,6 +409,7 @@ pub fn router(state: AppState) -> Router {
             get(management::probe_comparison),
         )
         .merge(management::routes())
+        .merge(external_traffic::routes())
         .merge(ip_info::routes())
         .route("/api/rpc2", post(rpc_handler))
         .route(

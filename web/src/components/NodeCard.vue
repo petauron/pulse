@@ -3,7 +3,7 @@ import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
 import NodeProbePanel from '@/components/NodeProbePanel.vue'
-import { Badge } from '@/components/ui/badge'
+import NodeTagBadge from '@/components/NodeTagBadge.vue'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
@@ -11,9 +11,10 @@ import { useBackgroundSurface } from '@/composables/useBackgroundSurface'
 import { useNodeFormatters } from '@/composables/useNodeFormatters'
 import { useAppStore } from '@/stores/app'
 import { formatDateTime, getStatus } from '@/utils/helper'
-import { getCustomTags, getDiskPercentage, getMemPercentage, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
+import { getDiskPercentage, getMemPercentage, getPriceTags, getRemainingTimeTagClass, getTrafficUsed, getTrafficUsedPercentage, hasRegion, showTrafficProgress } from '@/utils/nodeHelpers'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
 import { getFlagSrc, getRegionDisplayName } from '@/utils/regionHelper'
+import { parseTags } from '@/utils/tagHelper'
 
 const props = defineProps<{ node: NodeData }>()
 
@@ -37,7 +38,17 @@ const diskStatus = computed(() => getStatus(diskPercentage.value))
 
 const trafficUsedPercentage = computed(() => getTrafficUsedPercentage(props.node))
 const trafficUsed = computed(() => getTrafficUsed(props.node))
-const customTags = computed(() => getCustomTags(props.node))
+const externalTraffic = computed(() => props.node.external_traffic)
+const externalTrafficStale = computed(() => {
+  const source = externalTraffic.value
+  return !source?.snapshot || source.status !== 'ok'
+    || Date.now() - source.last_success_unix_ms > 90 * 60 * 1000
+})
+const externalTrafficPercentage = computed(() => {
+  const snapshot = externalTraffic.value?.snapshot
+  return snapshot?.limit_bytes ? Math.min((snapshot.used_bytes / snapshot.limit_bytes) * 100, 100) : 0
+})
+const customTags = computed(() => parseTags(props.node.tags))
 </script>
 
 <template>
@@ -134,7 +145,7 @@ const customTags = computed(() => getCustomTags(props.node))
           <div class="flex flex-col gap-1">
             <div class="w-full text-xs flex flex-row justify-between">
               <span class="text-muted-foreground">
-                流量
+                本地流量
               </span>
               <span>{{ trafficUsedPercentage.toFixed(1) }}%</span>
             </div>
@@ -165,6 +176,24 @@ const customTags = computed(() => getCustomTags(props.node))
               </template>
             </DataTooltip>
           </div>
+        </div>
+        <div v-if="externalTraffic" class="border-t border-border/60 pt-2 text-xs" aria-label="服务商记录流量">
+          <div class="flex items-center justify-between gap-2">
+            <span class="min-w-0 truncate text-muted-foreground" :title="externalTraffic.name">服务商流量 · {{ externalTraffic.name }}</span>
+            <span v-if="externalTrafficStale" class="shrink-0 font-medium text-foreground">{{ externalTraffic.snapshot ? '上次值' : '待同步' }}</span>
+          </div>
+          <template v-if="externalTraffic.snapshot">
+            <div class="mt-1 flex items-center justify-between gap-2">
+              <span class="text-muted-foreground">计费已用</span>
+              <span class="font-medium">{{ formatBytes(externalTraffic.snapshot.used_bytes) }} / {{ externalTraffic.snapshot.limit_bytes === null ? '未提供额度' : formatBytes(externalTraffic.snapshot.limit_bytes) }}</span>
+            </div>
+            <ProgressThin
+              v-if="externalTraffic.snapshot.limit_bytes"
+              class="mt-1" :percentage="externalTrafficPercentage"
+              :status="externalTrafficStale ? 'warning' : 'success'" :height="4"
+            />
+          </template>
+          <p v-else class="mt-1 text-muted-foreground">暂无服务商流量快照</p>
         </div>
         <div class="relative text-[11px] text-muted-foreground">
           <div
@@ -216,13 +245,8 @@ const customTags = computed(() => getCustomTags(props.node))
             <NodeProbePanel :node="props.node" />
           </div>
         </div>
-        <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1 items-center">
-          <Badge
-            v-for="(tag, index) in customTags" :key="index" variant="outline"
-            class="!text-[11px] rounded text-muted-foreground border-muted-foreground/10 px-1.5"
-          >
-            {{ tag }}
-          </Badge>
+        <div v-if="customTags.length > 0" class="flex shrink-0 flex-wrap gap-1.5 items-center">
+          <NodeTagBadge v-for="(tag, index) in customTags" :key="index" :text="tag.text" :color="tag.color" />
         </div>
       </div>
     </template>

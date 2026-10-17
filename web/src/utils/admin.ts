@@ -83,6 +83,45 @@ export interface AdminState {
   notification_failures: { happened_at_unix_ms: number, subject: string }[]
 }
 
+export interface ExternalTrafficSnapshot {
+  up_bytes: number
+  down_bytes: number
+  used_bytes: number
+  limit_bytes: number | null
+  reset_at: string | null
+  fetched_at_unix_ms: number
+}
+
+export interface ExternalTrafficConfig {
+  name: string
+  enabled: boolean
+  auth_mode: 'none' | 'bearer' | 'login_refresh'
+  traffic_url: string
+  login_url: string
+  refresh_url: string
+  username_field: string
+  password_field: string
+  refresh_token_field: string
+  access_pointer: string
+  refresh_pointer: string
+  up_pointer: string
+  down_pointer: string
+  used_pointer: string
+  limit_pointer: string
+  limit_unit: 'bytes' | 'gb' | 'gib'
+  reset_pointer: string
+}
+
+export interface ExternalTrafficSource {
+  node_id: string
+  config: ExternalTrafficConfig
+  has_credential: boolean
+  snapshot: ExternalTrafficSnapshot | null
+  last_attempt_unix_ms: number
+  last_success_unix_ms: number
+  status: string
+}
+
 export interface ProbeRecord {
   task_id: string
   collected_at_unix_ms: number

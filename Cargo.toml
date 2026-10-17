@@ -23,6 +23,7 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "json
 hex = "0.4.3"
 mime_guess = "2.0.5"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls"] }
+ring = "0.17.14"
 rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "std"] }
 rust-embed = "8.11.0"

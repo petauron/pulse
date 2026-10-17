@@ -1033,6 +1033,7 @@ dependencies = [
  "mime_guess",
  "pulse-protocol",
  "reqwest",
+ "ring",
  "rusqlite",
  "rust-embed",
  "serde",

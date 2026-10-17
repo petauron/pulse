@@ -13,6 +13,7 @@ base64.workspace = true
 subtle.workspace = true
 totp-rs.workspace = true
 reqwest.workspace = true
+ring.workspace = true
 axum.workspace = true
 hex.workspace = true
 mime_guess.workspace = true

@@ -179,6 +179,13 @@ const trafficUsageText = computed(() => {
   return `${formatBytes(trafficUsed.value)} / ${formatBytes(data.value?.traffic_limit ?? 0)}`
 })
 
+const externalTraffic = computed(() => data.value?.external_traffic)
+const externalTrafficStale = computed(() => {
+  const source = externalTraffic.value
+  return !source?.snapshot || source.status !== 'ok'
+    || now.value.getTime() - source.last_success_unix_ms > 90 * 60 * 1000
+})
+
 const trafficProgressStyle = computed(() => ({
   width: `${trafficUsedPercentage.value}%`,
 }))
@@ -333,7 +340,7 @@ const trafficProgressStyle = computed(() => ({
               <div class="relative flex flex-col gap-1.5">
                 <div class="flex gap-1 items-center text-muted-foreground">
                   <Icon icon="icon-park-outline:transfer-data" :width="14" :height="14" />
-                  <span class="text-xs sm:text-sm">总流量</span>
+                  <span class="text-xs sm:text-sm">本地网卡流量</span>
                   <div class="flex-1" />
                   <span class="hidden sm:block text-[11px] font-medium text-foreground/70">{{
                     formatBytes(data?.net_total_up ?? 0) }} / {{ formatBytes(data?.net_total_down ?? 0) }}</span>
@@ -357,6 +364,26 @@ const trafficProgressStyle = computed(() => ({
               </span>
             </div>
           </div>
+        </CardX>
+        <CardX
+          v-if="externalTraffic"
+          :title="`${externalTraffic.name} · 服务商记录流量`" size="small"
+          class="h-full border-none rounded-md"
+          :class="pickSurfaceClass('bg-background/60', 'bg-background/50 backdrop-blur-xs')"
+        >
+          <p v-if="externalTrafficStale" role="status" class="mb-3 text-sm text-amber-600">
+            {{ externalTraffic.snapshot ? '同步已过期，以下是上次成功快照' : '尚无可用的服务商流量快照' }}
+          </p>
+          <div v-if="externalTraffic.snapshot" class="grid grid-cols-2 gap-3 text-sm">
+            <div class="rounded-sm bg-slate-500/5 p-2">计费已用<br><span class="font-medium">{{ formatBytes(externalTraffic.snapshot.used_bytes) }}</span></div>
+            <div class="rounded-sm bg-slate-500/5 p-2">额度<br><span class="font-medium">{{ externalTraffic.snapshot.limit_bytes === null ? '未提供' : formatBytes(externalTraffic.snapshot.limit_bytes) }}</span></div>
+            <div class="rounded-sm bg-slate-500/5 p-2">上行<br><span class="font-medium">{{ formatBytes(externalTraffic.snapshot.up_bytes) }}</span></div>
+            <div class="rounded-sm bg-slate-500/5 p-2">下行<br><span class="font-medium">{{ formatBytes(externalTraffic.snapshot.down_bytes) }}</span></div>
+          </div>
+          <p v-if="externalTraffic.snapshot" class="mt-3 text-xs text-muted-foreground">
+            获取于 {{ new Date(externalTraffic.snapshot.fetched_at_unix_ms).toLocaleString() }}<span v-if="externalTraffic.snapshot.reset_at"> · 重置记录 {{ externalTraffic.snapshot.reset_at }}</span>
+          </p>
+          <p class="mt-2 text-xs text-muted-foreground">独立来源，不与本地流量相加或自动校准。</p>
         </CardX>
       </div>
 

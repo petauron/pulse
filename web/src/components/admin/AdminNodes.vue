@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import type { ManagedNode } from '@/utils/admin'
+import type { TagColor } from '@/utils/tagHelper'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import NodeTagBadge from '@/components/NodeTagBadge.vue'
 import { Button } from '@/components/ui/button'
 import { CardX } from '@/components/ui/card-x'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -9,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { useAdminAction } from '@/composables/useAdminAction'
 import { nodeMetadata } from '@/utils/admin'
 import { getSharedApi } from '@/utils/api'
+import { parseTags } from '@/utils/tagHelper'
 
 const props = defineProps<{ nodes: ManagedNode[], refresh: () => Promise<void> }>()
 const route = useRoute()
@@ -20,6 +23,18 @@ const quotaGiB = ref(0)
 const ttlHours = ref(24)
 const secret = ref('')
 const confirm = ref<'rotate' | 'revoke' | 'delete' | 'reset-traffic' | null>(null)
+const newTagText = ref('')
+const newTagColor = ref<TagColor>('blue')
+const tagError = ref('')
+const tagPreview = computed(() => parseTags(draft.value?.tags))
+const tagColors: { value: TagColor, label: string }[] = [
+  { value: 'gray', label: '灰色' },
+  { value: 'green', label: '绿色' },
+  { value: 'blue', label: '蓝色' },
+  { value: 'violet', label: '紫色' },
+  { value: 'amber', label: '琥珀色' },
+  { value: 'ruby', label: '红色' },
+]
 const { busy, error, success, run } = useAdminAction(props.refresh)
 const actionLabels = { 'rotate': '轮换 Agent 凭据', 'revoke': '撤销 Agent 凭据', 'delete': '删除节点', 'reset-traffic': '重置本周期流量' }
 const actionHints = {
@@ -31,6 +46,8 @@ const actionHints = {
 
 watch(selected, (node) => {
   draft.value = node ? nodeMetadata(node) : null
+  newTagText.value = ''
+  tagError.value = ''
   quotaGiB.value = (node?.traffic_limit_bytes ?? 0) / 1024 ** 3
   if (node?.expired_at_unix_ms) {
     const date = new Date(node.expired_at_unix_ms)
@@ -38,6 +55,26 @@ watch(selected, (node) => {
   }
   else { expires.value = '' }
 }, { immediate: true })
+
+function addTag(): void {
+  if (!draft.value)
+    return
+  const text = newTagText.value.trim()
+  if (!text || /[;<>]/.test(text)) {
+    tagError.value = '请输入标签文字，不能包含分号或尖括号。'
+    return
+  }
+  const tag = `${text}<${newTagColor.value}>`
+  const existing = draft.value.tags.trim().replace(/;+$/, '')
+  const next = existing ? `${existing};${tag}` : tag
+  if (new TextEncoder().encode(next).length > 512) {
+    tagError.value = '标签总长度不能超过 512 个字符。'
+    return
+  }
+  draft.value.tags = next
+  newTagText.value = ''
+  tagError.value = ''
+}
 
 function choose(event: Event): void {
   secret.value = ''
@@ -129,7 +166,24 @@ async function execute(): Promise<void> {
           </p>
           <label class="grid gap-2 text-sm">分组<Input v-model="draft.group" maxlength="128" /></label>
           <label class="grid gap-2 text-sm">排序权重<Input v-model="draft.weight" type="number" min="-2147483648" max="2147483647" step="1" required /></label>
-          <label class="grid gap-2 text-sm">标签<Input v-model="draft.tags" placeholder="使用分号分隔" maxlength="512" /></label>
+          <div class="grid gap-2 text-sm sm:col-span-2 lg:col-span-3">
+            <label for="node-tags">小面板标签</label>
+            <Input id="node-tags" v-model="draft.tags" placeholder="马来西亚<gray>;V4<green>;V6<green>;带宽1G<violet>" maxlength="512" aria-describedby="node-tags-help" />
+            <p id="node-tags-help" class="text-muted-foreground">可添加地区、线路、协议和带宽等信息；用分号分隔，颜色格式为 标签文字&lt;颜色英文名&gt;。也可以用下方按钮添加。</p>
+            <div class="flex flex-wrap items-end gap-2">
+              <label class="grid min-w-36 flex-1 gap-1">标签文字<Input v-model="newTagText" maxlength="40" placeholder="例如：带宽1G" @keydown.enter.prevent="addTag" /></label>
+              <label class="grid gap-1">颜色
+                <select v-model="newTagColor" class="h-11 rounded-md border border-input bg-background px-3 focus-visible:ring-2 focus-visible:ring-ring">
+                  <option v-for="color in tagColors" :key="color.value" :value="color.value">{{ color.label }}</option>
+                </select>
+              </label>
+              <Button type="button" variant="outline" class="min-h-11" @click="addTag">添加标签</Button>
+            </div>
+            <p v-if="tagError" role="alert" class="text-destructive">{{ tagError }}</p>
+            <div v-if="tagPreview.length" class="flex flex-wrap gap-1.5 rounded-md border border-border/60 p-2" aria-label="标签预览">
+              <NodeTagBadge v-for="(tag, index) in tagPreview" :key="index" :text="tag.text" :color="tag.color" />
+            </div>
+          </div>
           <label class="flex min-h-11 items-center gap-2 text-sm"><input v-model="draft.hidden" type="checkbox" class="size-4 accent-primary">从监控视图隐藏（管理列表保留）</label>
           <label class="grid gap-2 text-sm sm:col-span-2 lg:col-span-3">公开备注<textarea v-model="draft.public_remark" rows="3" maxlength="2048" class="rounded-md border border-input bg-background px-3 py-2 focus-visible:ring-2 focus-visible:ring-ring" /></label>
         </fieldset>

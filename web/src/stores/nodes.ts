@@ -39,6 +39,7 @@ export interface NodeData {
   hidden: boolean
   traffic_limit: number
   traffic_limit_type: TrafficLimitType
+  external_traffic?: Client['external_traffic']
   created_at: string
   updated_at: string
   // Status 信息
@@ -161,6 +162,7 @@ const useNodesStore = defineStore('nodes', () => {
       hidden: client.hidden,
       traffic_limit: client.traffic_limit,
       traffic_limit_type: client.traffic_limit_type as TrafficLimitType,
+      external_traffic: client.external_traffic,
       created_at: client.created_at,
       updated_at: client.updated_at,
       // Status 默认值
