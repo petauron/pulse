@@ -325,7 +325,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1010,60 +1010,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "senulun-agent"
-version = "0.1.0-alpha.22"
-dependencies = [
- "senulun-protocol",
- "reqwest",
- "rustix",
- "serde",
- "serde_json",
- "sysinfo",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "senulun-protocol"
-version = "0.1.0-alpha.22"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "senulun-service"
-version = "0.1.0-alpha.22"
-dependencies = [
- "argon2",
- "axum",
- "base64 0.23.1",
- "hex",
- "mime_guess",
- "senulun-protocol",
- "reqwest",
- "ring",
- "rusqlite",
- "rust-embed",
- "serde",
- "serde_json",
- "sha2",
- "subtle",
- "tempfile",
- "time",
- "tokio",
- "totp-rs",
- "tower",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "zip",
-]
-
-[[package]]
 name = "quinn"
 version = "0.11.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1117,7 +1063,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1239,9 +1185,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9e7760e252aaba7b09f4be00e36476cf585bdb68a53552ac954cdf504ab4bc9"
+checksum = "19afa5b4b6a611de00bd1bdae6ae6f39084c9399f0679c3f52d8469cf335cc23"
 dependencies = [
  "rust-embed-impl",
  "rust-embed-utils",
@@ -1250,9 +1196,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-impl"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bcfc4d6f53af43755f7a723e4b6b8794fcce052a178dd8c6c1dadc5f5343097"
+checksum = "e0d8afda6374eac59e066abee06d265247ebbaf3006cf878e2879e8356e34053"
 dependencies = [
  "mime_guess",
  "proc-macro2",
@@ -1264,9 +1210,9 @@ dependencies = [
 
 [[package]]
 name = "rust-embed-utils"
-version = "8.12.0"
+version = "8.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ffa149f6aa81b58a5b3011d01a857c4ed12c7a732d2c51947a4c7c692185f0"
+checksum = "0d84e8ba78bd384263e5922f084cbe1b081c3b7e69add59c8fb097b879ba968a"
 dependencies = [
  "sha2",
  "walkdir",
@@ -1297,7 +1243,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1354,7 +1300,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1433,6 +1379,60 @@ name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
+name = "senulun-agent"
+version = "0.1.0-alpha.22"
+dependencies = [
+ "reqwest",
+ "rustix",
+ "senulun-protocol",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "senulun-protocol"
+version = "0.1.0-alpha.22"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "senulun-service"
+version = "0.1.0-alpha.22"
+dependencies = [
+ "argon2",
+ "axum",
+ "base64 0.23.1",
+ "hex",
+ "mime_guess",
+ "reqwest",
+ "ring",
+ "rusqlite",
+ "rust-embed",
+ "senulun-protocol",
+ "serde",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "tempfile",
+ "time",
+ "tokio",
+ "totp-rs",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "zip",
+]
 
 [[package]]
 name = "serde"
@@ -1681,7 +1681,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2113,7 +2113,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
