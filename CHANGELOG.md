@@ -4,6 +4,16 @@ All notable changes to Pulse will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) after its first stable release.
 
+## [0.1.0-alpha.22](https://github.com/petauron/senulun/compare/v0.1.0-alpha.21...v0.1.0-alpha.22) (2026-10-17)
+
+
+### Bug Fixes
+
+* **senulun:** enable existing tempfile dependency for storage migration ([e5c226d](https://github.com/petauron/senulun/commit/e5c226dc43ff49a578796bbd640936810d4ea68b))
+* **senulun:** migrate runtime branding with identity-preserving storage conversion ([b8662ba](https://github.com/petauron/senulun/commit/b8662ba34f6f1ed3133b03ae5daa3cda7cbca7ca))
+* **senulun:** migrate runtime naming while preserving retained identities ([#77](https://github.com/petauron/senulun/issues/77)) ([378b6ad](https://github.com/petauron/senulun/commit/378b6ad2f6020af801d5a668aff0bcf0bbc2393f))
+* **senulun:** reject incomplete migrated stores before startup ([f20c2b5](https://github.com/petauron/senulun/commit/f20c2b556bac44aba9c4e74f84670989aa209583))
+
 ## [0.1.0-alpha.21](https://github.com/petauron/senulun/compare/v0.1.0-alpha.20...v0.1.0-alpha.21) (2026-10-17)
 
 

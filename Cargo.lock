@@ -1011,7 +1011,7 @@ dependencies = [
 
 [[package]]
 name = "senulun-agent"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "senulun-protocol",
  "reqwest",
@@ -1028,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "senulun-protocol"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "serde",
  "serde_json",
@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "senulun-service"
-version = "0.1.0-alpha.21"
+version = "0.1.0-alpha.22"
 dependencies = [
  "argon2",
  "axum",
